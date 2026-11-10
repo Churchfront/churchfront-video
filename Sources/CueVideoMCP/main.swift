@@ -99,9 +99,18 @@ while let line = readLine(strippingNewline: true) {
         guard ensureApp(), let r = app("POST", "/call", ["name": name, "arguments": args]) else {
             result(id, ["content": [["type": "text", "text": notRunning]], "isError": true]); continue
         }
-        let text = (try? JSONSerialization.data(withJSONObject: r, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]))
+        // Pictures (camera_snapshots) go back as MCP image content, each after a label.
+        var rest = r
+        let images = rest.removeValue(forKey: "images") as? [[String: Any]] ?? []
+        let text = (try? JSONSerialization.data(withJSONObject: rest, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]))
             .map { String(decoding: $0, as: UTF8.self) } ?? "{}"
-        result(id, ["content": [["type": "text", "text": text]], "isError": r["error"] != nil])
+        var content: [[String: Any]] = [["type": "text", "text": text]]
+        for img in images {
+            guard let data = img["data"] as? String else { continue }
+            content.append(["type": "text", "text": img["label"] as? String ?? "Picture"])
+            content.append(["type": "image", "data": data, "mimeType": img["mimeType"] as? String ?? "image/jpeg"])
+        }
+        result(id, ["content": content, "isError": r["error"] != nil])
     default:
         failure(id, -32601, "Unknown method \(method)")
     }

@@ -41,7 +41,7 @@ enum ControlTools {
         // Status and setup
         tool("get_status", "Everything CueVideo knows right now: switcher connection, what's Live and Next on each M/E, keys, DSKs, aux, macros, recording and streaming, every source, the volunteer source row and key buttons, and each camera's connection, control, exposure, saved shots and on-camera presets."),
         tool("get_config", "The setup as saved in CueVideo's config file (JSON): switcher address, volunteer M/E, source row, key buttons, cameras and their saved shots."),
-        tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 2, trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources. Routing: mixNames (what each M/E is for, from M/E 1), screens ([{name, aux: [numbers from 1], note, volunteer}]), routes (volunteer routing buttons: [{label, set: [{aux, source}]}], source as an input number; M/E 1 program is 10010, M/E 2 program 10020); each one given replaces that whole field. Read get_config first and send back the edited field.",
+        tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 4, ptzSpeed 0.25 to 2 (manual camera control speed), trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources. Routing: mixNames (what each M/E is for, from M/E 1), screens ([{name, aux: [numbers from 1], note, volunteer}]), routes (volunteer routing buttons: [{label, set: [{aux, source}]}], source as an input number; M/E 1 program is 10010, M/E 2 program 10020); each one given replaces that whole field. Read get_config first and send back the edited field.",
              ["config": ["type": "object", "description": "Fields to replace, in the config file's format."]], required: ["config"]),
         tool("show_window", "Open one of CueVideo's windows on screen.", ["window": choice("Which window.", ["main", "setup", "routing", "switcher"])], required: ["window"]),
 
@@ -73,12 +73,27 @@ enum ControlTools {
         tool("list_ndi_sources", "The NDI sources on the network now, by their exact names, for the ndi field of a volunteer source (a picture for its tile and the Next and Live monitors, such as CueScreens' graphics) or of a key button (a picture with alpha laid over Next and Live when that key is on them, such as CueScreens' lower thirds). Set them with update_config."),
         tool("start_tracking", "Auto tracking: make a Canon camera follow a person, by watching its preview picture. It frames them as a broadcast follow shot: shoulders up, waist up or full length (the shot the camera is closest to unless shot is given), eyes near the upper third, lead room on the side they face or walk toward, eased pan and tilt, and slow zooms to hold the size. Picks the person nearest the middle, or nearest x/y if given (0 to 1 across and down the picture). Waits up to 4 seconds for someone to be found. Any manual pan, tilt, shot or preset stops tracking; a manual zoom keeps it and holds the new size.",
              ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "x": num("0 (left) to 1 (right) across the picture."), "y": num("0 (top) to 1 (bottom) down the picture."), "allow_live": allowLive]),
+        tool("get_framing", "The follow-shot framing rules auto tracking uses for each shot size (shoulders, waist, full), the built-in standard and any changes, plus the tracking response settings. Use with camera_snapshots to judge framing."),
+        tool("set_framing", "Change how a follow shot is framed, live, while CueVideo runs: takes effect on tracking cameras within a frame. All measured as a share of the frame. eye_line: where the eyes sit, down from the top (less = less headroom). size: eyes-to-shoulders drop against frame height (bigger = tighter). lead_room: offset toward where they face or walk. dead_x / dead_y: how far they can drift before the camera moves. reset: true returns this size to the standard.",
+             ["shot": choice("Shot size.", ["shoulders", "waist", "full"]), "eye_line": num("0.1 to 0.5."), "size": num("Shoulders about 0.36, waist 0.21, full 0.095."),
+              "lead_room": num("0 to 0.2."), "dead_x": num("0.02 to 0.2."), "dead_y": num("0.02 to 0.2."), "reset": bool("Back to the standard.")], required: ["shot"]),
+        tool("set_tracking_tuning", "Change how auto tracking responds, live. correction: pull toward the mark (default 1.2; higher reacts harder, too high wobbles). latency: seconds the preview runs behind (0.45). walk_threshold: speed in frames a second that counts as walking (0.12; higher ignores more small moves). zoom_threshold: how wrong the shot size must look before zooming (0.3, about a third). zoom_wait: seconds it must stay wrong first (1.5). speed: overall follow speed 0.5 to 4. reset: true returns all to defaults.",
+             ["correction": num("0.4 to 2.5."), "latency": num("0.2 to 0.8."), "walk_threshold": num("0.05 to 0.4."), "zoom_threshold": num("0.1 to 0.8."),
+              "zoom_wait": num("0.5 to 5."), "speed": num("0.5 to 4."), "reset": bool("Back to defaults.")]),
         tool("set_tracking_shot", "Reframe a tracking camera as a different follow shot: shoulders up, waist up or full length.",
              ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "allow_live": allowLive], required: ["shot"]),
         tool("stop_tracking", "Stop auto tracking on a camera, or on every camera with all: true.", ["camera": camera, "all": bool("Stop every camera.")]),
         tool("camera_home", "Send a camera to its home position (pan and tilt 0).", ["camera": camera, "allow_live": allowLive]),
-        tool("set_exposure", "Set a camera's gain, shutter and/or iris (each switches that setting to manual). Canon units: gain in tenths of a dB (65 = 6.5 dB), shutter as 1/x (60 = 1/60), iris as f-number times 100 (450 = f/4.5). Values snap to the nearest the camera accepts; get_status lists them.",
-             ["camera": camera, "gain": int("Tenths of a dB."), "shutter": int("Shutter speed denominator."), "iris": int("f-number times 100."), "allow_live": allowLive]),
+        tool("set_exposure", "Set a camera's gain, shutter, iris and/or white balance. Gain, shutter and iris each switch that setting to manual. Canon units: gain in tenths of a dB (65 = 6.5 dB), shutter as 1/x (60 = 1/60), iris as f-number times 100 (450 = f/4.5). White balance: auto, daylight, tungsten, or a color temperature in kelvin (4300); higher kelvin looks warmer. Values snap to the nearest the camera accepts; get_status lists them.",
+             ["camera": camera, "gain": int("Tenths of a dB."), "shutter": int("Shutter speed denominator."), "iris": int("f-number times 100."),
+              "white_balance": any("auto, daylight, tungsten, or kelvin as a number such as 4300."), "allow_live": allowLive]),
+        tool("camera_snapshots", "A still picture from each Canon camera (or the ones named), with color measurements, to compare and match them: average red, green and blue, the color cast (red÷green and blue÷green; balanced is about 1), brightness (0 to 255), and the share of the picture clipped to white or crushed to black. Point the cameras at the same scene to compare fairly. Fix differences with set_exposure or match_exposure.",
+             ["cameras": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to look at. Leave out for all."],
+              "pictures": bool("Include the pictures themselves (default true). False gives only the measurements.")]),
+        tool("match_exposure", "Make cameras match one camera's exposure: copies gain, shutter, iris and white balance (or only the settings named) from one camera to the others, each value snapped to the nearest the other camera accepts (models differ). Leave out to for every other camera. Cameras on Live are skipped unless allow_live is true.",
+             ["from": any("The camera to copy from (name, IP or input)."), "to": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to change. Leave out for all the others."],
+              "settings": ["type": "array", "items": ["type": "string", "enum": ["gain", "shutter", "iris", "white_balance"]], "description": "Which settings to copy. Leave out for all four."],
+              "allow_live": allowLive], required: ["from"]),
         tool("recall_shot", "Recall a shot saved in CueVideo: move to its position, or set its exposure.",
              ["camera": camera, "shot": str("The shot's name."), "allow_live": allowLive], required: ["shot"]),
         tool("save_shot", "Save the camera as it is now as a CueVideo shot: its position (pan, tilt, zoom, the default) or its exposure (gain, shutter, iris).",
@@ -132,7 +147,7 @@ enum ControlTools {
         case "update_config":
             guard let patch = a["config"] as? [String: Any] else { throw fail("Give config as an object.") }
             var obj = try configObject()
-            for (k, v) in patch where ["atemHost", "me", "sources", "keys", "cameras", "trackSpeed", "trackTilt", "trackZoom", "mixNames", "screens", "routes"].contains(k) { obj[k] = v }
+            for (k, v) in patch where ["atemHost", "me", "sources", "keys", "cameras", "trackSpeed", "ptzSpeed", "framing", "trackTuning", "trackTilt", "trackZoom", "mixNames", "screens", "routes"].contains(k) { obj[k] = v }
             let data = try JSONSerialization.data(withJSONObject: obj)
             let c: CueConfig
             do { c = try JSONDecoder().decode(CueConfig.self, from: data) } catch { throw fail("That config doesn't fit the format: \(error)") }
@@ -240,6 +255,36 @@ enum ControlTools {
                 done(why == nil ? ok("\(c.name) is following someone, framed \(z)", ["warning": controlWarning(c)].compactMapValues { $0 })
                                 : ["error": "\(c.name): \(why!) It keeps looking until stop_tracking."])
             }
+        case "get_framing":
+            done(framingReport())
+        case "set_framing":
+            guard let z = (a["shot"] as? String).flatMap(ShotSize.init(rawValue:)) else { throw fail("shot is shoulders, waist or full.") }
+            func clamp(_ v: Any?, _ lo: Double, _ hi: Double) -> Double? { (v as? NSNumber).map { min(hi, max(lo, $0.doubleValue)) } }
+            store.update { c in
+                if a["reset"] as? Bool == true { c.framing[z.rawValue] = nil }
+                var r = c.framing[z.rawValue] ?? FramingRule()
+                if let v = clamp(a["eye_line"], 0.1, 0.5) { r.eyeLine = v }
+                if let v = clamp(a["size"], 0.04, 0.7) { r.scale = v }
+                if let v = clamp(a["lead_room"], 0, 0.2) { r.leadRoom = v }
+                if let v = clamp(a["dead_x"], 0.02, 0.2) { r.deadX = v }
+                if let v = clamp(a["dead_y"], 0.02, 0.2) { r.deadY = v }
+                c.framing[z.rawValue] = r == FramingRule() ? nil : r
+            }
+            // Tracking cameras on this size reframe to it now.
+            for (id, t) in AutoTracker.shared.sessions where t.size == z && t.asked != nil { AutoTracker.shared.setSize(id, z) }
+            done(ok("\(z.name) framing updated", framingReport()))
+        case "set_tracking_tuning":
+            func clamp(_ v: Any?, _ lo: Double, _ hi: Double) -> Double? { (v as? NSNumber).map { min(hi, max(lo, $0.doubleValue)) } }
+            store.update { c in
+                if a["reset"] as? Bool == true { c.trackTuning = TrackTuning() }
+                if let v = clamp(a["correction"], 0.4, 2.5) { c.trackTuning.correction = v }
+                if let v = clamp(a["latency"], 0.2, 0.8) { c.trackTuning.latency = v }
+                if let v = clamp(a["walk_threshold"], 0.05, 0.4) { c.trackTuning.walkThreshold = v }
+                if let v = clamp(a["zoom_threshold"], 0.1, 0.8) { c.trackTuning.zoomThreshold = v }
+                if let v = clamp(a["zoom_wait"], 0.5, 5) { c.trackTuning.zoomWait = v }
+                if let v = clamp(a["speed"], 0.5, 4) { c.trackSpeed = v }
+            }
+            done(ok("Tracking tuning updated", framingReport()))
         case "set_tracking_shot":
             let c = try cam(a, changing: true)
             guard let z = (a["shot"] as? String).flatMap(ShotSize.init(rawValue:)) else { throw fail("shot is shoulders, waist or full.") }
@@ -254,10 +299,48 @@ enum ControlTools {
         case "set_exposure":
             let c = try cam(a, changing: true)
             let x = ptz.exposure[c.id] ?? CameraExposure()
-            let e = PTZExposure(gain: snap(a["gain"], x.gainList), shutter: snap(a["shutter"], x.shutterList), iris: snap(a["iris"], x.irisList))
-            guard e.gain != nil || e.shutter != nil || e.iris != nil else { throw fail("Give gain, shutter and/or iris.") }
+            var e = PTZExposure(gain: snap(a["gain"], x.gainList), shutter: snap(a["shutter"], x.shutterList), iris: snap(a["iris"], x.irisList))
+            if let w = a["white_balance"] {
+                if let k = snap(w, x.kelvinList) ?? intValue(w) { e.wb = "kelvin"; e.kelvin = k }
+                else if let m = (w as? String)?.lowercased(), ["auto", "daylight", "tungsten"].contains(m) { e.wb = m }
+                else { throw fail("white_balance is auto, daylight, tungsten, or a kelvin number such as 4300.") }
+            }
+            guard e.hasExposure || e.hasWhiteBalance else { throw fail("Give gain, shutter, iris and/or white_balance.") }
             ptz.setExposure(e, camera: c.id)
             done(ok("Exposure set on \(c.name)", ["sent": expo(e)]))
+        case "camera_snapshots":
+            let cams: [PTZCamera] = try (a["cameras"] as? [Any]).map { list in try list.map { try cam(["camera": $0], changing: false) } }
+                ?? ptz.cameras.filter { $0.proto == .canonXC && !$0.host.isEmpty }
+            let pictures = a["pictures"] as? Bool ?? true
+            Snapshots.take(cams, pictures: pictures) { results in
+                var out: [String: Any] = ["cameras": results.map(\.info)]
+                if pictures { out["images"] = results.compactMap(\.image) }
+                done(out)
+            }
+        case "match_exposure":
+            let src = try cam(["camera": a["from"] as Any], changing: false)
+            guard let x = ptz.exposure[src.id]?.value else { throw fail("\(src.name) hasn't reported its exposure yet. Try again in a moment.") }
+            let want = Set((a["settings"] as? [String]) ?? ["gain", "shutter", "iris", "white_balance"])
+            let targets: [PTZCamera] = try (a["to"] as? [Any]).map { list in try list.map { try cam(["camera": $0], changing: false) } }
+                ?? ptz.cameras.filter { $0.id != src.id && !$0.host.isEmpty }
+            var changed: [String: Any] = [:], skipped: [String] = []
+            for t in targets where t.id != src.id {
+                if let i = t.atemInput, (atem.state.tally[i] ?? 0) & 1 != 0, a["allow_live"] as? Bool != true { skipped.append("\(t.name) (on Live)"); continue }
+                let tx = ptz.exposure[t.id] ?? CameraExposure()
+                var e = PTZExposure()
+                if want.contains("gain"), let g = x.gain { e.gain = snap(g, tx.gainList) }
+                if want.contains("shutter"), let v = x.shutter { e.shutter = snap(v, tx.shutterList) }
+                if want.contains("iris"), let v = x.iris { e.iris = snap(v, tx.irisList) }
+                if want.contains("white_balance") {
+                    if x.wb == "kelvin" || x.wb == nil, let k = x.kelvin { e.wb = "kelvin"; e.kelvin = snap(k, tx.kelvinList) }
+                    else if let m = x.wb { e.wb = m }
+                }
+                guard e.hasExposure || e.hasWhiteBalance else { continue }
+                ptz.setExposure(e, camera: t.id)
+                changed[t.name] = expo(e)
+            }
+            done(ok("Matched \(changed.count) camera\(changed.count == 1 ? "" : "s") to \(src.name)",
+                    ["source": expo(x), "changed": changed, "skipped": skipped]))
         case "recall_shot":
             let c = try cam(a, changing: true), sh = try shot(c, a["shot"])
             ptz.go(to: sh, camera: c.id); done(ok("\(c.name): \(sh.name)"))
@@ -438,6 +521,7 @@ enum ControlTools {
         if let g = e.gain { d["gain"] = g; d["gain_text"] = CameraExposure.gainText(g) }
         if let s = e.shutter { d["shutter"] = s; d["shutter_text"] = CameraExposure.shutterText(s) }
         if let i = e.iris { d["iris"] = i; d["iris_text"] = CameraExposure.irisText(i) }
+        if e.hasWhiteBalance { d["white_balance"] = CameraExposure.wbText(e.wb, e.kelvin) }
         return d
     }
 
@@ -454,6 +538,21 @@ enum ControlTools {
         let digits = base.filter(\.isNumber)
         if (base.hasPrefix("m/e") || base.hasPrefix("me")), let m = Int(digits), m >= 1 { return 10000 + m * 10 + (preview ? 1 : 0) }
         return try source(v, aux: true)
+    }
+
+    static func framingReport() -> [String: Any] {
+        func d(_ r: FramingRule) -> [String: Any] {
+            ["eye_line": r.eyeLine ?? 0, "size": r.scale ?? 0, "lead_room": r.leadRoom ?? 0, "dead_x": r.deadX ?? 0, "dead_y": r.deadY ?? 0]
+        }
+        var shots: [String: Any] = [:]
+        for z in ShotSize.allCases {
+            shots[z.rawValue] = ["name": z.name, "now": d(z.rule), "standard": d(z.standard), "changed": store.config.framing[z.rawValue] != nil]
+        }
+        let t = store.config.trackTuning
+        return ["framing": shots, "tracking": [
+            "speed": store.config.trackSpeed, "tilt": store.config.trackTilt, "zoom_to_hold_size": store.config.trackZoom,
+            "correction": t.correction ?? 1.2, "latency": t.latency ?? 0.45, "walk_threshold": t.walkThreshold ?? 0.12,
+            "zoom_threshold": t.zoomThreshold ?? 0.3, "zoom_wait": t.zoomWait ?? 1.5] as [String: Any]]
     }
 
     static func routing() -> [String: Any] {
@@ -519,6 +618,7 @@ enum ControlTools {
                 d["exposure"] = expo(x.value).merging([
                     "gain_auto": x.gainAuto, "shutter_auto": x.shutterAuto, "iris_auto": x.irisAuto,
                     "gain_values": x.gainList, "shutter_values": x.shutterList, "iris_values": x.irisList,
+                    "white_balance_mode": x.value.wb ?? "", "kelvin_values": x.kelvinList,
                 ]) { a, _ in a }
             }
             return d

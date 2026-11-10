@@ -65,6 +65,37 @@ struct ScreenOutput: Codable, Hashable, Identifiable {
     var forVolunteers: Bool { volunteer ?? true }
 }
 
+/// How a follow shot is framed. Any part left out uses the built-in standard. Measured as a
+/// share of the frame: eyeLine down from the top (0.29), scale is eyes to shoulders against
+/// frame height (bigger is tighter), leadRoom the offset toward where they face or walk,
+/// deadX and deadY how far they can drift before the camera moves.
+struct FramingRule: Codable, Hashable {
+    var eyeLine: Double?
+    var scale: Double?
+    var leadRoom: Double?
+    var deadX: Double?
+    var deadY: Double?
+
+    func merged(_ o: FramingRule?) -> FramingRule {
+        guard let o else { return self }
+        return FramingRule(eyeLine: o.eyeLine ?? eyeLine, scale: o.scale ?? scale, leadRoom: o.leadRoom ?? leadRoom,
+                           deadX: o.deadX ?? deadX, deadY: o.deadY ?? deadY)
+    }
+}
+
+/// Tracking response, for tuning while it runs. Any left out use the built-in values.
+/// correction: pull toward the framing mark (1.2); latency: how far behind the preview picture
+/// runs, in seconds (0.45); walkThreshold: how fast (frames a second) counts as walking (0.12);
+/// zoomThreshold: how wrong the size must look before zooming, as a log ratio (0.3, about a third);
+/// zoomWait: seconds it must stay wrong first (1.5).
+struct TrackTuning: Codable, Hashable {
+    var correction: Double?
+    var latency: Double?
+    var walkThreshold: Double?
+    var zoomThreshold: Double?
+    var zoomWait: Double?
+}
+
 /// One change a routing button makes: send this source to this aux (counted from 1).
 struct RouteChange: Codable, Hashable {
     var aux: Int
@@ -92,7 +123,7 @@ struct RouteButton: Codable, Hashable, Identifiable {
 ///       "sources": [ { "input": 9, "label": "Cam 1" }, { "input": 3, "label": "Graphics", "ndi": "CG-MAC (CueScreens Stream)" } ],
 ///       "cameras": [ { "name": "Cam 1", "host": "192.168.1.91", "proto": "canonXC", "atemInput": 9 } ],
 ///       "keys": [ { "label": "Lower thirds", "me": 1, "keyer": 1, "ndi": "CG-MAC (CueScreens Lower Thirds)" } ],
-///       "trackSpeed": 1, "trackTilt": true, "trackZoom": true,
+///       "trackSpeed": 1, "ptzSpeed": 1, "trackTilt": true, "trackZoom": true,
 ///       "mixNames": [ "Live stream", "Side screens" ],
 ///       "screens": [ { "name": "Lobby TVs", "aux": [4, 5], "note": "VCV 104, VCV 105" } ],
 ///       "routes": [ { "label": "Lobby: stream", "set": [ { "aux": 4, "source": 10010 }, { "aux": 5, "source": 10010 } ] } ]
@@ -109,8 +140,10 @@ struct CueConfig: Codable, Equatable {
     var cameras: [PTZCamera] = []
     /// On/off buttons for keys, such as lower thirds, under the take buttons.
     var keys: [KeyButton] = []
-    /// Auto tracking: how quickly cameras follow, 0.5 (gentle) to 2 (quick), and whether they tilt too.
+    /// Auto tracking: how quickly cameras follow, 0.5 (gentle) to 4 (quick), and whether they tilt too.
     var trackSpeed = 1.0
+    /// Overall speed of manual camera control (joystick, zoom, arrow keys), 0.25 to 2.
+    var ptzSpeed = 1.0
     var trackTilt = true
     /// Auto tracking zooms to hold the shot size (shoulders, waist or full length) as people
     /// move nearer or farther. Off: zoom is left entirely to the volunteer.
@@ -121,10 +154,13 @@ struct CueConfig: Codable, Equatable {
     var screens: [ScreenOutput] = []
     /// Volunteer routing buttons, bottom right of the main window.
     var routes: [RouteButton] = []
+    /// Changes to the follow-shot framing, by size: "shoulders", "waist", "full".
+    var framing: [String: FramingRule] = [:]
+    var trackTuning = TrackTuning()
 
     init() {}
 
-    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, trackTilt, trackZoom, mixNames, screens, routes }
+    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, screens, routes, framing, trackTuning }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -133,12 +169,15 @@ struct CueConfig: Codable, Equatable {
         sources = try c.decodeIfPresent([VolunteerSource].self, forKey: .sources) ?? []
         cameras = try c.decodeIfPresent([PTZCamera].self, forKey: .cameras) ?? []
         keys = try c.decodeIfPresent([KeyButton].self, forKey: .keys) ?? []
-        trackSpeed = min(2, max(0.5, try c.decodeIfPresent(Double.self, forKey: .trackSpeed) ?? 1))
+        trackSpeed = min(4, max(0.5, try c.decodeIfPresent(Double.self, forKey: .trackSpeed) ?? 1))
+        ptzSpeed = min(2, max(0.25, try c.decodeIfPresent(Double.self, forKey: .ptzSpeed) ?? 1))
         trackTilt = try c.decodeIfPresent(Bool.self, forKey: .trackTilt) ?? true
         trackZoom = try c.decodeIfPresent(Bool.self, forKey: .trackZoom) ?? true
         mixNames = try c.decodeIfPresent([String].self, forKey: .mixNames) ?? []
         screens = try c.decodeIfPresent([ScreenOutput].self, forKey: .screens) ?? []
         routes = try c.decodeIfPresent([RouteButton].self, forKey: .routes) ?? []
+        framing = try c.decodeIfPresent([String: FramingRule].self, forKey: .framing) ?? [:]
+        trackTuning = try c.decodeIfPresent(TrackTuning.self, forKey: .trackTuning) ?? TrackTuning()
     }
 }
 
@@ -233,6 +272,7 @@ final class ConfigStore: ObservableObject {
 
     private func apply() {
         guard let b = booth else { return }
+        b.ptz.manualSpeed = config.ptzSpeed
         let me = max(0, config.me - 1)
         if b.me != me { b.me = me }
         guard !readOnly else { return }
