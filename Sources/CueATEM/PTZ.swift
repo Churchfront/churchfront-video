@@ -76,12 +76,19 @@ public struct PTZPosition: Codable, Hashable {
 
 /// Manual exposure in the camera's own units. For Canon: gain in tenths of a dB (65 is
 /// 6.5 dB), shutter as the speed's denominator (60 is 1/60), iris as the f-number times
-/// 100 (450 is f/4.5). Any left out stay as they are.
+/// 100 (450 is f/4.5). White balance: a mode (auto, daylight, tungsten or kelvin) and, for
+/// kelvin, the color temperature (4300). Any left out stay as they are.
 public struct PTZExposure: Codable, Hashable {
     public var gain: Int?
     public var shutter: Int?
     public var iris: Int?
-    public init(gain: Int? = nil, shutter: Int? = nil, iris: Int? = nil) { self.gain = gain; self.shutter = shutter; self.iris = iris }
+    public var wb: String?
+    public var kelvin: Int?
+    public init(gain: Int? = nil, shutter: Int? = nil, iris: Int? = nil, wb: String? = nil, kelvin: Int? = nil) {
+        self.gain = gain; self.shutter = shutter; self.iris = iris; self.wb = wb; self.kelvin = kelvin
+    }
+    public var hasExposure: Bool { gain != nil || shutter != nil || iris != nil }
+    public var hasWhiteBalance: Bool { wb != nil || kelvin != nil }
 }
 
 /// What a camera's exposure is now, and the values it accepts, for the controls.
@@ -90,7 +97,20 @@ public struct CameraExposure: Hashable {
     /// Which of gain, shutter and iris the camera is setting itself.
     public var gainAuto = false, shutterAuto = false, irisAuto = false
     public var gainList: [Int] = [], shutterList: [Int] = [], irisList: [Int] = []
+    public var kelvinList: [Int] = []
     public init() {}
+
+    /// "Auto", "Daylight", "Tungsten" or "4300 K".
+    public static func wbText(_ mode: String?, _ kelvin: Int?) -> String {
+        switch mode {
+        case "auto": return "Auto"
+        case "daylight": return "Daylight"
+        case "tungsten": return "Tungsten"
+        case "kelvin": return kelvin.map { "\($0) K" } ?? "Kelvin"
+        case nil: return kelvin.map { "\($0) K" } ?? "?"
+        default: return "Custom"
+        }
+    }
 
     public static func gainText(_ v: Int?) -> String { v.map { String(format: "%.1f dB", Double($0) / 10) } ?? "?" }
     public static func shutterText(_ v: Int?) -> String { v.map { "1/\($0)" } ?? "?" }
@@ -157,6 +177,9 @@ protocol PTZLink: AnyObject {
     func stop()
     /// Speeds from -1 to 1; up is positive tilt. Zero stops that axis.
     func drive(pan: Double, tilt: Double)
+    /// Speeds in the camera's own units, signed (right and up positive), 0 stops. On Canon
+    /// that's hundredths of a degree a second (10 to 10000). Used by auto tracking.
+    func driveRaw(pan: Int, tilt: Int)
     func zoom(_ v: Double)
     func autoFocus(_ on: Bool)
     func focusOnce()
@@ -257,6 +280,11 @@ final class VISCALink: PTZLink {
         send([0x81, 0x01, 0x06, 0x01, UInt8(ps), UInt8(ts), p, t, 0xFF])
     }
 
+    func driveRaw(pan: Int, tilt: Int) {
+        func v(_ r: Int) -> Double { r == 0 ? 0 : (r < 0 ? -1 : 1) * min(1, (Double(abs(r)) / 10000).squareRoot() * 1.8) }
+        drive(pan: v(pan), tilt: v(tilt))
+    }
+
     func zoom(_ v: Double) {
         let p = UInt8(min(7, max(0, Int((abs(v) * 7).rounded()))))
         if v == 0 { send([0x81, 0x01, 0x04, 0x07, 0x00, 0xFF]) }
@@ -306,7 +334,14 @@ final class CanonLink: PTZLink {
         cfg.timeoutIntervalForRequest = 3
         cfg.httpMaximumConnectionsPerHost = 2
         http = URLSession(configuration: cfg)
+        // Position reads (auto tracking asks several times a second) get their own connection,
+        // so they never hold up a joystick or zoom command.
+        let rc = URLSessionConfiguration.ephemeral
+        rc.timeoutIntervalForRequest = 2
+        rc.httpMaximumConnectionsPerHost = 1
+        reads = URLSession(configuration: rc)
     }
+    private let reads: URLSession
 
     private var base: String { "http://\(camera.host)\(camera.port == 80 ? "" : ":\(camera.port)")/-wvhttp-01-/" }
 
@@ -436,6 +471,9 @@ final class CanonLink: PTZLink {
         e.shutterAuto = auto || kv["c.1.me.shutter.mode"] == "auto"
         e.irisAuto = auto || kv["c.1.me.diaphragm.mode"] == "auto"
         e.gainList = list("me.gain"); e.shutterList = list("me.shutter"); e.irisList = list("me.diaphragm")
+        e.value.wb = kv["c.1.wb"]
+        e.value.kelvin = kv["c.1.wb.kelvin"].flatMap(Int.init)
+        e.kelvinList = list("wb.kelvin")
         return e
     }
 
@@ -449,11 +487,15 @@ final class CanonLink: PTZLink {
     /// Exposure goes through the same control channel as pan and tilt, as on the camera's own
     /// web page. Each value set also switches that one setting (and the camera) to manual.
     func setExposure(_ e: PTZExposure) {
-        var q = ["exp=manual"]
+        var q: [String] = e.hasExposure ? ["exp=manual"] : []
         if let g = e.gain { q += ["me.gain.mode=manual", "me.gain=\(g)"] }
         if let s = e.shutter { q += ["me.shutter.mode=speed", "me.shutter=\(s)"] }
         if let i = e.iris { q += ["me.diaphragm.mode=manual", "me.diaphragm=\(i)"] }
-        guard q.count > 1 else { return }
+        // White balance: a kelvin value sets kelvin mode; a mode alone (auto, daylight,
+        // tungsten) sets just that.
+        if let k = e.kelvin, e.wb == nil || e.wb == "kelvin" { q += ["wb=kelvin", "wb.kelvin=\(k)"] }
+        else if let m = e.wb { q += ["wb=\(m)"] }
+        guard !q.isEmpty else { return }
         control(q.joined(separator: "&"))
         // Read back what the camera actually took, once the command has gone.
         queue.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.readExposure() }
@@ -497,7 +539,7 @@ final class CanonLink: PTZLink {
     }
 
     // Canon speeds run 10 to 10000 for pan and tilt (very fast at the top), 0 to 127 for zoom.
-    private func speed(_ v: Double) -> Int { Int(10 + v * v * 3000) }
+    private func speed(_ v: Double) -> Int { min(10000, Int(10 + v * v * 3000)) }
 
     func drive(pan: Double, tilt: Double) {
         let p = pan == 0 ? "pan=stop" : "pan=\(pan < 0 ? "left" : "right")&pan.speed=\(speed(pan))"
@@ -508,8 +550,17 @@ final class CanonLink: PTZLink {
         if pan == 0 && tilt == 0 { resendStop(q, key: "drive") { $0.lastDrive } }
     }
 
+    func driveRaw(pan: Int, tilt: Int) {
+        let p = pan == 0 ? "pan=stop" : "pan=\(pan < 0 ? "left" : "right")&pan.speed=\(min(10000, max(20, abs(pan))))"
+        let t = tilt == 0 ? "tilt=stop" : "tilt=\(tilt > 0 ? "up" : "down")&tilt.speed=\(min(10000, max(20, abs(tilt))))"
+        let q = p + "&" + t
+        lastDrive = q
+        control(q, key: "drive")
+        if pan == 0 && tilt == 0 { resendStop(q, key: "drive") { $0.lastDrive } }
+    }
+
     func zoom(_ v: Double) {
-        let q = v == 0 ? "zoom=stop" : "zoom=\(v > 0 ? "tele" : "wide")&zoom.speed=\(Int(1 + abs(v) * 60))"
+        let q = v == 0 ? "zoom=stop" : "zoom=\(v > 0 ? "tele" : "wide")&zoom.speed=\(min(127, Int(1 + abs(v) * 60)))"
         lastZoom = q
         control(q, key: "zoom")
         if v == 0 { resendStop(q, key: "zoom") { $0.lastZoom } }
@@ -531,8 +582,16 @@ final class CanonLink: PTZLink {
     func store(_ n: Int) {}
 
     func readPosition(_ done: @escaping (PTZPosition?) -> Void) {
-        get("info.cgi") { text in
-            let kv = text.map(Self.parse) ?? [:]
+        // Only pan, tilt and zoom: about 1 KB instead of the whole 30 KB info page.
+        guard let url = URL(string: base + "info.cgi?item=c.1.pan,c.1.tilt,c.1.zoom") else { done(nil); return }
+        reads.dataTask(with: url) { [weak self] data, _, _ in
+            let kv = data.map { Self.parse(String(decoding: $0, as: UTF8.self)) } ?? [:]
+            self?.queue.async { Self.position(kv, done) }
+        }.resume()
+    }
+
+    private static func position(_ kv: [String: String], _ done: @escaping (PTZPosition?) -> Void) {
+        do {
             guard let p = kv["c.1.pan"].flatMap(Int.init), let t = kv["c.1.tilt"].flatMap(Int.init),
                   let z = kv["c.1.zoom"].flatMap(Int.init) else { done(nil); return }
             done(PTZPosition(pan: p, tilt: t, zoom: z))
@@ -677,6 +736,9 @@ public final class PTZController: ObservableObject {
     /// Called (on main) with the camera whenever a person or Claude moves it: the joystick,
     /// a shot, a preset or home. Auto tracking uses it to hand the camera straight back.
     public var onManualMove: ((UUID) -> Void)?
+    /// Overall speed for manual control (joystick, zoom rocker, arrow keys, Claude's moves):
+    /// 1 is normal, 0.25 very slow and fine, 2 twice as fast. Auto tracking has its own speed.
+    public var manualSpeed = 1.0
     /// Called (on main) whenever a person or Claude zooms a camera. Auto tracking keeps
     /// following and takes the new zoom as the shot size to hold.
     public var onManualZoom: ((UUID) -> Void)?
@@ -688,6 +750,16 @@ public final class PTZController: ObservableObject {
 
     /// Zoom for auto tracking, -1 to 1, without counting as a manual zoom.
     public func trackZoom(_ v: Double, camera: UUID) { with(camera) { $0.zoom(max(-1, min(1, v))) } }
+
+    /// Pan and tilt for auto tracking in the camera's own speed units (Canon: hundredths of a
+    /// degree a second), signed, without counting as a manual move.
+    public func trackDriveRaw(pan: Int, tilt: Int, camera: UUID) { with(camera) { $0.driveRaw(pan: pan, tilt: tilt) } }
+
+    /// Where a camera is now (Canon: pan and tilt in hundredths of a degree, zoom as the
+    /// horizontal angle of view in hundredths of a degree), on main; nil if it can't say.
+    public func readPosition(camera: UUID, _ done: @escaping (PTZPosition?) -> Void) {
+        with(camera) { $0.readPosition { p in DispatchQueue.main.async { done(p) } } }
+    }
 
     /// Pan and tilt for auto tracking: speeds -1 to 1, sent as given, without counting as a manual move.
     public func trackDrive(pan: Double, tilt: Double, camera: UUID) {
@@ -709,7 +781,8 @@ public final class PTZController: ObservableObject {
         if px != 0 || py != 0 { manual(camera) }
         if camera == nil, let l = lastDrive, l == step { return }
         if camera == nil { lastDrive = step }
-        with(camera) { $0.drive(pan: px, tilt: py) }
+        let k = manualSpeed
+        with(camera) { $0.drive(pan: px * k, tilt: py * k) }
     }
 
     public func stopDrive(camera: UUID? = nil) { if camera == nil { lastDrive = nil }; with(camera) { $0.drive(pan: 0, tilt: 0) } }
@@ -720,7 +793,8 @@ public final class PTZController: ObservableObject {
         if let id = camera ?? selected {
             if Thread.isMainThread { onManualZoom?(id) } else { DispatchQueue.main.async { self.onManualZoom?(id) } }
         }
-        with(camera) { $0.zoom(z) }
+        let k = manualSpeed
+        with(camera) { $0.zoom(z * k) }
     }
     public func autoFocus(_ on: Bool, camera: UUID? = nil) { with(camera) { $0.autoFocus(on) } }
     public func focusOnce(camera: UUID? = nil) { with(camera) { $0.focusOnce() } }
@@ -746,6 +820,8 @@ public final class PTZController: ObservableObject {
             if let g = e.gain { x.value.gain = g; x.gainAuto = false }
             if let s = e.shutter { x.value.shutter = s; x.shutterAuto = false }
             if let i = e.iris { x.value.iris = i; x.irisAuto = false }
+            if let k = e.kelvin, e.wb == nil || e.wb == "kelvin" { x.value.wb = "kelvin"; x.value.kelvin = k }
+            else if let m = e.wb { x.value.wb = m }
             exposure[id] = x
         }
         with(camera) { $0.setExposure(e) }
