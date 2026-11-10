@@ -39,6 +39,26 @@ calls to the running app over 127.0.0.1:9911, using the key in
 isn't running. `.mcp.json` registers it for Claude Code sessions in this folder.
 Camera tools refuse a camera that's on Live unless the call says `allow_live: true`.
 
+## Graphics and lower thirds previews (NDI)
+
+Tiles and the Next and Live monitors can show any NDI source, typically a CueScreens screen with an NDI output added. In Setup, under Volunteer source row, pick the NDI picture for a non-camera source such as Graphics. Under Key buttons, pick an NDI source with alpha (such as CueScreens' lower thirds sent with alpha). It is laid over the Next and Live pictures when the key is on them: on Live when it's on air, and on Next when it will be on air after the next Cut or Fade (a tied DSK or a key selected in the next transition).
+
+Previews use NDI's low-bandwidth preview stream, so they cost little network or processor time. They need the NDI runtime on this Mac (NDI Tools). In the config file, it's the `ndi` field on a source or key, with the exact name from Setup or Claude's `list_ndi_sources`. The preview shows what CueScreens is drawing, not the switcher's actual output.
+
+## Auto tracking
+
+**Track** (under the joystick) makes the Canon camera on Next follow the person nearest the middle of its shot. Click a person on the Next picture to follow them instead. CueVideo finds people and their body landmarks (eyes, shoulders, hips, ankles) in the camera's preview picture with Apple's Vision framework. It works out whether the shot is **shoulders up**, **waist up** or **full length**, and frames it the way a broadcast operator would:
+
+- Eyes near the upper third line, with headroom to suit the shot size.
+- Frame edges between joints: mid-chest, just below the waist, or a little room under the feet.
+- Lead room on the side the person faces or walks toward.
+- A dead zone, so the camera doesn't chase small moves, with eased starts and stops.
+- Slow zooms that hold the shot size as the person comes nearer or moves away.
+
+The Close / Waist / Full buttons under Track reframe the shot. Zooming by hand keeps tracking going and holds the new size. Moving the joystick, recalling a shot or preset, or clicking the badge on a monitor stops tracking. The person being followed is outlined on every picture of that camera, and tracking carries on when the camera goes Live.
+
+The preview runs slightly behind real time, so tracking suits someone walking the stage, not running. Follow speed (0.5 to 2), tilt on/off and zoom-to-hold-size are in Setup and the config file (`trackSpeed`, `trackTilt`, `trackZoom`). The framing numbers live in `ShotSize` in `Tracker.swift`. Claude can use `start_tracking`, `set_tracking_shot` and `stop_tracking`.
+
 ## Canon cameras take one controller at a time
 
 Only one session controls a Canon camera at a time. If another controller (another

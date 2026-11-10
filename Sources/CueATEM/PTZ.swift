@@ -674,6 +674,26 @@ public final class PTZController: ObservableObject {
         selected = c.id
     }
 
+    /// Called (on main) with the camera whenever a person or Claude moves it: the joystick,
+    /// a shot, a preset or home. Auto tracking uses it to hand the camera straight back.
+    public var onManualMove: ((UUID) -> Void)?
+    /// Called (on main) whenever a person or Claude zooms a camera. Auto tracking keeps
+    /// following and takes the new zoom as the shot size to hold.
+    public var onManualZoom: ((UUID) -> Void)?
+
+    private func manual(_ camera: UUID?) {
+        guard let id = camera ?? selected else { return }
+        if Thread.isMainThread { onManualMove?(id) } else { DispatchQueue.main.async { self.onManualMove?(id) } }
+    }
+
+    /// Zoom for auto tracking, -1 to 1, without counting as a manual zoom.
+    public func trackZoom(_ v: Double, camera: UUID) { with(camera) { $0.zoom(max(-1, min(1, v))) } }
+
+    /// Pan and tilt for auto tracking: speeds -1 to 1, sent as given, without counting as a manual move.
+    public func trackDrive(pan: Double, tilt: Double, camera: UUID) {
+        with(camera) { $0.drive(pan: max(-1, min(1, pan)), tilt: max(-1, min(1, tilt))) }
+    }
+
     private func with(_ id: UUID? = nil, _ f: @escaping (PTZLink) -> Void) {
         guard let id = id ?? selected else { return }
         queue.async { if let l = self.links[id] { f(l) } }
@@ -686,6 +706,7 @@ public final class PTZController: ObservableObject {
         let px = abs(x) < dead ? 0 : max(-1, min(1, x)), py = abs(y) < dead ? 0 : max(-1, min(1, y))
         // Only send when the direction or speed step changes, so a drag doesn't flood the camera.
         let step = (Int((px * 12).rounded()), Int((py * 12).rounded()))
+        if px != 0 || py != 0 { manual(camera) }
         if camera == nil, let l = lastDrive, l == step { return }
         if camera == nil { lastDrive = step }
         with(camera) { $0.drive(pan: px, tilt: py) }
@@ -694,19 +715,25 @@ public final class PTZController: ObservableObject {
     public func stopDrive(camera: UUID? = nil) { if camera == nil { lastDrive = nil }; with(camera) { $0.drive(pan: 0, tilt: 0) } }
 
     /// Zoom speed from -1 (wide) to 1 (tele); 0 stops.
-    public func zoom(_ v: Double, camera: UUID? = nil) { let z = abs(v) < 0.05 ? 0 : v; with(camera) { $0.zoom(z) } }
+    public func zoom(_ v: Double, camera: UUID? = nil) {
+        let z = abs(v) < 0.05 ? 0 : v
+        if let id = camera ?? selected {
+            if Thread.isMainThread { onManualZoom?(id) } else { DispatchQueue.main.async { self.onManualZoom?(id) } }
+        }
+        with(camera) { $0.zoom(z) }
+    }
     public func autoFocus(_ on: Bool, camera: UUID? = nil) { with(camera) { $0.autoFocus(on) } }
     public func focusOnce(camera: UUID? = nil) { with(camera) { $0.focusOnce() } }
-    public func home(camera: UUID? = nil) { with(camera) { $0.home() } }
+    public func home(camera: UUID? = nil) { manual(camera); with(camera) { $0.home() } }
 
     /// Presets are numbered from 1 here, whatever the camera counts from.
-    public func recall(_ n: Int, camera: UUID? = nil) { with(camera) { $0.recall(n) } }
+    public func recall(_ n: Int, camera: UUID? = nil) { manual(camera); with(camera) { $0.recall(n) } }
     public func store(_ n: Int) { with { $0.store(n) } }
 
     /// Recall a saved shot: move to its position, or set its exposure.
     public func go(to shot: PTZShot, camera: UUID? = nil) {
         switch shot.kind {
-        case .position: with(camera) { $0.goTo(shot.position) }
+        case .position: manual(camera); with(camera) { $0.goTo(shot.position) }
         case .exposure: if let e = shot.exposure { setExposure(e, camera: camera) }
         }
     }

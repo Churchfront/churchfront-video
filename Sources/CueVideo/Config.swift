@@ -6,6 +6,9 @@ import CueATEM
 struct VolunteerSource: Codable, Hashable, Identifiable {
     var input: Int
     var label: String?
+    /// An NDI source showing what this input carries (such as CueScreens' graphics output),
+    /// for its tile and the Next and Live pictures. Cameras show their own picture instead.
+    var ndi: String?
     var id: Int { input }
 }
 
@@ -17,6 +20,9 @@ struct KeyButton: Codable, Hashable, Identifiable {
     var me: Int?
     var keyer: Int?
     var dsk: Int?
+    /// An NDI source with alpha showing this key (such as CueScreens' lower thirds), laid
+    /// over the Next and Live pictures when the key is on them.
+    var ndi: String? = nil
     var id: String { "\(label)|\(me ?? 0)|\(keyer ?? 0)|\(dsk ?? 0)" }
 
     func isOn(_ s: ATEMState) -> Bool {
@@ -31,6 +37,17 @@ struct KeyButton: Codable, Hashable, Identifiable {
         atem.setKeyOnAir(keyer - 1, !isOn(atem.state), me: (me ?? 1) - 1)
     }
 
+    /// Whether the key will be on air after the next Cut or Fade: on now, unless the next
+    /// transition takes it off; off now, unless it brings it on (a tied DSK, or a key
+    /// selected in the next transition).
+    func onNext(_ s: ATEMState) -> Bool {
+        if let dsk { return (s.dskOnAir[dsk - 1] ?? false) != (s.dskTie[dsk - 1] ?? false) }
+        guard let keyer else { return false }
+        let m = (me ?? 1) - 1
+        let selected = ((s.nextSelection[m] ?? 1) >> keyer) & 1 == 1
+        return isOn(s) != selected
+    }
+
     /// "M/E 1 Key 1" or "DSK 2".
     var target: String { dsk.map { "DSK \($0)" } ?? "M/E \(me ?? 1) Key \(keyer ?? 0)" }
 }
@@ -42,11 +59,13 @@ struct KeyButton: Codable, Hashable, Identifiable {
 ///     {
 ///       "atemHost": "192.168.20.31",
 ///       "me": 1,
-///       "sources": [ { "input": 9, "label": "Cam 1" }, { "input": 3 } ],
+///       "sources": [ { "input": 9, "label": "Cam 1" }, { "input": 3, "label": "Graphics", "ndi": "CG-MAC (CueScreens Stream)" } ],
 ///       "cameras": [ { "name": "Cam 1", "host": "192.168.20.91", "proto": "canonXC", "atemInput": 9 } ],
-///       "keys": [ { "label": "Lower thirds", "me": 1, "keyer": 1 } ]
+///       "keys": [ { "label": "Lower thirds", "me": 1, "keyer": 1, "ndi": "CG-MAC (CueScreens Lower Thirds)" } ],
+///       "trackSpeed": 1, "trackTilt": true, "trackZoom": true
 ///     }
 ///
+/// `ndi` names an NDI source exactly as it appears on the network (Setup lists them).
 /// `proto` is canonXC (Canon HTTP), sonyUDP (VISCA over IP, UDP 52381) or rawTCP (VISCA over TCP 5678).
 struct CueConfig: Codable, Equatable {
     var atemHost = ""
@@ -57,10 +76,16 @@ struct CueConfig: Codable, Equatable {
     var cameras: [PTZCamera] = []
     /// On/off buttons for keys, such as lower thirds, under the take buttons.
     var keys: [KeyButton] = []
+    /// Auto tracking: how quickly cameras follow, 0.5 (gentle) to 2 (quick), and whether they tilt too.
+    var trackSpeed = 1.0
+    var trackTilt = true
+    /// Auto tracking zooms to hold the shot size (shoulders, waist or full length) as people
+    /// move nearer or farther. Off: zoom is left entirely to the volunteer.
+    var trackZoom = true
 
     init() {}
 
-    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys }
+    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, trackTilt, trackZoom }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -69,6 +94,9 @@ struct CueConfig: Codable, Equatable {
         sources = try c.decodeIfPresent([VolunteerSource].self, forKey: .sources) ?? []
         cameras = try c.decodeIfPresent([PTZCamera].self, forKey: .cameras) ?? []
         keys = try c.decodeIfPresent([KeyButton].self, forKey: .keys) ?? []
+        trackSpeed = min(2, max(0.5, try c.decodeIfPresent(Double.self, forKey: .trackSpeed) ?? 1))
+        trackTilt = try c.decodeIfPresent(Bool.self, forKey: .trackTilt) ?? true
+        trackZoom = try c.decodeIfPresent(Bool.self, forKey: .trackZoom) ?? true
     }
 }
 
@@ -125,6 +153,12 @@ final class ConfigStore: ObservableObject {
     func volunteerSources(_ state: ATEMState) -> [VolunteerSource] {
         if !config.sources.isEmpty { return config.sources }
         return config.cameras.compactMap(\.atemInput).map { VolunteerSource(input: $0) }
+    }
+
+    /// The NDI picture set for a source, if any.
+    func ndi(_ input: Int?) -> String? {
+        guard let input, let n = config.sources.first(where: { $0.input == input })?.ndi, !n.isEmpty else { return nil }
+        return n
     }
 
     func label(_ input: Int?, _ state: ATEMState) -> String {
