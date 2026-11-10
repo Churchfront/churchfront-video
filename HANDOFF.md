@@ -7,8 +7,10 @@ Status of CueVideo when it moved from Jake's MacBook Pro to the church booth.
   switcher, program/preview, cut, auto, T-bar, transition style and rate,
   next-transition keys, upstream keys, DSKs (tie/cut/auto), fade to black,
   aux, macros, stream and record, tally by source.
-- PTZ (`Sources/CueATEM/PTZ.swift`): VISCA over IP (UDP 52381) and VISCA over
-  TCP (5678): joystick pan/tilt, zoom, focus, home, presets 1 to 8 recall and save.
+- PTZ (`Sources/CueATEM/PTZ.swift`): Canon's own HTTP control (no camera
+  settings, no login; reads the camera's preset names), VISCA over IP (UDP
+  52381) and VISCA over TCP (5678): joystick pan/tilt, zoom, focus, home,
+  preset recall, and preset save on VISCA (Canon needs an admin login to save).
   "Follow next" selects the camera whose ATEM input is on preview.
 - NDI preview monitor (`Sources/CueVideo/NDIMonitor.swift`), meant for the ATEM multiview.
 - UI: Simple mode (Live / Next / Cut / Fade / Black) and Full mode.
@@ -28,9 +30,15 @@ Status of CueVideo when it moved from Jake's MacBook Pro to the church booth.
   overflowed the panel; Record and Stream now show only on models that have them.
 - CueStack's ATEM code (Devices.swift) has the same resend problem; fix it when it moves onto CueATEM.
 
+- 2026-11-10 on the church's three Canon cameras (CR-N500 .91, CR-N100 .92,
+  CR-N300 .93) over Canon HTTP: `CUEVIDEO_PTZTEST=ip,ip,ip` nudged pan, tilt and
+  zoom and recalled a preset on each; a watcher saw pan, tilt and zoom change on
+  all three; `Tools/canon_position.py` saved and restored every camera exactly.
+  VISCA never answered on these cameras (and the CR-N100 is on old firmware 1.0.1).
+
 ## Not tested yet
-- Real PTZ cameras. The three Canon CR-N cameras (.91, .92, .93) need VISCA
-  over IP turned on in each camera's web page first (admin login).
+- The joystick and zoom rocker by hand (the test drives the same code paths).
+- Which ATEM input each Canon feeds (needed for "Follow next"; set in settings).
 - Live NDI video in the monitor (no multiview NDI source on the network yet).
 - Macros (this switcher has none recorded).
 
@@ -38,7 +46,7 @@ Status of CueVideo when it moved from Jake's MacBook Pro to the church booth.
 | IP | Hardware maker (MAC prefix) | Likely device |
 |---|---|---|
 | 192.168.20.31 | Blackmagic Design | ATEM 2 M/E Constellation HD (confirmed) |
-| 192.168.20.91, .92, .93 | Canon | Canon CR-N PTZ cameras (confirmed, VISCA off) |
+| 192.168.20.91 / .92 / .93 | Canon | CR-N500 / CR-N100 / CR-N300 PTZ (confirmed; Canon HTTP works, VISCA off) |
 | 192.168.20.164 | Allen & Heath | Audio console |
 | 192.168.20.206, .254 | Shure | Wireless receivers |
 | 192.168.20.1 | Ubiquiti | Gateway |
