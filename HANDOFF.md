@@ -17,10 +17,22 @@ Status of CueVideo when it moved from Jake's MacBook Pro to the church booth.
 - Every command above against `Tools/fake_atem.py` (fake ATEM plus three fake
   VISCA cameras) through the self-test; screenshots looked right.
 
+- 2026-11-10 on the church's real ATEM 2 M/E Constellation HD (192.168.1.31,
+  protocol 2.32): read-only probe (`CUEVIDEO_PROBE=1`) read every input, both
+  M/Es, 4 keys, 2 DSKs, 12 aux. `CUEVIDEO_REALTEST=1` ran 25 commands (preview,
+  cut, auto, T-bar, style, rate, next transition, key, DSK tie, aux, fade to
+  black) and put everything back: 25 of 25 passed, twice.
+- Fixed from the real switcher: it resends packets, so each is applied once
+  (an old fade update was undoing a newer one); a finished auto can end with a
+  program change and no final "not in transition" update; big switchers (12 aux)
+  overflowed the panel; Record and Stream now show only on models that have them.
+- CueStack's ATEM code (Devices.swift) has the same resend problem; fix it when it moves onto CueATEM.
+
 ## Not tested yet
-- A real ATEM (field layouts of InPr, RTMS, StRS may differ by firmware).
-- Real PTZ cameras (Canon cameras may need their VISCA over IP setting turned on).
-- Live NDI video in the monitor (the source found had no frames).
+- Real PTZ cameras. The three Canon CR-N cameras (.91, .92, .93) need VISCA
+  over IP turned on in each camera's web page first (admin login).
+- Live NDI video in the monitor (no multiview NDI source on the network yet).
+- Macros (this switcher has none recorded).
 
 
 ## First steps at the booth
