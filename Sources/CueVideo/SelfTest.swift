@@ -174,6 +174,43 @@ enum SelfTest {
         DispatchQueue.main.asyncAfter(deadline: .now() + 90) { log("timed out"); exit(1) }
     }
 
+    /// CUEVIDEO_FOLLOWTEST=1: puts each linked camera's input on M/E 1 preview (never program),
+    /// checks "Follow next" selects that camera, then puts preview back.
+    static func followTest() {
+        let booth = Booth.shared, atem = booth.atem, ptz = booth.ptz
+        func log(_ s: String) { print("FOLLOW", s); fflush(stdout) }
+        booth.followPreview = true
+        func wait() {
+            guard atem.link == .online, !atem.state.inputs.isEmpty else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: wait); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                let original = atem.state.preview[0] ?? 0
+                let cams = ptz.cameras.filter { $0.atemInput != nil }
+                var fails = 0
+                func step(_ i: Int) {
+                    guard i < cams.count else {
+                        atem.setPreview(original, me: 0)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            log("preview back to \(atem.state.name(atem.state.preview[0])); \(cams.count - fails) of \(cams.count) passed")
+                            exit(fails == 0 ? 0 : 1)
+                        }
+                        return
+                    }
+                    let c = cams[i]
+                    atem.setPreview(c.atemInput!, me: 0)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        let ok = ptz.selected == c.id
+                        if !ok { fails += 1 }
+                        log("\(ok ? "PASS" : "FAIL") preview \(atem.state.name(atem.state.preview[0])) selects \(ptz.current?.name ?? "none") (want \(c.name))")
+                        step(i + 1)
+                    }
+                }
+                step(cams.count > 1 ? 0 : 0)
+            }
+        }
+        wait()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { log("timed out"); exit(1) }
+    }
+
     static func run() {
         let booth = Booth.shared
         let atem = booth.atem

@@ -36,9 +36,13 @@ Status of CueVideo when it moved from Jake's MacBook Pro to the church booth.
   all three; `Tools/canon_position.py` saved and restored every camera exactly.
   VISCA never answered on these cameras (and the CR-N100 is on old firmware 1.0.1).
 
+- Camera inputs: Cam 1 CR-N500 (.91) on Camera 101 (input 9), Cam 2 CR-N100 (.92)
+  on Camera 102 (input 10), Cam 3 CR-N300 (.93) on Camera 103 (input 11).
+  `CUEVIDEO_FOLLOWTEST=1` put each on M/E 1 preview: Follow next picked the right
+  camera 3 of 3, preview put back.
+
 ## Not tested yet
 - The joystick and zoom rocker by hand (the test drives the same code paths).
-- Which ATEM input each Canon feeds (needed for "Follow next"; set in settings).
 - Live NDI video in the monitor (no multiview NDI source on the network yet).
 - Macros (this switcher has none recorded).
 
