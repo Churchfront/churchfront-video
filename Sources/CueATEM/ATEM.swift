@@ -50,6 +50,9 @@ public struct ATEMState: Equatable {
     public var macroRunning: Int?
     public var streamStatus = 0
     public var recordStatus = 0
+    /// Only switchers with a built-in encoder or recorder report these.
+    public var hasStreaming = false
+    public var hasRecording = false
     /// Tally by source: bit 0 program, bit 1 preview (keys and DSKs included).
     public var tally: [Int: UInt8] = [:]
 
@@ -91,6 +94,7 @@ public final class ATEMClient: ObservableObject {
     private var localID: UInt16 = 0
     private var inFlight: [(id: UInt16, data: Data, sent: Double, tries: Int)] = []
     private var lastInbound = 0.0
+    private var lastRemoteID: UInt16?
     private var lastHello = 0.0
     private var connected = false
     private var ready = false
@@ -199,13 +203,20 @@ public final class ATEMClient: ObservableObject {
 
         if flags & Flag.newSession != 0 {
             connected = true
+            lastRemoteID = nil
             sendAck(remoteID)
             setLink(.connecting)
             return
         }
         if flags & Flag.ackRequest != 0 {
             sendAck(remoteID)
-            if length > 12 && b.count >= length { parse(Array(b[12..<length])) }
+            // The switcher resends packets it isn't sure we got. Apply each packet once,
+            // or an old update can land after a newer one and undo it.
+            let fresh = lastRemoteID.map { (Int(remoteID) - Int($0) + 32768) % 32768 } ?? 1
+            if fresh > 0 && fresh < 16384 {
+                lastRemoteID = remoteID
+                if length > 12 && b.count >= length { parse(Array(b[12..<length])) }
+            }
         }
         if flags & Flag.ackReply != 0 {
             let acked = UInt16(b[4]) << 8 | UInt16(b[5])
@@ -246,7 +257,13 @@ public final class ATEMClient: ObservableObject {
         if ready { publish() }
     }
 
+    private let trace = ProcessInfo.processInfo.environment["CUEVIDEO_TRACE"].map { Set($0.split(separator: ",").map(String.init)) }
+
     private func apply(_ name: String, _ d: [UInt8]) {
+        if let trace, trace.contains(name) {
+            print(String(format: "TRACE %.3f %@ %@", now(), name, d.map { String(format: "%02x", $0) }.joined(separator: " ")))
+            fflush(stdout)
+        }
         switch name {
         case "InCm":
             ready = true
@@ -256,16 +273,19 @@ public final class ATEMClient: ObservableObject {
         case "InPr" where d.count >= 26:
             let id = u16(d, 0)
             s.inputs[id] = ATEMInput(id: id, long: str(d, 2..<22), short: str(d, 22..<26))
-        case "PrgI" where d.count >= 4: s.program[Int(d[0])] = u16(d, 2)
+        case "PrgI" where d.count >= 4:
+            let me = Int(d[0]), src = u16(d, 2)
+            // A finished transition changes program; the switcher doesn't always send a
+            // last "not in transition" update after it, so end it here.
+            if s.program[me] != src && s.inTransition[me] == true { endTransition(me) }
+            s.program[me] = src
         case "PrvI" where d.count >= 4: s.preview[Int(d[0])] = u16(d, 2)
         case "TrPs" where d.count >= 6:
             let me = Int(d[0])
             let was = s.inTransition[me] ?? false
             let isOn = d[1] != 0
             let pos = Double(u16(d, 4)) / 10000
-            if was && !isOn && (lastPosition[me] ?? 0) > 0.5 {
-                DispatchQueue.main.async { self.tbarAtTop[me] = !(self.tbarAtTop[me] ?? false) }
-            }
+            if was && !isOn { endTransition(me) }
             s.inTransition[me] = isOn
             s.position[me] = pos
             lastPosition[me] = isOn ? pos : 0
@@ -291,8 +311,8 @@ public final class ATEMClient: ObservableObject {
                 s.macros[i] = nil
             }
         case "MRPr" where d.count >= 4: s.macroRunning = d[0] & 1 != 0 ? u16(d, 2) : nil
-        case "StRS" where d.count >= 2: s.streamStatus = u16(d, 0)
-        case "RTMS" where d.count >= 2: s.recordStatus = u16(d, 0)
+        case "StRS" where d.count >= 2: s.streamStatus = u16(d, 0); s.hasStreaming = true
+        case "RTMS" where d.count >= 2: s.recordStatus = u16(d, 0); s.hasRecording = true
         case "TlSr" where d.count >= 2:
             let n = u16(d, 0)
             var t: [Int: UInt8] = [:]
@@ -300,6 +320,16 @@ public final class ATEMClient: ObservableObject {
             s.tally = t
         default: break
         }
+    }
+
+    /// The T-bar's rest end flips when a transition ran past halfway, as on a hardware panel.
+    private func endTransition(_ me: Int) {
+        if (lastPosition[me] ?? 0) > 0.5 {
+            DispatchQueue.main.async { self.tbarAtTop[me] = !(self.tbarAtTop[me] ?? false) }
+        }
+        s.inTransition[me] = false
+        s.position[me] = 0
+        lastPosition[me] = 0
     }
 
     private func publish() {

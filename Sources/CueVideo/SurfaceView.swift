@@ -16,7 +16,7 @@ struct SurfaceView: View {
     var body: some View {
         HStack(alignment: .top, spacing: T.s5) {
             if !simple && (st.keyerCount > 0 || st.dskCount > 0) {
-                keys
+                keys.fixedSize()
                 divider
             }
             VStack(alignment: .leading, spacing: T.s3) {
@@ -27,12 +27,14 @@ struct SurfaceView: View {
                         if !st.macros.isEmpty { macros }
                         if st.auxCount > 0 { aux }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, T.s2)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(-1)
             divider
-            transition
+            transition.fixedSize()
         }
         .padding(T.s4)
         .background(T.surfaceSunken)
@@ -130,7 +132,7 @@ struct SurfaceView: View {
     var aux: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Aux outputs").panelLabel()
-            HStack(spacing: T.s2) {
+            ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: T.s2) {
                 ForEach(st.aux.keys.sorted(), id: \.self) { a in
                     VStack(alignment: .leading, spacing: 2) {
                         Text("AUX \(a + 1)").font(.sans(9, .bold)).foregroundStyle(T.inkSubtle)
@@ -140,7 +142,7 @@ struct SurfaceView: View {
                         .labelsHidden().pickerStyle(.menu).frame(width: 150)
                     }
                 }
-            }
+            } }
             .padding(.vertical, 6)
         }
     }

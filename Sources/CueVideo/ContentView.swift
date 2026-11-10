@@ -53,13 +53,15 @@ struct TopBar: View {
             }
             .pickerStyle(.segmented).frame(width: 140)
             .help("Simple shows only what a volunteer needs: what's live, what's next, and the cameras.")
-            StatusButton(title: atem.state.recording ? "Recording" : "Record", on: atem.state.recording, color: T.program) {
-                atem.setRecording(!atem.state.recording)
+            if atem.state.hasRecording {
+                StatusButton(title: atem.state.recording ? "Recording" : "Record", on: atem.state.recording, color: T.program) {
+                    atem.setRecording(!atem.state.recording)
+                }
             }
-            StatusButton(title: atem.state.streaming ? "Streaming" : (atem.state.streamConnecting ? "Connecting" : "Stream"),
+            if atem.state.hasStreaming { StatusButton(title: atem.state.streaming ? "Streaming" : (atem.state.streamConnecting ? "Connecting" : "Stream"),
                          on: atem.state.streaming || atem.state.streamConnecting, color: atem.state.streaming ? T.program : T.warning) {
                 atem.setStreaming(!(atem.state.streaming || atem.state.streamConnecting))
-            }
+            } }
             Button { booth.showSettings = true } label: { Image(systemName: "gearshape").font(.system(size: 15)) }
                 .buttonStyle(.plain).foregroundStyle(T.inkMuted).help("Switcher and cameras")
         }
