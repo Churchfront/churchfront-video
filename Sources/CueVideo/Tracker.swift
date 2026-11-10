@@ -34,25 +34,27 @@ enum ShotSize: String, CaseIterable, Identifiable {
         switch self { case .shoulders: return "Close"; case .waist: return "Waist"; case .full: return "Full" }
     }
 
+    /// The built-in rule for this size. The setup file's "framing" can change any part of it
+    /// while CueVideo runs (Setup, the config file, or Claude's set_framing).
+    var standard: FramingRule {
+        switch self {
+        case .shoulders: return FramingRule(eyeLine: 0.29, scale: 0.36, leadRoom: 0.09, deadX: 0.08, deadY: 0.07)
+        case .waist: return FramingRule(eyeLine: 0.29, scale: 0.21, leadRoom: 0.11, deadX: 0.07, deadY: 0.08)
+        case .full: return FramingRule(eyeLine: 0.15, scale: 0.095, leadRoom: 0.13, deadX: 0.06, deadY: 0.10)
+        }
+    }
+    /// The rule in use now: the standard with any changes from the setup file.
+    var rule: FramingRule { standard.merged(Booth.shared.store.config.framing[rawValue]) }
+
     /// Where the eyes sit, down from the top of the frame (0 to 1).
-    var eyeLine: Double {
-        switch self { case .shoulders: return 0.34; case .waist: return 0.29; case .full: return 0.15 }
-    }
+    var eyeLine: Double { rule.eyeLine ?? 0.3 }
     /// Eyes to shoulders as a share of frame height, the standard for this size.
-    var scale: Double {
-        switch self { case .shoulders: return 0.36; case .waist: return 0.21; case .full: return 0.095 }
-    }
+    var scale: Double { rule.scale ?? 0.2 }
     /// How far off center a person facing or walking one way sits, giving lead room.
-    var leadRoom: Double {
-        switch self { case .shoulders: return 0.09; case .waist: return 0.11; case .full: return 0.13 }
-    }
+    var leadRoom: Double { rule.leadRoom ?? 0.1 }
     /// How far they can drift across or up and down before the camera moves.
-    var deadX: Double {
-        switch self { case .shoulders: return 0.08; case .waist: return 0.07; case .full: return 0.06 }
-    }
-    var deadY: Double {
-        switch self { case .shoulders: return 0.07; case .waist: return 0.08; case .full: return 0.10 }
-    }
+    var deadX: Double { rule.deadX ?? 0.07 }
+    var deadY: Double { rule.deadY ?? 0.08 }
 
     /// The size a framing is closest to, from its head scale and what's in shot.
     static func classify(scale: Double?, anklesInShot: Bool, hipsInShot: Bool) -> ShotSize? {
@@ -116,8 +118,32 @@ final class AutoTracker: ObservableObject {
         var lastFrame = Date()
         var manualZoomAt: Date?
         var panning = false, tilting = false, zooming = false
+        /// Pan and tilt last sent, in the camera's units (hundredths of a degree a second).
         var sentPan = 0.0, sentTilt = 0.0, sentZoom = 0.0
         var panDir = 0, panDirSince = Date()
+
+        // Motion, measured. The camera reports its angle of view, so moves are worked out in
+        // real angles: how fast the person is really going, and how fast the camera really
+        // turns for the speed it was asked (some Canon modes slow panning when zoomed in).
+        var fov = 40.0                       // horizontal angle of view now, degrees
+        var lastPos: (pan: Double, tilt: Double, at: Date)?
+        var gainPan = 1.0, gainTilt = 1.0    // how fast it really turns ÷ how fast it was asked
+        var sentAt = Date()
+        var sentLog: [(at: Date, pan: Double, tilt: Double)] = []
+        var lastEye: (p: CGPoint, at: Date)?
+        var imgVX = 0.0, imgVY = 0.0         // the person's motion in the picture, frames a second
+        var moveX = 0.0, moveY = 0.0         // their real motion (right and up), frames a second
+        var polling = false
+        /// Recent measured positions (degrees), for how fast the camera really moved.
+        var polls: [(at: Date, pan: Double, tilt: Double)] = []
+        /// Zoom hold, kept calm: when the size first looked wrong, and the last zoom's end and direction.
+        var zoomWrongSince: Date?
+        var zoomEnded = Date.distantPast
+        var zoomDir = 0
+        /// For the first moments, the size to hold follows the (smoothed) size they're at.
+        var holdLearnUntil = Date.distantPast
+        /// Walking: the direction they've been clearly moving, and since when.
+        var walkX = 0, walkXSince = Date(), walkY = 0, walkYSince = Date()
     }
 
     @Published private(set) var sessions: [UUID: Session] = [:]
@@ -149,7 +175,6 @@ final class AutoTracker: ObservableObject {
     /// shot; without one, as whichever shot the camera is closest to now. `done` gets nil
     /// once someone is found, or the reason no one was.
     func start(_ camera: PTZCamera, at point: CGPoint? = nil, size: ShotSize? = nil, done: ((String?) -> Void)? = nil) {
-        let keep = sessions[camera.id]?.asked
         stop(camera.id)
         guard camera.proto == .canonXC, !camera.host.isEmpty else {
             done?("Auto tracking needs the camera's preview picture, which only Canon cameras give CueVideo.")
@@ -157,7 +182,7 @@ final class AutoTracker: ObservableObject {
         }
         var s = Session(camera: camera.id)
         s.pick = point
-        s.asked = size ?? keep
+        s.asked = size
         if let a = s.asked { s.size = a }
         sessions[camera.id] = s
         cameras[camera.id] = camera
@@ -177,6 +202,10 @@ final class AutoTracker: ObservableObject {
         s.size = size
         s.holdScale = size.scale
         s.manualZoomAt = nil
+        // A size picked on purpose reframes now, without the usual wait.
+        s.zoomWrongSince = .distantPast
+        s.zoomEnded = .distantPast
+        s.zoomDir = 0
         sessions[id] = s
     }
 
@@ -290,9 +319,11 @@ final class AutoTracker: ObservableObject {
                 s.eye = pick.eye
                 s.scale = pick.scale
                 s.seen = pick.size
-                // Frame as asked, or as the shot the volunteer set up is closest to.
+                // Frame as asked; otherwise keep the shot the volunteer set up: its size class for
+                // headroom and lead room, and its exact size to hold (no zoom at the start).
                 s.size = s.asked ?? pick.size ?? .waist
-                s.holdScale = s.size.scale
+                s.holdScale = s.asked != nil ? s.size.scale : pick.scale
+                s.holdLearnUntil = now.addingTimeInterval(1.5)
                 s.lastSeen = now
                 s.phase = .following
                 sessions[id] = s
@@ -315,7 +346,7 @@ final class AutoTracker: ObservableObject {
             s.phase = .following
             let o = s.eye ?? next.eye
             s.eye = CGPoint(x: o.x + (next.eye.x - o.x) * 0.5, y: o.y + (next.eye.y - o.y) * 0.4)
-            if let n = next.scale { s.scale = s.scale.map { $0 + (n - $0) * 0.25 } ?? n }
+            if let n = next.scale { s.scale = s.scale.map { $0 + (n - $0) * 0.08 } ?? n }
             if let z = next.size { s.seen = z }
             steer(&s, next)
         } else {
@@ -341,6 +372,7 @@ final class AutoTracker: ObservableObject {
             }
         }
         let size = s.size
+        if s.asked == nil, now < s.holdLearnUntil, let sc = s.scale { s.holdScale = sc }
 
         // Lead room: walking one way (the camera has been panning that way a while) wins over
         // which way they face. Eased so the frame doesn't jump when they turn.
@@ -350,39 +382,127 @@ final class AutoTracker: ObservableObject {
 
         let ex = eye.x - markX                 // right of the mark: pan right
         let ey = size.eyeLine - eye.y          // eyes above the line: tilt up
-        // Start moving past the outer line, stop well inside it, so it doesn't hunt.
-        if abs(ex) > size.deadX { s.panning = true } else if abs(ex) < size.deadX * 0.35 { s.panning = false }
-        let tiltOn = config.trackTilt
-        if tiltOn, abs(ey) > size.deadY { s.tilting = true } else if !tiltOn || abs(ey) < size.deadY * 0.4 { s.tilting = false }
         let k = config.trackSpeed
-        func speed(_ e: Double, _ on: Bool, _ cap: Double) -> Double {
-            guard on else { return 0 }
-            let v = min(cap, max(0.07, abs(e) * 1.1)) * k
-            return e < 0 ? -v : v
-        }
-        // Ease in and out: speed up gradually, slow down a bit quicker, so moves don't jerk.
-        func ease(_ from: Double, _ to: Double) -> Double {
-            let up = 0.045, down = 0.09
-            let d = to - from
-            let limit = (abs(to) < abs(from) || (to * from) < 0) ? down : up
-            let v = from + max(-limit, min(limit, d))
-            return (v * 50).rounded() / 50  // in steps, so the camera isn't flooded
-        }
-        let pan = ease(s.sentPan, speed(ex, s.panning, 0.45))
-        let tilt = ease(s.sentTilt, speed(ey, s.tilting, 0.3) * 0.8)
+        let fovX = s.fov, fovY = s.fov * 9 / 16
+        let tune = config.trackTuning
+        let latency = tune.latency ?? 0.45     // the preview picture (and Vision) run about this far behind
 
-        let d = pan > 0.05 ? 1 : (pan < -0.05 ? -1 : 0)
+        // How fast they're really moving: their motion in the picture plus the camera's own
+        // motion at the time that picture was taken. In frames a second, right and up.
+        let dtFrame = min(0.3, max(0.03, s.lastEye.map { now.timeIntervalSince($0.at) } ?? 0.07))
+        if let last = s.lastEye {
+            let dt = now.timeIntervalSince(last.at)
+            if dt > 0.02, dt < 0.6 {
+                let vx = (person.eye.x - last.p.x) / dt, vy = (person.eye.y - last.p.y) / dt
+                s.imgVX += (vx - s.imgVX) * 0.35
+                s.imgVY += (vy - s.imgVY) * 0.35
+            } else { s.imgVX = 0; s.imgVY = 0 }
+        }
+        s.lastEye = (person.eye, now)
+        // How fast the person is really moving (frames a second, right and up): their drift in
+        // the picture plus how fast the camera was really turning when that picture was taken,
+        // measured from its position reads, never assumed from what it was told.
+        let ta = now.addingTimeInterval(-latency + 0.05)
+        let before = s.polls.filter { $0.at <= ta }
+        var camRX = 0.0, camRY = 0.0
+        if before.count >= 2 {
+            // Over the last three reads (about half a second), so the camera's own starts and
+            // stops don't look like the person moving.
+            let a = before[max(0, before.count - 3)], b = before[before.count - 1]
+            let dt = b.at.timeIntervalSince(a.at)
+            if dt > 0.05, dt < 1 { camRX = (b.pan - a.pan) / dt / fovX; camRY = (b.tilt - a.tilt) / dt / fovY }
+        }
+        s.moveX += ((s.imgVX + camRX) - s.moveX) * 0.2
+        s.moveY += ((camRY - s.imgVY) - s.moveY) * 0.2
+        // Only clear, steady movement one way for half a second counts as walking; anything
+        // smaller is a shift of weight or measurement noise, and the camera just holds framing.
+        func walking(_ v: Double, _ dir: inout Int, _ since: inout Date, _ min: Double) -> Double {
+            let d = v > min ? 1 : (v < -min ? -1 : 0)
+            if d != dir { dir = d; since = now }
+            return d != 0 && now.timeIntervalSince(since) > 0.5 ? v : 0
+        }
+        let walkMin = tune.walkThreshold ?? 0.12
+        let walkVX = walking(s.moveX, &s.walkX, &s.walkXSince, walkMin)
+        let walkVY = walking(s.moveY, &s.walkY, &s.walkYSince, walkMin * 1.25)
+        let relX = s.imgVX, relY = -s.imgVY
+
+        // Edge alarm: how close their body is to the side of the frame they're heading for,
+        // 0 (comfortable) to 1 (touching it). Near the edge the camera corrects harder.
+        // Their body's edge, or on a tight shot (body wider than half the frame) their head.
+        let box = person.box
+        let gap = box.width < 0.5 ? (ex > 0 ? 1 - box.maxX : box.minX)
+                                  : (ex > 0 ? 1 - eye.x : eye.x) - 0.1
+        let urgency = min(1, max(0, (0.2 - gap) / 0.2))
+
+        // Move while they're off the mark or walking; settle once they stand still on it.
+        if abs(ex) > size.deadX || walkVX != 0 || urgency > 0 { s.panning = true }
+        else if abs(ex) < size.deadX * 0.5 && walkVX == 0 { s.panning = false }
+        let tiltOn = config.trackTilt
+        if tiltOn, abs(ey) > size.deadY || walkVY != 0 { s.tilting = true }
+        else if !tiltOn || (abs(ey) < size.deadY * 0.5 && walkVY == 0) { s.tilting = false }
+        _ = (relX, relY)
+
+        // The camera speed to ask for, in frames a second: their own speed, plus a gentle pull
+        // toward the mark (stronger near the edge). Tested in simulation against a camera that
+        // turns faster or slower than expected and a picture delay of 0.3 to 0.65 s: it keeps
+        // up with walking and settles without hunting. Speed-ups are limited so moves start smoothly.
+        func rate(_ e: Double, _ move: Double, _ on: Bool, _ prev: Double) -> Double {
+            guard on else { return 0 }
+            let kp = min(2.5, min(1.6, (tune.correction ?? 1.2) * k) * (1 + 1.5 * urgency))
+            let want = move + kp * e
+            let accel = (urgency > 0.3 ? 16.0 : 8.0 * max(1, k)) * dtFrame
+            let decel = 16.0 * max(1, k) * dtFrame
+            let step = abs(want) < abs(prev) || want * prev < 0 ? decel : accel
+            return prev + max(-step, min(step, want - prev))
+        }
+        let camNowX = s.sentPan / 100 * s.gainPan / fovX, camNowY = s.sentTilt / 100 * s.gainTilt / fovY
+        let rx = rate(ex, walkVX, s.panning, camNowX)
+        let ry = rate(ey, walkVY, s.tilting, camNowY)
+        let camX = camRX
+        // Back into the camera's units: degrees a second (× 100), allowing for how it really turns.
+        func units(_ r: Double, _ fov: Double, _ g: Double) -> Double {
+            let raw = r * fov * 100 / max(0.05, g)
+            if abs(raw) < 15 { return 0 }
+            return (min(10000, max(20, abs(raw))) / 10).rounded() * 10 * (raw < 0 ? -1 : 1)
+        }
+        let pan = units(rx, fovX, s.gainPan)
+        let tilt = units(ry, fovY, s.gainTilt)
+        TrackLog.shared.write(String(format: "%.3f,%@,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f,%.2f,%d,%.3f,%.3f",
+            now.timeIntervalSince1970, cameras[s.camera]?.name ?? "?", eye.x, ex, ey, s.imgVX, s.moveX, camX, rx,
+            s.fov, s.gainPan, pan, tilt, urgency, s.panning ? 1 : 0, box.minX, box.maxX))
+
+        // Walking direction (the way the camera is following), for lead room.
+        let d = pan > 150 ? 1 : (pan < -150 ? -1 : 0)
         if d != s.panDir { s.panDir = d; s.panDirSince = now }
 
-        // Hold the shot size as they come nearer or move away: slow zooms only.
+        // Hold the shot size as they come nearer or move away, calmly: only when the size has
+        // been clearly wrong (over about a third) for 1.5 s, slowly, with a rest of 2 s after
+        // each zoom and no reversing within 5 s, so turning, bending or nodding never sets it
+        // hunting in and out.
         var zoom = 0.0
         if config.trackZoom, s.manualZoomAt == nil, let hold = s.holdScale, let sc = s.scale, person.scale != nil {
             let r = log(hold / sc)             // positive: they look too small, zoom in
-            if abs(r) > 0.18 { s.zooming = true } else if abs(r) < 0.06 { s.zooming = false }
+            let dir = r > 0 ? 1 : -1
             if s.zooming {
-                let v = min(0.3, max(0.05, abs(r) * 0.5)) * min(1.5, k)
+                if abs(r) < 0.08 || (dir != s.zoomDir) {
+                    s.zooming = false; s.zoomEnded = now; s.zoomWrongSince = nil
+                }
+            } else if abs(r) > (tune.zoomThreshold ?? 0.3) {
+                if s.zoomWrongSince == nil { s.zoomWrongSince = now }
+                let settled = now.timeIntervalSince(s.zoomEnded) > 2
+                let reversing = dir != s.zoomDir && now.timeIntervalSince(s.zoomEnded) < 5
+                if now.timeIntervalSince(s.zoomWrongSince!) > (tune.zoomWait ?? 1.5), settled, !reversing {
+                    s.zooming = true; s.zoomDir = dir
+                }
+            } else {
+                s.zoomWrongSince = nil
+            }
+            if s.zooming {
+                let v = min(0.18, max(0.04, abs(r) * 0.3))
                 zoom = ((r > 0 ? v : -v) * 50).rounded() / 50
             }
+        } else if s.zooming {
+            s.zooming = false; s.zoomEnded = now
         }
         send(&s, pan, tilt, zoom)
     }
@@ -395,7 +515,10 @@ final class AutoTracker: ObservableObject {
     private func send(_ s: inout Session, _ pan: Double, _ tilt: Double, _ zoom: Double) {
         if pan != s.sentPan || tilt != s.sentTilt {
             s.sentPan = pan; s.sentTilt = tilt
-            ptz.trackDrive(pan: pan, tilt: tilt, camera: s.camera)
+            s.sentAt = Date()
+            s.sentLog.append((Date(), pan, tilt))
+            if s.sentLog.count > 40 { s.sentLog.removeFirst(s.sentLog.count - 40) }
+            ptz.trackDriveRaw(pan: Int(pan), tilt: Int(tilt), camera: s.camera)
         }
         if zoom != s.sentZoom {
             s.sentZoom = zoom
@@ -406,6 +529,7 @@ final class AutoTracker: ObservableObject {
     /// Stops a camera whose picture has stopped coming in, so it never drifts on old frames.
     private func tick() {
         let now = Date()
+        for id in sessions.keys { poll(id) }
         for (id, var s) in sessions where now.timeIntervalSince(s.lastFrame) > 0.6 && (s.sentPan != 0 || s.sentTilt != 0 || s.sentZoom != 0) {
             hold(&s)
             s.phase = .searching
@@ -413,6 +537,54 @@ final class AutoTracker: ObservableObject {
         }
         for (id, s) in sessions where s.target == nil && now.timeIntervalSince(s.started) > 4 {
             finish(id, "No one is in the picture, or the picture isn't coming in.")
+        }
+    }
+
+    /// Reads where the camera really is: its angle of view, and how fast it's really turning
+    /// compared with the speed it was asked for.
+    private func poll(_ id: UUID) {
+        guard var s = sessions[id], !s.polling else { return }
+        s.polling = true
+        sessions[id] = s
+        ptz.readPosition(camera: id) { [weak self] pos in
+            guard let self, var s = self.sessions[id] else { return }
+            s.polling = false
+            if let pos {
+                let now = Date()
+                if pos.zoom > 50 { s.fov = Double(pos.zoom) / 100 }
+                let pan = Double(pos.pan) / 100, tilt = Double(pos.tilt) / 100
+                if let last = s.lastPos {
+                    let dt = now.timeIntervalSince(last.at)
+                    // Learn only from a steady speed held long enough for the camera to reach it.
+                    if dt > 0.1 {
+                        // Degrees it was asked to turn over that time (the camera reacts about
+                        // 0.15 s late), against how far it really turned. Learn only from
+                        // clear moves in one direction.
+                        func asked(_ axis: (Double, Double) -> Double) -> Double {
+                            let from = last.at.addingTimeInterval(-0.15), to = now.addingTimeInterval(-0.15)
+                            var total = 0.0
+                            let log = s.sentLog
+                            for (i, e) in log.enumerated() {
+                                let start = max(from, e.at)
+                                let end = min(to, i + 1 < log.count ? log[i + 1].at : to)
+                                if end > start { total += axis(e.pan, e.tilt) / 100 * end.timeIntervalSince(start) }
+                            }
+                            return total
+                        }
+                        func learn(_ g: inout Double, _ moved: Double, _ want: Double) {
+                            guard abs(want) > 0.3, moved * want > 0 else { return }
+                            let seen = abs(moved) / abs(want)
+                            if seen.isFinite { g += (min(1.5, max(0.05, seen)) - g) * 0.35 }
+                        }
+                        learn(&s.gainPan, pan - last.pan, asked { p, _ in p })
+                        learn(&s.gainTilt, tilt - last.tilt, asked { _, t in t })
+                    }
+                }
+                s.lastPos = (pan, tilt, now)
+                s.polls.append((now, pan, tilt))
+                if s.polls.count > 16 { s.polls.removeFirst(s.polls.count - 16) }
+            }
+            self.sessions[id] = s
         }
     }
 
@@ -426,4 +598,32 @@ final class AutoTracker: ObservableObject {
 
 extension CGRect {
     var center: CGPoint { CGPoint(x: midX, y: midY) }
+}
+
+/// A frame-by-frame record of what tracking saw and did, for tuning:
+/// ~/Library/Logs/CueVideo/tracking.csv (the last few minutes of tracking).
+final class TrackLog {
+    static let shared = TrackLog()
+    private let url: URL
+    private var handle: FileHandle?
+    private var lines = 0
+
+    init() {
+        let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs/CueVideo", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        url = dir.appendingPathComponent("tracking.csv")
+    }
+
+    func write(_ line: String) {
+        if handle == nil || lines > 20000 {
+            try? handle?.close()
+            let head = "time,camera,eye_x,err_x,err_y,picture_vx,person_vx,camera_vx_then,want_vx,fov_deg,pan_gain,pan_sent,tilt_sent,edge_urgency,panning,box_min_x,box_max_x\n"
+            FileManager.default.createFile(atPath: url.path, contents: Data(head.utf8))
+            handle = try? FileHandle(forWritingTo: url)
+            handle?.seekToEndOfFile()
+            lines = 0
+        }
+        handle?.write(Data((line + "\n").utf8))
+        lines += 1
+    }
 }

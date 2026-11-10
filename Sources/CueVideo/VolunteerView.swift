@@ -5,6 +5,7 @@ import CueATEM
 /// Top half: the Next and Live monitors and the source row. Bottom half: saved shots, camera
 /// control (center, under the tiles) and the take buttons. Everything else lives in Setup and the Full Switcher window.
 struct VolunteerView: View {
+    @AppStorage("showExposure") private var showExposure = false
     @EnvironmentObject var store: ConfigStore
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
@@ -27,22 +28,29 @@ struct VolunteerView: View {
             // Left to right: exposure, saved shots, the joystick (center), then take right beside it.
             HStack(alignment: .top, spacing: T.s6) {
                 VStack(alignment: .leading, spacing: T.s2) {
-                    NextCameraHeader()
-                    HStack(alignment: .top, spacing: T.s5) {
-                        ExposurePanel()
-                        ShotsPanel().frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: T.s2) {
+                        NextCameraHeader()
+                        Spacer()
+                        // Exposure for the camera on Next, shown when wanted, so the shot grid
+                        // gets the room the rest of the time.
+                        Button { showExposure.toggle() } label: {
+                            Label("Exposure", systemImage: "camera.aperture").font(.sans(12, .semibold))
+                                .foregroundStyle(showExposure ? T.onAction : T.ink)
+                                .padding(.horizontal, 10).frame(height: 28)
+                                .background(RoundedRectangle(cornerRadius: T.rMD).fill(showExposure ? T.accent : T.surfaceRaised))
+                                .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(showExposure ? T.accent : T.line))
+                        }
+                        .buttonStyle(PressStyle())
+                        .help(showExposure ? "Hide exposure" : "Show gain, shutter, iris and white balance for the camera on Next")
+                    }
+                    HStack(alignment: .top, spacing: T.s4) {
+                        if showExposure { ExposurePanel() }
+                        PresetGrid().frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 FramePanel().fixedSize()
-                HStack(alignment: .top, spacing: T.s5) {
-                    TakePanel().frame(width: 250)
-                    // Routing buttons, like macros: which picture goes to which screen.
-                    if !store.config.routes.isEmpty || !store.config.screens.isEmpty {
-                        RoutePanel().frame(width: 270)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                TakePanel().frame(width: 250).frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(T.s4)
             .frame(height: 290)
@@ -260,6 +268,7 @@ struct FramePanel: View {
             }
             .opacity(target == nil ? 0.35 : 1)
             .allowsHitTesting(target != nil)
+            CameraSpeedDial()
             .overlay {
                 if target == nil {
                     Text("Put a camera on Next to frame it")
@@ -271,6 +280,31 @@ struct FramePanel: View {
         }
         .onAppear { if let t = target { ptz.selected = t.id } }
         .onChange(of: target?.id) { _, id in if let id { ptz.selected = id } }
+    }
+}
+
+/// How fast the joystick, zoom and arrow keys move the cameras: slow for fine framing on a
+/// tight shot, fast for big moves. Shared by every camera and saved in the setup.
+struct CameraSpeedDial: View {
+    @EnvironmentObject var store: ConfigStore
+    @State private var value = 1.0
+
+    var body: some View {
+        HStack(spacing: T.s2) {
+            Image(systemName: "tortoise").font(.system(size: 11)).foregroundStyle(T.inkSubtle)
+            Slider(value: $value, in: 0.25...2) { editing in
+                if !editing { store.update { $0.ptzSpeed = (value * 20).rounded() / 20 } }
+            }
+            .controlSize(.small).frame(width: 150)
+            Image(systemName: "hare").font(.system(size: 11)).foregroundStyle(T.inkSubtle)
+            Text(String(format: "%.2g×", value)).font(.system(size: 11, design: .monospaced)).foregroundStyle(T.inkMuted).frame(width: 36, alignment: .leading)
+            Button("Reset") { value = 1; store.update { $0.ptzSpeed = 1 } }
+                .buttonStyle(.borderless).font(.sans(11)).foregroundStyle(T.inkSubtle)
+                .opacity(abs(value - 1) < 0.01 ? 0 : 1)
+        }
+        .help("Camera speed for the joystick, zoom and arrow keys. Slow it down for fine framing on a tight shot.")
+        .onAppear { value = store.config.ptzSpeed }
+        .onChange(of: store.config.ptzSpeed) { _, v in value = v }
     }
 }
 
@@ -343,6 +377,7 @@ struct ExposureControls: View {
                 brighterIsUp: false) { ptz.setExposure(PTZExposure(shutter: $0), camera: camera.id) }
             row("Iris", CameraExposure.irisText(e.value.iris), auto: e.irisAuto, list: e.irisList, value: e.value.iris,
                 brighterIsUp: false) { ptz.setExposure(PTZExposure(iris: $0), camera: camera.id) }
+            whiteBalance(e)
         }
         .frame(width: 200)
         .onAppear { ptz.refreshExposure(camera: camera.id) }
@@ -370,6 +405,52 @@ struct ExposureControls: View {
         .disabled(list.isEmpty)
     }
 
+    /// White balance: cooler (bluer) and warmer (more orange) step through the camera's
+    /// color temperatures; the middle opens auto, daylight, tungsten, common temperatures,
+    /// and matching another camera.
+    func whiteBalance(_ e: CameraExposure) -> some View {
+        let list = e.kelvinList
+        let k = e.value.kelvin
+        let i = k.flatMap { v in list.firstIndex(of: v) ?? list.firstIndex { $0 >= v } }
+        // A higher kelvin setting makes the picture warmer.
+        func step(_ warmer: Bool) {
+            guard !list.isEmpty else { return }
+            let j = max(0, min(list.count - 1, (i ?? list.count / 2) + (warmer ? 2 : -2)))
+            ptz.setExposure(PTZExposure(wb: "kelvin", kelvin: list[j]), camera: camera.id)
+        }
+        let others = ptz.cameras.filter { $0.id != camera.id && ptz.exposure[$0.id]?.value.wb != nil }
+        return HStack(spacing: 4) {
+            Text("White").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle).frame(width: 46, alignment: .leading)
+            stepButton("snowflake", "Cooler (bluer)") { step(false) }
+            Menu {
+                Button("Auto") { ptz.setExposure(PTZExposure(wb: "auto"), camera: camera.id) }
+                Button("Daylight") { ptz.setExposure(PTZExposure(wb: "daylight"), camera: camera.id) }
+                Button("Tungsten") { ptz.setExposure(PTZExposure(wb: "tungsten"), camera: camera.id) }
+                Divider()
+                ForEach([3200, 4300, 5600], id: \.self) { v in
+                    Button("\(v) K") { ptz.setExposure(PTZExposure(wb: "kelvin", kelvin: v), camera: camera.id) }
+                }
+                if !others.isEmpty {
+                    Divider()
+                    ForEach(others) { o in
+                        let x = ptz.exposure[o.id]!.value
+                        Button("Match \(o.name) (\(CameraExposure.wbText(x.wb, x.kelvin)))") {
+                            ptz.setExposure(x.wb == "kelvin" ? PTZExposure(wb: "kelvin", kelvin: x.kelvin) : PTZExposure(wb: x.wb), camera: camera.id)
+                        }
+                    }
+                }
+            } label: {
+                Text(CameraExposure.wbText(e.value.wb, k)).font(.sans(13, .semibold)).monospacedDigit()
+                    .frame(maxWidth: .infinity).frame(height: 28)
+                    .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceSunken))
+            }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+            .help("White balance. Pick auto, daylight, tungsten, a color temperature, or match another camera.")
+            stepButton("flame", "Warmer (more orange)") { step(true) }
+        }
+        .disabled(list.isEmpty && e.value.wb == nil)
+    }
+
     func stepButton(_ icon: String, _ help: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon).font(.system(size: 12, weight: .semibold)).frame(width: 30, height: 28)
@@ -382,80 +463,42 @@ struct ExposureControls: View {
     }
 }
 
-/// Shots for the camera that's on Next: the ones saved in CueVideo (tap to recall,
-/// right-click to update, rename or delete), then the presets stored on the camera itself
-/// (tap to recall, right-click to delete). A shot holds a position or an exposure.
-struct ShotsPanel: View {
+/// Every camera's shots in one grid: a row per camera, its shots and presets across. Tap a
+/// shot to send that camera there. The camera's name puts it on Next. The + at the end of a
+/// row saves where that camera is now (position, or exposure). Right-click a shot to update,
+/// rename or delete it. A camera on Live asks before it moves.
+struct PresetGrid: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
+    @EnvironmentObject var store: ConfigStore
 
-    @State private var saving = false
+    @State private var savingFor: UUID?
     @State private var saveKind: ShotKind = .position
     @State private var newName = ""
-    @State private var renaming: PTZShot?
-    @State private var deleting: PTZShot?
-    @State private var deletingPreset: Int?
+    @State private var renaming: (camera: UUID, shot: PTZShot)?
+    @State private var deleting: (camera: UUID, shot: PTZShot)?
+    @State private var deletingPreset: (camera: UUID, n: Int)?
+    @State private var liveMove: (camera: UUID, run: () -> Void)?
     @State private var problem: String?
-    @State private var storing = false
+    /// The shot each camera was last sent to, lit in the grid.
+    @State private var lastUsed: [UUID: String] = [:]
 
-    var target: PTZCamera? {
-        guard let i = atem.state.preview[booth.me] else { return nil }
-        return ptz.cameras.first { $0.atemInput == i && !$0.host.isEmpty }
-    }
+    var cams: [PTZCamera] { ptz.cameras.filter { !$0.host.isEmpty } }
+
+    func onLive(_ c: PTZCamera) -> Bool { c.atemInput.map { (atem.state.tally[$0] ?? 0) & 1 != 0 } ?? false }
+    func onNext(_ c: PTZCamera) -> Bool { c.atemInput == atem.state.preview[booth.me] }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: T.s3) {
-            HStack {
-                Text("Saved shots").panelLabel()
-                Spacer()
-                if let t = target {
-                    if ptz.canSaveShots(t) {
-                        Button("Save current shot") { newName = ""; saveKind = .position; saving = true }
-                            .buttonStyle(.plain).font(.sans(12, .bold)).foregroundStyle(T.accentStrong)
-                            .help("Saves \(t.name)'s position (or exposure) as a new shot")
-                            .popover(isPresented: $saving, arrowEdge: .top) { savePopover(t) }
-                    } else {
-                        Button(storing ? "Done saving" : "Save to preset") { storing.toggle() }
-                            .buttonStyle(.plain).font(.sans(12, .bold)).foregroundStyle(storing ? T.warning : T.accentStrong)
-                            .help("Turn on, then tap a preset to save the camera's current shot to it.")
-                    }
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Shots").panelLabel().frame(height: 16)
+            if cams.isEmpty {
+                Text("No cameras set up yet. Add them in Setup (⌘,).").font(.sans(12)).foregroundStyle(T.inkSubtle)
             }
-            .frame(height: 20)
-            if let t = target {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: T.s2)], spacing: T.s2) {
-                        ForEach(t.shots) { s in
-                            PanelButton(title: s.name, subtitle: s.kind == .exposure ? "EXPOSURE" : nil,
-                                        width: 130, height: 48, titleSize: 15) { ptz.go(to: s) }
-                                .contextMenu {
-                                    Button(s.kind == .exposure ? "Update to the camera's exposure now" : "Update to where the camera is now") {
-                                        ptz.saveShot("", camera: t.id, kind: s.kind, replacing: s.id) { if !$0 { problem = Self.noReading } }
-                                    }
-                                    Button("Rename…") { newName = s.name; renaming = s }
-                                    Divider()
-                                    Button("Delete…") { deleting = s }
-                                }
-                        }
-                        ForEach(cameraPresets(t), id: \.self) { n in
-                            let exp = ptz.exposurePresets[t.id]?.contains(n) ?? false
-                            PanelButton(title: ptz.presetNames(t)[n] ?? "Preset \(n)", subtitle: exp ? "ON CAMERA · EXPOSURE" : "ON CAMERA",
-                                        lit: storing ? T.warning : nil, width: 130, height: 48, titleSize: 15) {
-                                if storing { ptz.store(n); storing = false } else { ptz.recall(n) }
-                            }
-                            .contextMenu {
-                                if ptz.canSaveShots(t) { Button("Delete from camera…") { deletingPreset = n } }
-                            }
-                        }
-                    }
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(cams) { c in row(c) }
                 }
-                if t.shots.isEmpty && cameraPresets(t).isEmpty {
-                    Text("No shots yet. Frame the camera, then press Save current shot.")
-                        .font(.sans(12)).foregroundStyle(T.inkSubtle)
-                }
-            } else {
-                Spacer()
             }
         }
         .alert("Rename shot", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -463,18 +506,18 @@ struct ShotsPanel: View {
             Button("Save") { rename() }
             Button("Cancel", role: .cancel) { renaming = nil }
         }
-        .confirmationDialog("Delete \(deleting?.name ?? "this shot")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+        .confirmationDialog("Delete \(deleting?.shot.name ?? "this shot")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete", role: .destructive) {
-                if let d = deleting, let t = target, let i = ptz.cameras.firstIndex(where: { $0.id == t.id }) {
-                    ptz.cameras[i].shots.removeAll { $0.id == d.id }
+                if let d = deleting, let i = ptz.cameras.firstIndex(where: { $0.id == d.camera }) {
+                    ptz.cameras[i].shots.removeAll { $0.id == d.shot.id }
                 }
                 deleting = nil
             }
         }
         .confirmationDialog(presetQuestion, isPresented: Binding(get: { deletingPreset != nil }, set: { if !$0 { deletingPreset = nil } })) {
             Button("Delete from camera", role: .destructive) {
-                if let n = deletingPreset, let t = target {
-                    ptz.deleteCameraPreset(n, camera: t.id) { why in
+                if let d = deletingPreset {
+                    ptz.deleteCameraPreset(d.n, camera: d.camera) { why in
                         if let why { problem = "Couldn't delete that preset. \(why)" }
                     }
                 }
@@ -483,16 +526,110 @@ struct ShotsPanel: View {
         } message: {
             Text("This removes it from the camera itself, for every controller that uses it. It can't be undone.")
         }
+        .confirmationDialog(liveQuestion, isPresented: Binding(get: { liveMove != nil }, set: { if !$0 { liveMove = nil } })) {
+            Button("Move it on Live", role: .destructive) { liveMove?.run(); liveMove = nil }
+        } message: {
+            Text("Everyone watching will see the camera move.")
+        }
         .alert(problem ?? "", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
             Button("OK", role: .cancel) {}
         }
     }
 
+    func row(_ c: PTZCamera) -> some View {
+        let live = onLive(c), next = onNext(c)
+        return HStack(spacing: 6) {
+            // The camera: tap to put it on Next.
+            Button { if let i = c.atemInput { atem.setPreview(i, me: booth.me) } } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(c.name).font(.sans(13, .bold)).lineLimit(1)
+                    Text(live ? "LIVE" : (next ? "NEXT" : " ")).font(.sans(9, .bold)).tracking(0.8)
+                        .foregroundStyle(live ? T.program : T.preview)
+                }
+                .foregroundStyle(T.ink)
+                .padding(.horizontal, 8)
+                .frame(width: 82, height: 40, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
+                .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(live ? T.program : (next ? T.preview : T.line), lineWidth: live || next ? 2 : 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle())
+            .help("Put \(c.name) on Next")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(c.shots) { s in
+                        cell(s.name, s.kind == .exposure ? "EXPOSURE" : nil, used: lastUsed[c.id] == "shot:\(s.id)", live: live) {
+                            go(c) { ptz.go(to: s, camera: c.id); lastUsed[c.id] = "shot:\(s.id)" }
+                        }
+                        .contextMenu {
+                            Button(s.kind == .exposure ? "Update to the camera's exposure now" : "Update to where the camera is now") {
+                                ptz.saveShot("", camera: c.id, kind: s.kind, replacing: s.id) { if !$0 { problem = Self.noReading } }
+                            }
+                            Button("Rename…") { newName = s.name; renaming = (c.id, s) }
+                            Divider()
+                            Button("Delete…") { deleting = (c.id, s) }
+                        }
+                    }
+                    ForEach(cameraPresets(c), id: \.self) { n in
+                        let exp = ptz.exposurePresets[c.id]?.contains(n) ?? false
+                        cell(ptz.presetNames(c)[n] ?? "Preset \(n)", exp ? "CAMERA · EXP" : "ON CAMERA",
+                             used: lastUsed[c.id] == "preset:\(n)", live: live) {
+                            go(c) { ptz.recall(n, camera: c.id); lastUsed[c.id] = "preset:\(n)" }
+                        }
+                        .contextMenu {
+                            if ptz.canSaveShots(c) { Button("Delete from camera…") { deletingPreset = (c.id, n) } }
+                        }
+                    }
+                    if ptz.canSaveShots(c) {
+                        Button { newName = ""; saveKind = .position; savingFor = c.id } label: {
+                            Image(systemName: "plus").font(.system(size: 13, weight: .bold)).foregroundStyle(T.accentStrong)
+                                .frame(width: 40, height: 40)
+                                .background(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressStyle())
+                        .help("Save where \(c.name) is now as a new shot")
+                        .popover(isPresented: Binding(get: { savingFor == c.id }, set: { if !$0 { savingFor = nil } }), arrowEdge: .top) {
+                            savePopover(c)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func cell(_ title: String, _ subtitle: String?, used: Bool, live: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 1) {
+                Text(title).font(.sans(13, .semibold)).lineLimit(1).minimumScaleFactor(0.75)
+                if let subtitle { Text(subtitle).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
+            }
+            .foregroundStyle(used ? T.onAction : T.ink)
+            .padding(.horizontal, 6)
+            .frame(width: 104, height: 40)
+            .background(RoundedRectangle(cornerRadius: T.rMD).fill(used ? T.accent : T.surfaceRaised))
+            .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(used ? T.accent : T.line))
+            .opacity(live && !used ? 0.75 : 1)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle())
+    }
+
+    /// Moves a camera, asking first if it's on Live.
+    func go(_ c: PTZCamera, _ run: @escaping () -> Void) {
+        if onLive(c) { liveMove = (c.id, run) } else { run() }
+    }
+
     static let noReading = "The camera didn't report its settings, so the shot wasn't saved. Check that it's answering and try again."
 
+    var liveQuestion: String {
+        guard let id = liveMove?.camera, let c = ptz.cameras.first(where: { $0.id == id }) else { return "Move the live camera?" }
+        return "\(c.name) is on Live. Move it anyway?"
+    }
+
     var presetQuestion: String {
-        guard let n = deletingPreset, let t = target else { return "Delete this preset?" }
-        return "Delete \"\(ptz.presetNames(t)[n] ?? "Preset \(n)")\" from \(t.name)?"
+        guard let d = deletingPreset, let c = ptz.cameras.first(where: { $0.id == d.camera }) else { return "Delete this preset?" }
+        return "Delete \"\(ptz.presetNames(c)[d.n] ?? "Preset \(d.n)")\" from \(c.name)?"
     }
 
     func savePopover(_ t: PTZCamera) -> some View {
@@ -504,13 +641,13 @@ struct ShotsPanel: View {
             }
             .pickerStyle(.segmented).labelsHidden()
             Text(saveKind == .position ? "Pan, tilt and zoom, where the camera is pointing now."
-                                       : "Gain, shutter and iris, the camera's exposure now.")
+                                       : "Gain, shutter, iris and white balance, the camera's exposure now.")
                 .font(.sans(12)).foregroundStyle(T.inkMuted)
             TextField(saveKind == .position ? "Pulpit" : "Bright stage", text: $newName)
                 .textFieldStyle(.roundedBorder).onSubmit { save(t) }
             HStack {
                 Spacer()
-                Button("Cancel") { saving = false }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { savingFor = nil }.keyboardShortcut(.cancelAction)
                 Button("Save") { save(t) }.keyboardShortcut(.defaultAction)
             }
         }
@@ -521,14 +658,14 @@ struct ShotsPanel: View {
     func save(_ t: PTZCamera) {
         let name = newName.trimmingCharacters(in: .whitespaces)
         ptz.saveShot(name, camera: t.id, kind: saveKind) { if !$0 { problem = Self.noReading } }
-        saving = false
+        savingFor = nil
         saveKind = .position  // always back to position for next time
     }
 
     func rename() {
         let name = newName.trimmingCharacters(in: .whitespaces)
-        if let r = renaming, let t = target, !name.isEmpty,
-           let i = ptz.cameras.firstIndex(where: { $0.id == t.id }), let j = ptz.cameras[i].shots.firstIndex(where: { $0.id == r.id }) {
+        if let r = renaming, !name.isEmpty,
+           let i = ptz.cameras.firstIndex(where: { $0.id == r.camera }), let j = ptz.cameras[i].shots.firstIndex(where: { $0.id == r.shot.id }) {
             ptz.cameras[i].shots[j].name = name
         }
         renaming = nil
@@ -590,6 +727,7 @@ struct TakePanel: View {
 struct TrackButton: View {
     let camera: PTZCamera
     @ObservedObject var tracker = AutoTracker.shared
+    @EnvironmentObject var store: ConfigStore
 
     var body: some View {
         let s = tracker.sessions[camera.id]
@@ -624,6 +762,16 @@ struct TrackButton: View {
                         .help("Frame \(z.name.lowercased())")
                     }
                 }
+                // Follow speed, right here so it can be nudged during a service.
+                HStack(spacing: 4) {
+                    Text("Speed").font(.sans(11)).foregroundStyle(T.inkMuted)
+                    Spacer(minLength: 0)
+                    speedButton("minus", -0.25)
+                    Text(String(format: "%.2g×", store.config.trackSpeed)).font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(T.ink).frame(width: 36)
+                    speedButton("plus", 0.25)
+                }
+                .help("How quickly tracking cameras follow. Raise it if the camera falls behind, lower it if it overshoots.")
                 Text([TrackingBadge.words(s.phase), s.phase == .following ? s.size.name : nil].compactMap { $0 }.joined(separator: " · "))
                     .font(.sans(11, .semibold))
                     .foregroundStyle(s.phase == .following ? T.accent : T.warning)
@@ -632,6 +780,19 @@ struct TrackButton: View {
                 Text("Or click a person on Next").font(.sans(11)).foregroundStyle(T.inkSubtle)
             }
         }
+    }
+}
+
+extension TrackButton {
+    func speedButton(_ icon: String, _ step: Double) -> some View {
+        Button {
+            store.update { $0.trackSpeed = min(4, max(0.5, (($0.trackSpeed + step) * 4).rounded() / 4)) }
+        } label: {
+            Image(systemName: icon).font(.system(size: 10, weight: .bold)).foregroundStyle(T.ink)
+                .frame(width: 24, height: 20)
+                .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceSunken))
+        }
+        .buttonStyle(PressStyle())
     }
 }
 
