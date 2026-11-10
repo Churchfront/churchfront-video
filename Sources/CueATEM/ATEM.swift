@@ -39,6 +39,12 @@ public struct ATEMState: Equatable {
     public var nextSelection: [Int: Int] = [:]
     public var mixRate: [Int: Int] = [:]
     public var keyOnAir: [Int: [Int: Bool]] = [:]
+    /// Upstream key sources by M/E then keyer: fill and key (cut) inputs.
+    public var keyFill: [Int: [Int: Int]] = [:]
+    public var keyCut: [Int: [Int: Int]] = [:]
+    /// Downstream key sources by DSK.
+    public var dskFill: [Int: Int] = [:]
+    public var dskCut: [Int: Int] = [:]
     public var dskOnAir: [Int: Bool] = [:]
     public var dskInTransition: [Int: Bool] = [:]
     public var dskTie: [Int: Bool] = [:]
@@ -78,6 +84,41 @@ public enum ATEMLink: Equatable {
     case offline(String)
 }
 
+public struct ATEMLogEntry: Identifiable {
+    public let id = UUID()
+    public let time: Date
+    /// The four-letter ATEM command, such as CPvI (set preview).
+    public let command: String
+    public let data: [UInt8]
+    /// False when the switcher wasn't connected, so nothing went out.
+    public let sent: Bool
+
+    /// A plain description, such as "Preview, M/E 1: input 9".
+    public func describe(_ state: ATEMState) -> String {
+        func u16(_ i: Int) -> Int { i + 1 < data.count ? Int(data[i]) << 8 | Int(data[i + 1]) : 0 }
+        let me = "M/E \(Int(data.first ?? 0) + 1)"
+        switch command {
+        case "CPgI": return "Program, \(me): \(state.inputs[u16(2)]?.long ?? "input \(u16(2))")"
+        case "CPvI": return "Preview, \(me): \(state.inputs[u16(2)]?.long ?? "input \(u16(2))")"
+        case "DCut": return "Cut, \(me)"
+        case "DAut": return "Auto transition, \(me)"
+        case "CTPs": return "T-bar, \(me): \(u16(2) / 100)%"
+        case "CTTp": return "Transition settings, M/E \(Int(data.count > 1 ? data[1] : 0) + 1)"
+        case "CTMx": return "Mix rate, \(me): \(data.count > 1 ? Int(data[1]) : 0) frames"
+        case "CKOn": return "Key \(Int(data.count > 1 ? data[1] : 0) + 1) \(data.count > 2 && data[2] != 0 ? "on" : "off"), \(me)"
+        case "CDsL": return "DSK \(Int(data.first ?? 0) + 1) \(data.count > 1 && data[1] != 0 ? "on" : "off")"
+        case "CDsT": return "DSK \(Int(data.first ?? 0) + 1) tie \(data.count > 1 && data[1] != 0 ? "on" : "off")"
+        case "DDsA": return "DSK \(Int(data.first ?? 0) + 1) auto"
+        case "FtbA": return "Fade to black, \(me)"
+        case "CAuS": return "Aux \(Int(data.count > 1 ? data[1] : 0) + 1): \(state.inputs[u16(2)]?.long ?? "input \(u16(2))")"
+        case "MAct": return u16(0) == 0xFFFF ? "Stop macro" : "Run macro \(u16(0) + 1)"
+        case "StrR": return "Streaming \(data.first == 1 ? "start" : "stop")"
+        case "RcTM": return "Recording \(data.first == 1 ? "start" : "stop")"
+        default: return command
+        }
+    }
+}
+
 public final class ATEMClient: ObservableObject {
     @Published public private(set) var state = ATEMState()
     @Published public private(set) var link: ATEMLink = .idle
@@ -85,6 +126,9 @@ public final class ATEMClient: ObservableObject {
     /// Which end of the T-bar is at rest, per M/E. Flips when a transition
     /// finishes, as on a hardware panel.
     @Published public private(set) var tbarAtTop: [Int: Bool] = [:]
+    /// The last commands this app sent (or tried to send while offline), newest last,
+    /// for the Status window.
+    @Published public private(set) var sentLog: [ATEMLogEntry] = []
 
     private let queue = DispatchQueue(label: "cuevideo.atem")
     private var conn: NWConnection?
@@ -298,6 +342,12 @@ public final class ATEMClient: ObservableObject {
             s.dskOnAir[Int(d[0])] = d[1] != 0
             s.dskInTransition[Int(d[0])] = d[2] != 0
         case "DskP" where d.count >= 2: s.dskTie[Int(d[0])] = d[1] != 0
+        case "KeBP" where d.count >= 10:
+            s.keyFill[Int(d[0]), default: [:]][Int(d[1])] = u16(d, 6)
+            s.keyCut[Int(d[0]), default: [:]][Int(d[1])] = u16(d, 8)
+        case "DskB" where d.count >= 6:
+            s.dskFill[Int(d[0])] = u16(d, 2)
+            s.dskCut[Int(d[0])] = u16(d, 4)
         case "FtbS" where d.count >= 3:
             s.ftbBlack[Int(d[0])] = d[1] != 0
             s.ftbInTransition[Int(d[0])] = d[2] != 0
@@ -346,7 +396,13 @@ public final class ATEMClient: ObservableObject {
 
     private func send(_ name: String, _ data: [UInt8]) {
         queue.async {
-            guard self.connected, self.ready else { return }
+            let ok = self.connected && self.ready
+            let entry = ATEMLogEntry(time: Date(), command: name, data: data, sent: ok)
+            DispatchQueue.main.async {
+                self.sentLog.append(entry)
+                if self.sentLog.count > 60 { self.sentLog.removeFirst(self.sentLog.count - 60) }
+            }
+            guard ok else { return }
             let commands = self.command(name, data)
             self.localID = (self.localID + 1) % 32768
             let len = 12 + commands.count

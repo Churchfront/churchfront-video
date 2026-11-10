@@ -7,9 +7,10 @@ struct SurfaceView: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
 
-    var me: Int { booth.me }
+    var me: Int = 0
     var st: ATEMState { atem.state }
-    var simple: Bool { booth.simple }
+    /// The volunteer screen has its own simple layout now; this window is the full panel.
+    var simple: Bool { false }
     var bw: CGFloat { simple ? 100 : 76 }
     var bh: CGFloat { simple ? 72 : 56 }
 

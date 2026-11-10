@@ -6,6 +6,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "CueVideo", targets: ["CueVideo"]),
+        // The MCP server Claude uses to control CueVideo (ships inside CueVideo.app).
+        .executable(name: "cuevideo-mcp", targets: ["CueVideoMCP"]),
         // The ATEM and PTZ engine, shared with CueScreens and CueStack.
         .library(name: "CueATEM", targets: ["CueATEM"]),
     ],
@@ -13,6 +15,7 @@ let package = Package(
         .target(name: "CueATEM", path: "Sources/CueATEM"),
         // NDI in by loading the runtime at run time (no SDK needed to build).
         .target(name: "NDIBridge", path: "Sources/NDIBridge"),
+        .executableTarget(name: "CueVideoMCP", path: "Sources/CueVideoMCP"),
         .executableTarget(
             name: "CueVideo",
             dependencies: ["CueATEM", "NDIBridge"],

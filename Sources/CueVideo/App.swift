@@ -7,6 +7,8 @@ final class Booth: ObservableObject {
     static let shared = Booth()
     let atem = ATEMClient()
     let ptz = PTZController(load: ProcessInfo.processInfo.environment["CUEVIDEO_FAKECAMS"] == nil)
+    /// The setup, kept in a JSON file people and Claude can edit.
+    let store = ConfigStore()
     @Published var simple = UserDefaults.standard.bool(forKey: "simple") { didSet { UserDefaults.standard.set(simple, forKey: "simple") } }
     @Published var followPreview = UserDefaults.standard.object(forKey: "followPreview") as? Bool ?? true {
         didSet { UserDefaults.standard.set(followPreview, forKey: "followPreview") }
@@ -17,13 +19,18 @@ final class Booth: ObservableObject {
 
     var connectedOnce: Bool { !atem.state.inputs.isEmpty }
 
-    /// Keyboard: 1 to 9 and 0 put that source on preview, shift puts it on program,
-    /// space cuts, return runs the auto transition, arrows move the selected camera.
+    /// Keyboard: 1 to 9 and 0 put that tile of the volunteer's source row on Next, shift
+    /// puts it on Live, space cuts, return fades, arrows move the camera on Next.
     func key(_ e: NSEvent, down: Bool) -> Bool {
         if let r = NSApp.keyWindow?.firstResponder, r is NSTextView { return false }
         if e.modifierFlags.contains(.command) { return false }
         let arrows: [UInt16: (Double, Double)] = [123: (-0.6, 0), 124: (0.6, 0), 125: (0, -0.6), 126: (0, 0.6)]
         if let a = arrows[e.keyCode] {
+            // Only the camera on Next moves, as with the joystick.
+            let next = atem.state.preview[me]
+            guard ptz.cameras.contains(where: { $0.atemInput == next && $0.id == ptz.selected }) else {
+                heldArrows.removeAll(); ptz.stopDrive(); return true
+            }
             if down { heldArrows.insert(e.keyCode) } else { heldArrows.remove(e.keyCode) }
             let x = heldArrows.compactMap { arrows[$0]?.0 }.reduce(0, +)
             let y = heldArrows.compactMap { arrows[$0]?.1 }.reduce(0, +)
@@ -39,9 +46,9 @@ final class Booth: ObservableObject {
         }
         let digits: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4, 22: 5, 26: 6, 28: 7, 25: 8, 29: 9]
         if let i = digits[e.keyCode] {
-            let src = atem.state.busSources.filter(\.isExternal)
+            let src = store.volunteerSources(atem.state)
             guard i < src.count else { return true }
-            if e.modifierFlags.contains(.shift) { atem.setProgram(src[i].id, me: me) } else { atem.setPreview(src[i].id, me: me) }
+            if e.modifierFlags.contains(.shift) { atem.setProgram(src[i].input, me: me) } else { atem.setPreview(src[i].input, me: me) }
             return true
         }
         return false
@@ -60,8 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             booth.key(e, down: e.type == .keyDown) ? nil : e
         }
         let env = ProcessInfo.processInfo.environment
-        let host = env["CUEVIDEO_HOST"] ?? UserDefaults.standard.string(forKey: "atemHost") ?? ""
-        if !host.isEmpty { booth.atem.connect(host, port: env["CUEVIDEO_PORT"].flatMap(UInt16.init) ?? 9910) }
+        // Self-tests name their own switcher; otherwise the config file says where it is.
+        if let host = env["CUEVIDEO_HOST"], !host.isEmpty { booth.atem.connect(host, port: env["CUEVIDEO_PORT"].flatMap(UInt16.init) ?? 9910) }
         if let fake = env["CUEVIDEO_FAKECAMS"] {
             var cams: [PTZCamera] = []
             for (i, name) in ["Center", "Left", "Right"].enumerated() {
@@ -71,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             booth.ptz.cameras = cams
         }
+        booth.store.attach(booth)
+        // Claude's way in (through the CueVideo MCP server). Not during self-tests, which
+        // may run beside the real app.
+        if !booth.store.readOnly { ControlServer.shared.start() }
         if let src = env["CUEVIDEO_NDI"] ?? UserDefaults.standard.string(forKey: "ndiSource") {
             NDIMonitor.shared.start(src)
         }
@@ -89,13 +100,44 @@ struct CueVideoApp: App {
     var body: some Scene {
         WindowGroup("CueVideo") {
             ContentView()
-                .environmentObject(Booth.shared)
-                .environmentObject(Booth.shared.atem)
-                .environmentObject(Booth.shared.ptz)
-                .environmentObject(NDIMonitor.shared)
+                .booth()
                 .frame(minWidth: 1100, minHeight: 720)
         }
         .defaultSize(width: 1440, height: 900)
         .windowStyle(.hiddenTitleBar)
+        .commands { BoothCommands() }
+
+        // For the system owner: how CueVideo is set up and how it's talking to the gear.
+        Window("CueVideo Setup", id: "setup") {
+            SetupWindow().booth()
+        }
+        .defaultSize(width: 980, height: 760)
+
+        // Every switcher control (keys, DSKs, aux, macros, T-bar), kept away from volunteers.
+        Window("Full Switcher", id: "switcher") {
+            SwitcherWindow().booth().frame(minWidth: 900, minHeight: 320)
+        }
+        .defaultSize(width: 1300, height: 420)
+    }
+}
+
+struct BoothCommands: Commands {
+    @Environment(\.openWindow) var openWindow
+    var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("Setup…") { openWindow(id: "setup") }.keyboardShortcut(",")
+            Button("Full Switcher") { openWindow(id: "switcher") }.keyboardShortcut("k", modifiers: [.command, .shift])
+        }
+    }
+}
+
+extension View {
+    /// Everything the app's windows share.
+    func booth() -> some View {
+        environmentObject(Booth.shared)
+            .environmentObject(Booth.shared.atem)
+            .environmentObject(Booth.shared.ptz)
+            .environmentObject(Booth.shared.store)
+            .environmentObject(NDIMonitor.shared)
     }
 }
