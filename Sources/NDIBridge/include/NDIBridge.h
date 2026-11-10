@@ -14,6 +14,10 @@ const char *ndi_load(void);
 int ndi_sources(char *names, int max, int timeout_ms);
 
 void *ndi_recv_open(const char *source_name);
+/// lowest: ask for the sender's small preview stream (about 640 wide), for monitors.
+void *ndi_recv_open_bw(const char *source_name, bool lowest);
+/// As ndi_recv_frame, and says whether the frame carries alpha (BGRA) or not (BGRX).
+bool ndi_recv_frame_alpha(void *recv, int timeout_ms, const uint8_t **data, int *width, int *height, int *stride, bool *alpha, void **frame);
 /// Waits up to timeout_ms for a video frame. On success fills in BGRA data,
 /// size and stride, and a handle to release with ndi_recv_release.
 bool ndi_recv_frame(void *recv, int timeout_ms, const uint8_t **data, int *width, int *height, int *stride, void **frame);

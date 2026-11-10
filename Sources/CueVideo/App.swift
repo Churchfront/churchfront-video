@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             booth.ptz.cameras = cams
         }
         booth.store.attach(booth)
+        AutoTracker.shared.attach()
         // Claude's way in (through the CueVideo MCP server). Not during self-tests, which
         // may run beside the real app.
         if !booth.store.readOnly { ControlServer.shared.start() }
