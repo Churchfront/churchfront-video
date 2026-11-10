@@ -124,6 +124,56 @@ enum SelfTest {
         DispatchQueue.main.asyncAfter(deadline: .now() + 90) { log("timed out"); exit(1) }
     }
 
+    /// CUEVIDEO_PTZTEST=ip,ip: adds those Canon cameras (not saved), then on each one waits for it,
+    /// prints its model and presets, and nudges pan, tilt and zoom through the app's own controls.
+    /// Record positions before and put them back after (Tools/canon_position.py).
+    static func ptzTest(_ list: String) {
+        let ptz = Booth.shared.ptz
+        func log(_ s: String) { print("PTZ", s); fflush(stdout) }
+        var cams: [PTZCamera] = []
+        for ip in list.split(separator: ",") {
+            var c = PTZCamera(); c.name = String(ip); c.host = String(ip); c.proto = .canonXC; c.port = 80
+            cams.append(c)
+        }
+        ptz.cameras = cams
+        let moves: [(String, Double, () -> Void)] = [
+            ("pan right", 0.4, { ptz.drive(x: 0.4, y: 0) }), ("stop", 0.5, { ptz.stopDrive() }),
+            ("pan left", 0.4, { ptz.drive(x: -0.4, y: 0) }), ("stop", 0.5, { ptz.stopDrive() }),
+            ("tilt up", 0.4, { ptz.drive(x: 0, y: 0.4) }), ("stop", 0.5, { ptz.stopDrive() }),
+            ("tilt down", 0.4, { ptz.drive(x: 0, y: -0.4) }), ("stop", 0.5, { ptz.stopDrive() }),
+            ("zoom in", 0.4, { ptz.zoom(0.5) }), ("zoom stop", 0.5, { ptz.zoom(0) }),
+            ("zoom out", 0.4, { ptz.zoom(-0.5) }), ("zoom stop", 0.5, { ptz.zoom(0) }),
+        ]
+        func camera(_ i: Int) {
+            guard i < cams.count else { log("done"); ptz.cameras = []; DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exit(0) }; return }
+            let c = cams[i]
+            ptz.selected = c.id
+            var waited = 0.0
+            func ready() {
+                if ptz.online.contains(c.id) && ptz.models[c.id] != nil {
+                    log("\(c.host): \(ptz.models[c.id]!), presets \(ptz.presetNames(c).keys.sorted().map { "\($0)=\(ptz.presetNames(c)[$0]!)" })")
+                    move(0)
+                } else if waited > 8 {
+                    log("\(c.host): no answer"); camera(i + 1)
+                } else { waited += 0.25; DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: ready) }
+            }
+            func move(_ m: Int) {
+                guard m < moves.count else {
+                    if let first = ptz.presetNames(c).keys.sorted().first {
+                        log("\(c.host): recall preset \(first)"); ptz.recall(first)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { camera(i + 1) }
+                    } else { camera(i + 1) }
+                    return
+                }
+                moves[m].2()
+                DispatchQueue.main.asyncAfter(deadline: .now() + moves[m].1) { log("\(c.host): \(moves[m].0) sent"); move(m + 1) }
+            }
+            ready()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { camera(0) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 90) { log("timed out"); exit(1) }
+    }
+
     static func run() {
         let booth = Booth.shared
         let atem = booth.atem

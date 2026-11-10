@@ -36,11 +36,12 @@ struct SettingsView: View {
                     Button("Add camera") {
                         var c = PTZCamera()
                         c.name = "Camera \(ptz.cameras.count + 1)"
+                        c.proto = .canonXC; c.port = 80
                         ptz.cameras.append(c)
                     }
                 }
                 if ptz.cameras.isEmpty {
-                    Text("Add each PTZ camera's IP address. Most cameras speak VISCA over IP on UDP port 52381; PTZOptics cameras also take VISCA over TCP on port 5678. Set Switcher input to the ATEM input the camera is plugged into, so picking it on Next selects it here.")
+                    Text("Add each PTZ camera's IP address. Pick Canon (HTTP) for Canon cameras: it works with no camera settings and shows the presets saved on the camera. Most other cameras speak VISCA over IP on UDP port 52381; PTZOptics cameras also take VISCA over TCP on port 5678. Set Switcher input to the ATEM input the camera is plugged into, so picking it on Next selects it here.")
                         .font(.sans(12)).foregroundStyle(T.inkMuted)
                 }
                 ScrollView {

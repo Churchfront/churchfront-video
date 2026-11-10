@@ -20,7 +20,7 @@ struct CameraPanel: View {
             if ptz.cameras.isEmpty {
                 VStack(alignment: .leading, spacing: T.s3) {
                     Text("No PTZ cameras yet.").font(.sans(14, .semibold))
-                    Text("Add each camera's IP address in settings. CueVideo uses VISCA over IP, which PTZOptics, BirdDog, Sony, Canon and most PTZ cameras support.")
+                    Text("Add each camera's IP address in settings. CueVideo speaks Canon's own control and VISCA, which PTZOptics, BirdDog, Sony, Panasonic and most PTZ cameras support.")
                         .font(.sans(12)).foregroundStyle(T.inkMuted)
                     Button("Add cameras") { booth.showSettings = true }
                 }
@@ -41,14 +41,16 @@ struct CameraPanel: View {
                 HStack {
                     Text("Presets").panelLabel()
                     Spacer()
+                    if ptz.current?.proto.canStorePresets ?? false {
                     Button(saving ? "Done saving" : "Save shot") { saving.toggle() }
                         .buttonStyle(.plain).font(.sans(11, .bold))
                         .foregroundStyle(saving ? T.warning : T.accentStrong)
                         .help("Turn on, then tap a preset to save the camera's current shot to it.")
+                    }
                 }
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(70), spacing: T.s2), count: 4), spacing: T.s2) {
-                    ForEach(1...8, id: \.self) { n in
-                        PanelButton(title: "\(n)", subtitle: ptz.current?.presetNames[n], lit: saving ? T.warning : nil,
+                    ForEach(presetSlots, id: \.self) { n in
+                        PanelButton(title: "\(n)", subtitle: names[n], lit: saving ? T.warning : nil,
                                     width: 70, height: 46, titleSize: 15) {
                             if saving { ptz.store(n); saving = false } else { ptz.recall(n) }
                         }
@@ -59,6 +61,15 @@ struct CameraPanel: View {
         }
         .padding(T.s4)
         .background(T.surface)
+    }
+
+    var names: [Int: String] { ptz.current.map { ptz.presetNames($0) } ?? [:] }
+
+    /// Presets 1 to 8, or the camera's own named presets when it reports them.
+    var presetSlots: [Int] {
+        let named = names.keys.sorted()
+        if named.isEmpty || named.allSatisfy({ $0 <= 8 }) { return Array(1...8) }
+        return Array((named + Array(1...8)).reduce(into: [Int]()) { if !$0.contains($1) { $0.append($1) } }.prefix(12)).sorted()
     }
 
     var cameraChips: some View {
@@ -78,7 +89,7 @@ struct CameraPanel: View {
                         .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(ring, lineWidth: tally == 0 ? 1 : 2.5))
                     }
                     .buttonStyle(.plain)
-                    .help(ptz.online.contains(c.id) ? "\(c.name) at \(c.host)" : "\(c.name) is not answering at \(c.host)")
+                    .help(ptz.online.contains(c.id) ? "\(c.name) (\(ptz.models[c.id] ?? c.proto.label)) at \(c.host)" : "\(c.name) is not answering at \(c.host)")
                 }
             }
         }
