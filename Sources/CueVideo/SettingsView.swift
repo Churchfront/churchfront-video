@@ -233,7 +233,7 @@ struct SetupTab: View {
             HStack(spacing: T.s3) {
                 Text("Follow speed").font(.sans(13))
                 Slider(value: Binding(get: { store.config.trackSpeed }, set: { v in store.update { $0.trackSpeed = (v * 10).rounded() / 10 } }),
-                       in: 0.5...2).frame(width: 200)
+                       in: 0.5...4).frame(width: 240)
                 Text(String(format: "%.1f×", store.config.trackSpeed)).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkMuted)
                 Text("Lower if the camera overshoots or wanders, higher if it falls behind.").font(.sans(12)).foregroundStyle(T.inkSubtle)
             }

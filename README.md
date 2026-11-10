@@ -39,6 +39,16 @@ calls to the running app over 127.0.0.1:9911, using the key in
 isn't running. `.mcp.json` registers it for Claude Code sessions in this folder.
 Camera tools refuse a camera that's on Live unless the call says `allow_live: true`.
 
+## Camera speed, exposure and color matching
+
+- **Manual speed:** a tortoise-to-hare dial under the joystick (0.25× to 2×) sets how fast the joystick, zoom and arrow keys move every camera (config `ptzSpeed`).
+- **Tracking speed:** auto tracking works in real angles. It reads each camera's angle of view and position about four times a second. It drives the camera at the person's own speed plus a correction toward the framing mark, and speeds up sharply near the frame edge. It also learns how fast the camera really turns for the speed it was asked for, so zoomed-in shots, or camera modes that slow panning at tele, still keep up.
+- **White balance:** a row under gain, shutter and iris. Cooler and warmer step the color temperature, and the middle picks auto, daylight, tungsten, 3200, 4300 or 5600 K, or matches another camera. Exposure shots save white balance too.
+- **For Claude:**
+  - `set_exposure` takes `white_balance`.
+  - `match_exposure` copies gain, shutter, iris and white balance from one camera to the others, snapped to each model's values.
+  - `camera_snapshots` returns a picture from each camera with color measurements (average RGB, red÷green and blue÷green cast, brightness, clipping), so cameras can be compared and matched.
+
 ## Video routing
 
 **Window → Video Routing** (⇧⌘R) shows how pictures reach the screens:
