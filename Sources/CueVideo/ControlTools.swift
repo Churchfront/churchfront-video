@@ -41,7 +41,7 @@ enum ControlTools {
         // Status and setup
         tool("get_status", "Everything CueVideo knows right now: switcher connection, what's Live and Next on each M/E, keys, DSKs, aux, macros, recording and streaming, every source, the volunteer source row and key buttons, and each camera's connection, control, exposure, saved shots and on-camera presets."),
         tool("get_config", "The setup as saved in CueVideo's config file (JSON): switcher address, volunteer M/E, source row, key buttons, cameras and their saved shots."),
-        tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras); each one given replaces that whole field. Read get_config first and send back the edited field.",
+        tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 2, trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources; each one given replaces that whole field. Read get_config first and send back the edited field.",
              ["config": ["type": "object", "description": "Fields to replace, in the config file's format."]], required: ["config"]),
         tool("show_window", "Open one of CueVideo's windows on screen.", ["window": choice("Which window.", ["main", "setup", "switcher"])], required: ["window"]),
 
@@ -65,6 +65,12 @@ enum ControlTools {
         tool("camera_stop", "Stop any pan, tilt and zoom on a camera.", ["camera": camera]),
         tool("camera_focus", "Focus a camera: once (one-shot autofocus, like the Focus button), auto, or manual.",
              ["camera": camera, "mode": choice("Focus mode.", ["once", "auto", "manual"]), "allow_live": allowLive], required: ["mode"]),
+        tool("list_ndi_sources", "The NDI sources on the network now, by their exact names, for the ndi field of a volunteer source (a picture for its tile and the Next and Live monitors, such as CueScreens' graphics) or of a key button (a picture with alpha laid over Next and Live when that key is on them, such as CueScreens' lower thirds). Set them with update_config."),
+        tool("start_tracking", "Auto tracking: make a Canon camera follow a person, by watching its preview picture. It frames them as a broadcast follow shot: shoulders up, waist up or full length (the shot the camera is closest to unless shot is given), eyes near the upper third, lead room on the side they face or walk toward, eased pan and tilt, and slow zooms to hold the size. Picks the person nearest the middle, or nearest x/y if given (0 to 1 across and down the picture). Waits up to 4 seconds for someone to be found. Any manual pan, tilt, shot or preset stops tracking; a manual zoom keeps it and holds the new size.",
+             ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "x": num("0 (left) to 1 (right) across the picture."), "y": num("0 (top) to 1 (bottom) down the picture."), "allow_live": allowLive]),
+        tool("set_tracking_shot", "Reframe a tracking camera as a different follow shot: shoulders up, waist up or full length.",
+             ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "allow_live": allowLive], required: ["shot"]),
+        tool("stop_tracking", "Stop auto tracking on a camera, or on every camera with all: true.", ["camera": camera, "all": bool("Stop every camera.")]),
         tool("camera_home", "Send a camera to its home position (pan and tilt 0).", ["camera": camera, "allow_live": allowLive]),
         tool("set_exposure", "Set a camera's gain, shutter and/or iris (each switches that setting to manual). Canon units: gain in tenths of a dB (65 = 6.5 dB), shutter as 1/x (60 = 1/60), iris as f-number times 100 (450 = f/4.5). Values snap to the nearest the camera accepts; get_status lists them.",
              ["camera": camera, "gain": int("Tenths of a dB."), "shutter": int("Shutter speed denominator."), "iris": int("f-number times 100."), "allow_live": allowLive]),
@@ -121,7 +127,7 @@ enum ControlTools {
         case "update_config":
             guard let patch = a["config"] as? [String: Any] else { throw fail("Give config as an object.") }
             var obj = try configObject()
-            for (k, v) in patch where ["atemHost", "me", "sources", "keys", "cameras"].contains(k) { obj[k] = v }
+            for (k, v) in patch where ["atemHost", "me", "sources", "keys", "cameras", "trackSpeed", "trackTilt", "trackZoom"].contains(k) { obj[k] = v }
             let data = try JSONSerialization.data(withJSONObject: obj)
             let c: CueConfig
             do { c = try JSONDecoder().decode(CueConfig.self, from: data) } catch { throw fail("That config doesn't fit the format: \(error)") }
@@ -178,6 +184,7 @@ enum ControlTools {
             }
         case "camera_stop":
             let c = try cam(a, changing: false)
+            AutoTracker.shared.stop(c.id)
             ptz.stopDrive(camera: c.id); ptz.zoom(0, camera: c.id); done(ok("Stopped \(c.name)"))
         case "camera_focus":
             let c = try cam(a, changing: true)
@@ -188,6 +195,31 @@ enum ControlTools {
             default: throw fail("mode is once, auto or manual.")
             }
             done(ok("Focus \(a["mode"] as? String ?? "") on \(c.name)"))
+        case "list_ndi_sources":
+            let ndi = NDIMonitor.shared
+            ndi.scan()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                guard ndi.hasRuntime else { done(["error": "NDI isn't installed on this Mac. Install NDI Tools."]); return }
+                done(["sources": ndi.sources])
+            }
+        case "start_tracking":
+            let c = try cam(a, changing: true)
+            let pt: CGPoint? = (a["x"] == nil && a["y"] == nil) ? nil : CGPoint(x: dbl(a["x"] ?? 0.5), y: dbl(a["y"] ?? 0.5))
+            let size = (a["shot"] as? String).flatMap(ShotSize.init(rawValue:))
+            AutoTracker.shared.start(c, at: pt, size: size) { why in
+                let z = AutoTracker.shared.sessions[c.id]?.size.name.lowercased() ?? ""
+                done(why == nil ? ok("\(c.name) is following someone, framed \(z)", ["warning": controlWarning(c)].compactMapValues { $0 })
+                                : ["error": "\(c.name): \(why!) It keeps looking until stop_tracking."])
+            }
+        case "set_tracking_shot":
+            let c = try cam(a, changing: true)
+            guard let z = (a["shot"] as? String).flatMap(ShotSize.init(rawValue:)) else { throw fail("shot is shoulders, waist or full.") }
+            guard AutoTracker.shared.isTracking(c.id) else { throw fail("\(c.name) isn't tracking. Use start_tracking.") }
+            AutoTracker.shared.setSize(c.id, z); done(ok("\(c.name) framing \(z.name.lowercased())"))
+        case "stop_tracking":
+            if a["all"] as? Bool == true { AutoTracker.shared.stopAll(); done(ok("Stopped tracking on every camera")); return }
+            let c = try cam(a, changing: false)
+            AutoTracker.shared.stop(c.id); done(ok("\(c.name) stopped tracking"))
         case "camera_home":
             let c = try cam(a, changing: true); ptz.home(camera: c.id); done(ok("\(c.name) going home"))
         case "set_exposure":
@@ -418,6 +450,9 @@ enum ControlTools {
                 "on_live": c.atemInput.map { (s.tally[$0] ?? 0) & 1 != 0 } ?? false,
                 "on_next": c.atemInput.map { (s.tally[$0] ?? 0) & 2 != 0 } ?? false,
                 "shots": shots, "camera_presets": presets,
+                "tracking": AutoTracker.shared.sessions[c.id].map { t -> Any in
+                    ["state": t.phase.rawValue, "framing": t.size.rawValue, "picture_is": t.seen?.rawValue ?? "unknown"]
+                } ?? false,
             ]
             if let x {
                 d["exposure"] = expo(x.value).merging([
@@ -442,6 +477,15 @@ enum ControlTools {
                 "sources": store.volunteerSources(s).map { ["input": $0.input, "label": store.label($0.input, s)] },
                 "key_buttons": store.config.keys.map { ["label": $0.label, "target": $0.target, "on_air": $0.isOn(s)] },
             ] as [String: Any],
+            "ndi_previews": (store.config.sources.compactMap { src -> [String: Any]? in
+                guard let n = src.ndi else { return nil }
+                return ["for": store.label(src.input, s), "source": n, "receiving": NDIFeedHub.shared.isLive(n).map { $0 as Any } ?? "not shown now",
+                        "alpha": NDIFeedHub.shared.feed(n).hasAlpha]
+            } + store.config.keys.compactMap { k -> [String: Any]? in
+                guard let n = k.ndi else { return nil }
+                return ["for": k.label, "source": n, "receiving": NDIFeedHub.shared.isLive(n).map { $0 as Any } ?? "not shown now",
+                        "alpha": NDIFeedHub.shared.feed(n).hasAlpha, "on_live": k.isOn(s), "on_next": k.onNext(s)]
+            }),
             "cameras": cams,
             "config_file": store.url.path,
         ]

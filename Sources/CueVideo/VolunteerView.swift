@@ -63,28 +63,53 @@ struct StepLabel: View {
 /// The Next or Live picture: the camera's own preview when a Canon camera is on that bus,
 /// otherwise the source's name written large.
 struct BusMonitor: View {
+    @EnvironmentObject var booth: Booth
     let title: String
     let input: Int?
     let color: Color
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
     @EnvironmentObject var store: ConfigStore
+    @ObservedObject var tracker = AutoTracker.shared
 
     var camera: PTZCamera? {
         guard let input else { return nil }
         return ptz.cameras.first { $0.atemInput == input && $0.proto == .canonXC && !$0.host.isEmpty }
     }
 
+    var keyOverlays: [String] {
+        let s = atem.state
+        let keys = store.config.keys.filter { k in
+            guard let n = k.ndi, !n.isEmpty, n != store.ndi(input) else { return false }
+            guard k.dsk != nil || (k.me ?? 1) - 1 == booth.me else { return false }
+            return title == "Live" ? k.isOn(s) : k.onNext(s)
+        }
+        var seen = Set<String>()
+        return keys.compactMap(\.ndi).filter { seen.insert($0).inserted }
+    }
+
+    /// Clicking a person on Next follows them. On Live, a click only switches who an
+    /// already-tracking camera follows, so a stray click can't start moving the live shot.
+    func pick(_ camera: PTZCamera) -> ((CGPoint) -> Void)? {
+        guard title == "Next" || tracker.isTracking(camera.id) else { return nil }
+        return { p in tracker.start(camera, at: p) }
+    }
+
     var body: some View {
         ZStack {
             Color.black
             if let camera {
-                CameraVideo(camera: camera).id(camera.id)
+                CameraVideo(camera: camera, onPick: pick(camera)).id(camera.id)
+            } else if let n = store.ndi(input) {
+                NDIVideo(source: n).id(n)
             } else {
                 Text(store.label(input, atem.state))
                     .font(.sans(34, .bold)).foregroundStyle(T.inkMuted)
                     .lineLimit(2).minimumScaleFactor(0.4).multilineTextAlignment(.center).padding(T.s6)
             }
+            // Lower thirds and other keys with an NDI picture, laid over the shot when the
+            // key is on it: on Live when it's on air, on Next when it will be after the take.
+            ForEach(keyOverlays, id: \.self) { n in NDIVideo(source: n, overlay: true).id("key-" + n) }
         }
         .clipShape(RoundedRectangle(cornerRadius: T.rLG))
         .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(color, lineWidth: 3))
@@ -95,8 +120,13 @@ struct BusMonitor: View {
                 .background(RoundedRectangle(cornerRadius: T.rSM).fill(color))
                 .padding(T.s3)
         }
+        .overlay(alignment: .topTrailing) {
+            if let camera, let s = tracker.sessions[camera.id] {
+                TrackingBadge(phase: s.phase) { tracker.stop(camera.id) }.padding(T.s3)
+            }
+        }
         .overlay(alignment: .bottomLeading) {
-            if camera != nil {
+            if camera != nil || store.ndi(input) != nil {
                 Text(store.label(input, atem.state)).font(.sans(15, .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 10).frame(height: 28)
                     .background(Capsule().fill(Color.black.opacity(0.6)))
@@ -136,6 +166,7 @@ struct SourceRow: View {
 
 struct SourceTile: View {
     let source: VolunteerSource
+    @ObservedObject var tracker = AutoTracker.shared
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
@@ -152,16 +183,21 @@ struct SourceTile: View {
             ZStack(alignment: .bottomLeading) {
                 if let camera {
                     CameraVideo(camera: camera).id(camera.id)
+                } else if let n = source.ndi, !n.isEmpty {
+                    NDIVideo(source: n).id(n)
                 } else {
                     T.surfaceRaised
                 }
                 HStack(spacing: 6) {
                     Text(store.label(source.input, atem.state)).font(.sans(14, .semibold)).lineLimit(1)
                     if isLive { badge("LIVE", T.program) } else if isNext { badge("NEXT", T.preview) }
+                    if let camera, AutoTracker.shared.isTracking(camera.id) {
+                        Image(systemName: "figure.walk").font(.system(size: 11, weight: .bold)).foregroundStyle(T.accent)
+                    }
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 8).frame(height: 26)
-                .background(Capsule().fill(Color.black.opacity(camera == nil ? 0 : 0.6)))
+                .background(Capsule().fill(Color.black.opacity(camera == nil && (source.ndi ?? "").isEmpty ? 0 : 0.6)))
                 .padding(6)
             }
             .frame(maxWidth: 220, maxHeight: .infinity)
@@ -203,12 +239,13 @@ struct FramePanel: View {
                     .frame(width: 170, height: 170)
                 ZoomRocker { ptz.zoom($0) }.frame(width: 44, height: 170)
                 VStack(alignment: .leading, spacing: T.s2) {
-                    SmallButton("Focus") { ptz.focusOnce() }.frame(width: 120)
+                    SmallButton("Focus") { ptz.focusOnce() }.frame(width: 140)
+                    if let t = target { TrackButton(camera: t).frame(width: 140) }
                     if let t = target, !ptz.online.contains(t.id) {
                         Text("Not answering").font(.sans(11, .semibold)).foregroundStyle(T.warning)
                     } else if let t = target, !ptz.hasControl(t) {
                         Text("Waiting for control. Another controller has \(t.name), maybe its web page. Close it and this takes over.")
-                            .font(.sans(11, .semibold)).foregroundStyle(T.warning).frame(width: 120, alignment: .leading)
+                            .font(.sans(11, .semibold)).foregroundStyle(T.warning).frame(width: 140, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -537,5 +574,86 @@ struct TakePanel: View {
                 }
             }
         }
+    }
+}
+
+/// Turns auto tracking on and off for the camera on Next. On, it follows the person nearest
+/// the middle; clicking someone on the Next picture follows them instead.
+struct TrackButton: View {
+    let camera: PTZCamera
+    @ObservedObject var tracker = AutoTracker.shared
+
+    var body: some View {
+        let s = tracker.sessions[camera.id]
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                if s != nil { tracker.stop(camera.id) } else { tracker.start(camera) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "figure.walk").font(.system(size: 12, weight: .bold))
+                    Text(s == nil ? "Track" : "Tracking").font(.sans(12, .semibold))
+                }
+                .foregroundStyle(s == nil ? T.ink : T.onAction)
+                .frame(maxWidth: .infinity).frame(height: 30)
+                .background(RoundedRectangle(cornerRadius: T.rMD).fill(s == nil ? T.surfaceRaised : T.accent))
+                .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(s == nil ? T.line : T.accent))
+            }
+            .buttonStyle(PressStyle())
+            .disabled(camera.proto != .canonXC)
+            .help(s == nil ? "Follow the person in the middle of the shot. Or click someone on the Next picture. Moving the joystick stops tracking."
+                           : "Stop following. Moving the joystick or recalling a shot also stops it.")
+            if let s {
+                // The follow shot: tap to reframe. The highlighted one is what it's framing to.
+                HStack(spacing: 2) {
+                    ForEach(ShotSize.allCases) { z in
+                        Button { tracker.setSize(camera.id, z) } label: {
+                            Text(z.short).font(.sans(11, .semibold))
+                                .foregroundStyle(s.size == z ? T.onAction : T.inkMuted)
+                                .frame(maxWidth: .infinity).frame(height: 24)
+                                .background(RoundedRectangle(cornerRadius: T.rSM).fill(s.size == z ? T.accent : T.surfaceSunken))
+                        }
+                        .buttonStyle(PressStyle())
+                        .help("Frame \(z.name.lowercased())")
+                    }
+                }
+                Text([TrackingBadge.words(s.phase), s.phase == .following ? s.size.name : nil].compactMap { $0 }.joined(separator: " · "))
+                    .font(.sans(11, .semibold))
+                    .foregroundStyle(s.phase == .following ? T.accent : T.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Or click a person on Next").font(.sans(11)).foregroundStyle(T.inkSubtle)
+            }
+        }
+    }
+}
+
+/// Shown on a monitor whose camera is tracking, with a button to stop it.
+struct TrackingBadge: View {
+    let phase: AutoTracker.Phase
+    let stop: () -> Void
+
+    static func words(_ p: AutoTracker.Phase?) -> String? {
+        switch p {
+        case .starting: return "Looking for someone"
+        case .following: return "Following"
+        case .searching: return "Lost sight, holding"
+        case .lost: return "Lost them, looking"
+        case nil: return nil
+        }
+    }
+
+    var body: some View {
+        Button(action: stop) {
+            HStack(spacing: 6) {
+                Image(systemName: "figure.walk").font(.system(size: 11, weight: .bold))
+                Text(Self.words(phase)?.uppercased() ?? "").font(.sans(11, .bold)).tracking(0.8)
+                Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(phase == .following ? T.onAction : .black)
+            .padding(.horizontal, 8).frame(height: 24)
+            .background(Capsule().fill(phase == .following ? T.accent : T.warning))
+        }
+        .buttonStyle(PressStyle())
+        .help("Stop auto tracking")
     }
 }

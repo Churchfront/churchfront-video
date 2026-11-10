@@ -96,24 +96,32 @@ int ndi_sources(char *names, int max, int timeout_ms) {
     return count;
 }
 
-void *ndi_recv_open(const char *source_name) {
+void *ndi_recv_open(const char *source_name) { return ndi_recv_open_bw(source_name, false); }
+
+void *ndi_recv_open_bw(const char *source_name, bool lowest) {
     if (!ndi_load()) return NULL;
     recv_create_v3_t rc;
     memset(&rc, 0, sizeof(rc));
     rc.source_to_connect_to.p_ndi_name = source_name;
-    rc.color_format = 0;        // BGRX or BGRA
-    rc.bandwidth = 100;         // highest
+    rc.color_format = 0;        // BGRX, or BGRA when the source has alpha
+    rc.bandwidth = lowest ? 0 : 100;  // lowest: the sender's small preview stream
     rc.allow_video_fields = false;
     rc.p_ndi_recv_name = "CueVideo";
     return f_recv_create_v3(&rc);
 }
 
 bool ndi_recv_frame(void *recv, int timeout_ms, const uint8_t **data, int *width, int *height, int *stride, void **frame) {
+    bool alpha;
+    return ndi_recv_frame_alpha(recv, timeout_ms, data, width, height, stride, &alpha, frame);
+}
+
+bool ndi_recv_frame_alpha(void *recv, int timeout_ms, const uint8_t **data, int *width, int *height, int *stride, bool *alpha, void **frame) {
     if (!recv) return false;
     video_frame_v2_t *v = calloc(1, sizeof(video_frame_v2_t));
     int type = f_recv_capture_v2(recv, v, NULL, NULL, (uint32_t)timeout_ms);
     if (type != 1 || !v->p_data) { free(v); return false; }
     *data = v->p_data; *width = v->xres; *height = v->yres; *stride = v->line_stride_in_bytes; *frame = v;
+    *alpha = v->FourCC == FOURCC('B', 'G', 'R', 'A') || v->FourCC == FOURCC('R', 'G', 'B', 'A');
     return true;
 }
 

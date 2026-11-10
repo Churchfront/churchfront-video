@@ -191,32 +191,63 @@ final class CanonFeedHub {
     func isLive(_ c: PTZCamera) -> Bool? { users[key(c)] == nil ? nil : feeds[key(c)]?.live }
 }
 
-/// A Canon camera's live picture, fitted to its frame.
+/// A Canon camera's live picture, fitted to its frame. While the camera is auto tracking,
+/// the person it follows is outlined. With `onPick`, clicking the picture reports where
+/// (0 to 1 across and down the picture).
 struct CameraVideo: View {
     let camera: PTZCamera
+    var onPick: ((CGPoint) -> Void)? = nil
     @ObservedObject private var feed: CanonFeed
+    @ObservedObject private var tracker = AutoTracker.shared
 
-    init(camera: PTZCamera) {
+    init(camera: PTZCamera, onPick: ((CGPoint) -> Void)? = nil) {
         self.camera = camera
+        self.onPick = onPick
         feed = CanonFeedHub.shared.feed(for: camera)
     }
 
     var body: some View {
-        ZStack {
-            Color.black
-            if let img = feed.image {
-                Image(decorative: img, scale: 1).resizable().aspectRatio(contentMode: .fit)
-            }
-            if !feed.live {
-                VStack(spacing: T.s1) {
-                    ProgressView().controlSize(.small)
-                    Text(feed.image == nil ? "Connecting" : "Picture stopped").font(.sans(11)).foregroundStyle(T.inkMuted)
+        GeometryReader { g in
+            let box = fitted(g.size)
+            ZStack {
+                Color.black
+                if let img = feed.image {
+                    Image(decorative: img, scale: 1).resizable().aspectRatio(contentMode: .fit)
                 }
-                .padding(T.s2)
-                .background(RoundedRectangle(cornerRadius: T.rMD).fill(Color.black.opacity(0.6)))
+                if let s = tracker.sessions[camera.id], let t = s.target?.box {
+                    let r = CGRect(x: box.minX + t.minX * box.width, y: box.minY + t.minY * box.height,
+                                   width: t.width * box.width, height: t.height * box.height)
+                    let color = s.phase == .following ? T.accent : T.warning
+                    RoundedRectangle(cornerRadius: 4).stroke(color, style: StrokeStyle(lineWidth: 2, dash: s.phase == .following ? [] : [5, 4]))
+                        .frame(width: r.width, height: r.height)
+                        .position(x: r.midX, y: r.midY)
+                        .animation(.linear(duration: 0.1), value: t)
+                }
+                if !feed.live {
+                    VStack(spacing: T.s1) {
+                        ProgressView().controlSize(.small)
+                        Text(feed.image == nil ? "Connecting" : "Picture stopped").font(.sans(11)).foregroundStyle(T.inkMuted)
+                    }
+                    .padding(T.s2)
+                    .background(RoundedRectangle(cornerRadius: T.rMD).fill(Color.black.opacity(0.6)))
+                }
             }
+            .contentShape(Rectangle())
+            .onTapGesture(coordinateSpace: .local) { p in
+                guard let onPick, box.width > 0, box.contains(p) else { return }
+                onPick(CGPoint(x: (p.x - box.minX) / box.width, y: (p.y - box.minY) / box.height))
+            }
+            .allowsHitTesting(onPick != nil)
         }
         .onAppear { CanonFeedHub.shared.retain(camera) }
         .onDisappear { CanonFeedHub.shared.release(camera) }
+    }
+
+    /// Where the picture sits inside a frame of this size.
+    private func fitted(_ size: CGSize) -> CGRect {
+        let iw = CGFloat(feed.image?.width ?? 16), ih = CGFloat(feed.image?.height ?? 9)
+        let scale = min(size.width / iw, size.height / ih)
+        let w = iw * scale, h = ih * scale
+        return CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h)
     }
 }

@@ -81,6 +81,7 @@ struct SetupTab: View {
                 sources
                 keyButtons
                 cameras
+                tracking
                 configFile
             }
             .padding(T.s2)
@@ -120,7 +121,7 @@ struct SetupTab: View {
         let chosen = store.config.sources
         let available = atem.state.busSources.filter { s in !chosen.contains { $0.input == s.id } }
         return SetupSection(title: "Volunteer source row",
-                            note: "The tiles a volunteer can put on Next, left to right. Keys 1 to 9 and 0 pick them in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera.") {
+                            note: "The tiles a volunteer can put on Next, left to right. Keys 1 to 9 and 0 pick them in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, pick the NDI source showing the same picture (in CueScreens, add an NDI output to that screen) so the tile shows it.") {
             ForEach(Array(chosen.enumerated()), id: \.element.input) { i, s in
                 HStack(spacing: T.s2) {
                     Text(i < 10 ? "\((i + 1) % 10)" : "").font(.sans(12, .bold)).foregroundStyle(T.inkSubtle).frame(width: 18)
@@ -134,6 +135,11 @@ struct SetupTab: View {
                     .textFieldStyle(.roundedBorder).frame(width: 200)
                     if ptz.cameras.contains(where: { $0.atemInput == s.input }) {
                         Image(systemName: "video").foregroundStyle(T.inkSubtle).help("A PTZ camera")
+                    } else {
+                        NDIPicker(selection: s.ndi, none: "No picture") { v in store.update { c in
+                            if let j = c.sources.firstIndex(where: { $0.input == s.input }) { c.sources[j].ndi = v }
+                        } }
+                        .help("An NDI source showing what this input carries, such as a CueScreens screen sent to NDI, for its tile and the Next and Live pictures.")
                     }
                     Spacer()
                     Button { move(s.input, by: -1) } label: { Image(systemName: "chevron.up") }.disabled(i == 0)
@@ -156,7 +162,7 @@ struct SetupTab: View {
         let s = atem.state
         func name(_ i: Int?) -> String { i.map { s.inputs[$0]?.long ?? "input \($0)" } ?? "?" }
         return SetupSection(title: "Key buttons",
-                            note: "On/off buttons under Fade and Cut, such as lower thirds. Upstream keys cut on and off; DSKs fade at their own rate.") {
+                            note: "On/off buttons under Fade and Cut, such as lower thirds. Upstream keys cut on and off; DSKs fade at their own rate. Pick an NDI preview with alpha (in CueScreens, send the lower thirds screen to NDI with alpha) to see the key over the Next and Live pictures.") {
             ForEach(store.config.keys) { k in
                 HStack(spacing: T.s2) {
                     TextField("Label", text: Binding(get: { k.label }, set: { v in store.update { c in
@@ -168,6 +174,10 @@ struct SetupTab: View {
                          ?? "fill \(name(s.keyFill[(k.me ?? 1) - 1]?[(k.keyer ?? 1) - 1])), key \(name(s.keyCut[(k.me ?? 1) - 1]?[(k.keyer ?? 1) - 1]))")
                         .font(.sans(12)).foregroundStyle(T.inkMuted)
                     Spacer()
+                    NDIPicker(selection: k.ndi, none: "No preview") { v in store.update { c in
+                        if let i = c.keys.firstIndex(of: k) { c.keys[i].ndi = v }
+                    } }
+                    .help("An NDI source with alpha showing this key, such as CueScreens' lower thirds sent to NDI with alpha. It's laid over the Next and Live pictures when the key is on them.")
                     Button { store.update { $0.keys.removeAll { $0 == k } } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
                 }
             }
@@ -214,6 +224,23 @@ struct SetupTab: View {
                 ptz.cameras.append(c)
             }
             CameraLoginRow().padding(.top, T.s2)
+        }
+    }
+
+    var tracking: some View {
+        SetupSection(title: "Auto tracking",
+                     note: "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot (whichever the camera is closest to, or the one picked under Track): eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back.") {
+            HStack(spacing: T.s3) {
+                Text("Follow speed").font(.sans(13))
+                Slider(value: Binding(get: { store.config.trackSpeed }, set: { v in store.update { $0.trackSpeed = (v * 10).rounded() / 10 } }),
+                       in: 0.5...2).frame(width: 200)
+                Text(String(format: "%.1f×", store.config.trackSpeed)).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkMuted)
+                Text("Lower if the camera overshoots or wanders, higher if it falls behind.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+            }
+            Toggle("Tilt to follow too (off: pan only)", isOn: Binding(get: { store.config.trackTilt }, set: { v in store.update { $0.trackTilt = v } }))
+                .font(.sans(13))
+            Toggle("Zoom to hold the shot size as people move nearer or farther", isOn: Binding(get: { store.config.trackZoom }, set: { v in store.update { $0.trackZoom = v } }))
+                .font(.sans(13))
         }
     }
 
@@ -557,5 +584,38 @@ enum StatusReport {
         out += "\n\nCONFIG\n" + configRows(b.store).map { "\($0.0): \($0.1)" }.joined(separator: "\n")
         if let data = try? Data(contentsOf: b.store.url), let json = String(data: data, encoding: .utf8) { out += "\n\n" + json }
         return out
+    }
+}
+
+/// Picks an NDI source from those on the network (or none). Lists them fresh each time it opens.
+struct NDIPicker: View {
+    let selection: String?
+    let none: String
+    let set: (String?) -> Void
+    @ObservedObject var ndi = NDIMonitor.shared
+
+    var body: some View {
+        Menu {
+            Button(none) { set(nil) }
+            Divider()
+            if !ndi.hasRuntime {
+                Text("NDI isn't installed on this Mac (install NDI Tools)")
+            } else if ndi.sources.isEmpty {
+                Text("No NDI sources found yet")
+            }
+            ForEach(ndi.sources, id: \.self) { n in
+                Button { set(n) } label: { Text(NDIMonitor.shortName(n)) + Text(n == selection ? "  ✓" : "") }
+            }
+            Divider()
+            Button("Look again") { ndi.scan() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                Text(selection.map(NDIMonitor.shortName) ?? none).lineLimit(1)
+            }
+            .font(.sans(12))
+        }
+        .fixedSize()
+        .onAppear { ndi.scan() }
     }
 }
