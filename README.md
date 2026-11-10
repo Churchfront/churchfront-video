@@ -39,6 +39,16 @@ calls to the running app over 127.0.0.1:9911, using the key in
 isn't running. `.mcp.json` registers it for Claude Code sessions in this folder.
 Camera tools refuse a camera that's on Live unless the call says `allow_live: true`.
 
+## Video routing
+
+**Window → Video Routing** (⇧⌘R) shows how pictures reach the screens:
+
+- **Mixes:** what each M/E is for (M/E 1 the live stream, M/E 2 the side screens), what's on it, and quick buttons to switch the mix the volunteer doesn't run.
+- **Screens and outputs:** every aux output, as picture → aux → the screen it feeds and how it's wired. Pick a new picture from the menu and it changes right away. Linked auxes (such as a pair of lobby TVs) switch together. Outputs that feed encoders, recorders or the patch bay can be hidden from volunteers.
+- **Volunteer routing buttons:** route the screens the way you want, then save that as a button. The buttons sit in the bottom right of the main window, work like macros (one press can change several screens), and light up while the screens match them. Below them, a short summary says what each volunteer-facing screen is showing.
+
+In the config file, this is `mixNames`, `screens` and `routes`. Claude can use `get_routing`, `route_screen` and `run_route_button`. `route_screen` refuses hidden outputs, such as the stream encoder, unless the call says `allow_hidden: true`.
+
 ## Graphics and lower thirds previews (NDI)
 
 Tiles and the Next and Live monitors can show any NDI source, typically a CueScreens screen with an NDI output added. In Setup, under Volunteer source row, pick the NDI picture for a non-camera source such as Graphics. Under Key buttons, pick an NDI source with alpha (such as CueScreens' lower thirds sent with alpha). It is laid over the Next and Live pictures when the key is on them: on Live when it's on air, and on Next when it will be on air after the next Cut or Fade (a tied DSK or a key selected in the next transition).
