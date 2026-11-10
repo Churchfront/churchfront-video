@@ -41,9 +41,9 @@ enum ControlTools {
         // Status and setup
         tool("get_status", "Everything CueVideo knows right now: switcher connection, what's Live and Next on each M/E, keys, DSKs, aux, macros, recording and streaming, every source, the volunteer source row and key buttons, and each camera's connection, control, exposure, saved shots and on-camera presets."),
         tool("get_config", "The setup as saved in CueVideo's config file (JSON): switcher address, volunteer M/E, source row, key buttons, cameras and their saved shots."),
-        tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 2, trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources; each one given replaces that whole field. Read get_config first and send back the edited field.",
+        tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 2, trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources. Routing: mixNames (what each M/E is for, from M/E 1), screens ([{name, aux: [numbers from 1], note, volunteer}]), routes (volunteer routing buttons: [{label, set: [{aux, source}]}], source as an input number; M/E 1 program is 10010, M/E 2 program 10020); each one given replaces that whole field. Read get_config first and send back the edited field.",
              ["config": ["type": "object", "description": "Fields to replace, in the config file's format."]], required: ["config"]),
-        tool("show_window", "Open one of CueVideo's windows on screen.", ["window": choice("Which window.", ["main", "setup", "switcher"])], required: ["window"]),
+        tool("show_window", "Open one of CueVideo's windows on screen.", ["window": choice("Which window.", ["main", "setup", "routing", "switcher"])], required: ["window"]),
 
         // Volunteer screen
         tool("set_next", "Put a source on Next (preview), like tapping its tile.", ["source": source, "me": me], required: ["source"]),
@@ -65,6 +65,11 @@ enum ControlTools {
         tool("camera_stop", "Stop any pan, tilt and zoom on a camera.", ["camera": camera]),
         tool("camera_focus", "Focus a camera: once (one-shot autofocus, like the Focus button), auto, or manual.",
              ["camera": camera, "mode": choice("Focus mode.", ["once", "auto", "manual"]), "allow_live": allowLive], required: ["mode"]),
+        tool("get_routing", "Video routing in plain words: what each M/E mix is for and shows, every aux output with the screen it feeds, its wiring note and the picture it gets now, and the volunteer routing buttons (lit or not)."),
+        tool("route_screen", "Send a picture to a screen (all of its linked aux outputs) or to one aux. Changes what that screen shows right away. Screens hidden from volunteers (encoders, recorders, patch bay feeds) need allow_hidden: true; confirm with the person first, since one may feed the live stream.",
+             ["screen": any("Screen name, or aux number (from 1)."), "source": any("Input number or name, a mix name (such as Live stream or Side screens), or M/E 1 / M/E 2 (their program). Add 'preview' for an M/E's preview."),
+              "allow_hidden": bool("Required as true to change a screen hidden from volunteers.")], required: ["screen", "source"]),
+        tool("run_route_button", "Press one of the volunteer routing buttons, by label.", ["button": str("The button's label.")], required: ["button"]),
         tool("list_ndi_sources", "The NDI sources on the network now, by their exact names, for the ndi field of a volunteer source (a picture for its tile and the Next and Live monitors, such as CueScreens' graphics) or of a key button (a picture with alpha laid over Next and Live when that key is on them, such as CueScreens' lower thirds). Set them with update_config."),
         tool("start_tracking", "Auto tracking: make a Canon camera follow a person, by watching its preview picture. It frames them as a broadcast follow shot: shoulders up, waist up or full length (the shot the camera is closest to unless shot is given), eyes near the upper third, lead room on the side they face or walk toward, eased pan and tilt, and slow zooms to hold the size. Picks the person nearest the middle, or nearest x/y if given (0 to 1 across and down the picture). Waits up to 4 seconds for someone to be found. Any manual pan, tilt, shot or preset stops tracking; a manual zoom keeps it and holds the new size.",
              ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "x": num("0 (left) to 1 (right) across the picture."), "y": num("0 (top) to 1 (bottom) down the picture."), "allow_live": allowLive]),
@@ -127,7 +132,7 @@ enum ControlTools {
         case "update_config":
             guard let patch = a["config"] as? [String: Any] else { throw fail("Give config as an object.") }
             var obj = try configObject()
-            for (k, v) in patch where ["atemHost", "me", "sources", "keys", "cameras", "trackSpeed", "trackTilt", "trackZoom"].contains(k) { obj[k] = v }
+            for (k, v) in patch where ["atemHost", "me", "sources", "keys", "cameras", "trackSpeed", "trackTilt", "trackZoom", "mixNames", "screens", "routes"].contains(k) { obj[k] = v }
             let data = try JSONSerialization.data(withJSONObject: obj)
             let c: CueConfig
             do { c = try JSONDecoder().decode(CueConfig.self, from: data) } catch { throw fail("That config doesn't fit the format: \(error)") }
@@ -195,6 +200,30 @@ enum ControlTools {
             default: throw fail("mode is once, auto or manual.")
             }
             done(ok("Focus \(a["mode"] as? String ?? "") on \(c.name)"))
+        case "get_routing":
+            done(routing())
+        case "route_screen":
+            let auxes: [Int], what: String, hidden: Bool
+            if let n = intValue(a["screen"]) {
+                guard s.aux[n - 1] != nil else { throw fail("The switcher has no aux \(n). It has \(s.auxCount).") }
+                auxes = [n]; what = store.screen(aux: n)?.name ?? "Aux \(n)"; hidden = !(store.screen(aux: n)?.forVolunteers ?? true)
+            } else {
+                let q = (a["screen"] as? String ?? "").lowercased().trimmingCharacters(in: .whitespaces)
+                guard let sc = store.config.screens.first(where: { $0.name.lowercased() == q }) ?? store.config.screens.first(where: { $0.name.lowercased().contains(q) }), !q.isEmpty else {
+                    throw fail("No screen called \(a["screen"] ?? ""). Screens: \(store.config.screens.map(\.name).joined(separator: ", ")), or use an aux number.")
+                }
+                auxes = sc.aux; what = sc.name; hidden = !sc.forVolunteers
+            }
+            if hidden, a["allow_hidden"] as? Bool != true { throw fail("\(what) is hidden from volunteers (it may feed an encoder or the stream). Send allow_hidden: true to change it.") }
+            let src = try routeSource(a["source"])
+            for x in auxes { atem.setAux(x - 1, src) }
+            done(ok("\(what) now shows \(store.routeLabel(src, s))"))
+        case "run_route_button":
+            let q = (a["button"] as? String ?? "").lowercased()
+            guard let r = store.config.routes.first(where: { $0.label.lowercased() == q }) ?? store.config.routes.first(where: { $0.label.lowercased().contains(q) }), !q.isEmpty else {
+                throw fail("No routing button called \(a["button"] ?? ""). Buttons: \(store.config.routes.map(\.label).joined(separator: ", ")).")
+            }
+            r.run(atem); done(ok("Ran \(r.label): \(RoutingText.detail(r, store, s).replacingOccurrences(of: "\n", with: "; "))"))
         case "list_ndi_sources":
             let ndi = NDIMonitor.shared
             ndi.scan()
@@ -410,6 +439,38 @@ enum ControlTools {
         if let s = e.shutter { d["shutter"] = s; d["shutter_text"] = CameraExposure.shutterText(s) }
         if let i = e.iris { d["iris"] = i; d["iris_text"] = CameraExposure.irisText(i) }
         return d
+    }
+
+    /// A routing source from a number, a mix name, "M/E 2" (with "preview" for its preview), or any source name.
+    private static func routeSource(_ v: Any?) throws -> Int {
+        if let n = intValue(v) {
+            guard atem.state.inputs[n] != nil else { throw fail("The switcher has no source \(n).") }
+            return n
+        }
+        let q = (v as? String ?? "").lowercased().trimmingCharacters(in: .whitespaces)
+        let preview = q.contains("preview")
+        let base = q.replacingOccurrences(of: "preview", with: "").trimmingCharacters(in: .whitespaces)
+        for (i, n) in store.config.mixNames.enumerated() where !n.isEmpty && n.lowercased() == base { return 10000 + (i + 1) * 10 + (preview ? 1 : 0) }
+        let digits = base.filter(\.isNumber)
+        if (base.hasPrefix("m/e") || base.hasPrefix("me")), let m = Int(digits), m >= 1 { return 10000 + m * 10 + (preview ? 1 : 0) }
+        return try source(v, aux: true)
+    }
+
+    static func routing() -> [String: Any] {
+        let s = atem.state
+        let mixes = s.program.keys.sorted().map { me -> [String: Any] in
+            ["me": me + 1, "for": store.config.mixNames.indices.contains(me) ? store.config.mixNames[me] : "",
+             "live": store.label(s.program[me], s), "next": store.label(s.preview[me], s), "volunteer_mix": me == booth.me]
+        }
+        let outs = s.aux.keys.sorted().map { i -> [String: Any] in
+            let sc = store.screen(aux: i + 1)
+            return ["aux": i + 1, "screen": sc?.name ?? "", "note": sc?.note ?? "", "for_volunteers": sc?.forVolunteers ?? false,
+                    "showing": ["source": s.aux[i] ?? -1, "name": store.routeLabel(s.aux[i], s)] as [String: Any]]
+        }
+        let buttons = store.config.routes.map { r -> [String: Any] in
+            ["label": r.label, "on": r.isActive(s), "sets": RoutingText.detail(r, store, s).components(separatedBy: "\n")]
+        }
+        return ["mixes": mixes, "outputs": outs, "buttons": buttons]
     }
 
     static func status() -> [String: Any] {
