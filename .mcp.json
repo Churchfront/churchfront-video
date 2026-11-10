@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cuevideo": {
+      "command": "./CueVideo.app/Contents/MacOS/cuevideo-mcp",
+      "args": []
+    }
+  }
+}
