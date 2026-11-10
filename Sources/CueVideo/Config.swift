@@ -52,6 +52,36 @@ struct KeyButton: Codable, Hashable, Identifiable {
     var target: String { dsk.map { "DSK \($0)" } ?? "M/E \(me ?? 1) Key \(keyer ?? 0)" }
 }
 
+/// A screen (or other destination) fed by one or more switcher aux outputs, counted from 1.
+/// Auxes listed together switch together, such as a left and right pair.
+struct ScreenOutput: Codable, Hashable, Identifiable {
+    var name: String
+    var aux: [Int]
+    /// How it's wired, for the Routing page: "VCV 101 → Novastar LED processor".
+    var note: String?
+    /// Shown in the volunteer's screen summary. Off for encoders, recorders and patch bay feeds.
+    var volunteer: Bool?
+    var id: String { name + aux.map(String.init).joined(separator: ",") }
+    var forVolunteers: Bool { volunteer ?? true }
+}
+
+/// One change a routing button makes: send this source to this aux (counted from 1).
+struct RouteChange: Codable, Hashable {
+    var aux: Int
+    var source: Int
+}
+
+/// A volunteer button that routes one or more screens at once, like a macro. Lit when the
+/// switcher already matches every change in it.
+struct RouteButton: Codable, Hashable, Identifiable {
+    var label: String
+    var set: [RouteChange]
+    var id: String { label }
+
+    func isActive(_ s: ATEMState) -> Bool { !set.isEmpty && set.allSatisfy { s.aux[$0.aux - 1] == $0.source } }
+    func run(_ atem: ATEMClient) { for c in set { atem.setAux(c.aux - 1, c.source) } }
+}
+
 /// How CueVideo is set up, kept as plain JSON so a person or Claude can read and edit it:
 /// ~/Library/Application Support/CueVideo/config.json. Every field is optional when
 /// written by hand.
@@ -62,7 +92,10 @@ struct KeyButton: Codable, Hashable, Identifiable {
 ///       "sources": [ { "input": 9, "label": "Cam 1" }, { "input": 3, "label": "Graphics", "ndi": "CG-MAC (CueScreens Stream)" } ],
 ///       "cameras": [ { "name": "Cam 1", "host": "192.168.1.91", "proto": "canonXC", "atemInput": 9 } ],
 ///       "keys": [ { "label": "Lower thirds", "me": 1, "keyer": 1, "ndi": "CG-MAC (CueScreens Lower Thirds)" } ],
-///       "trackSpeed": 1, "trackTilt": true, "trackZoom": true
+///       "trackSpeed": 1, "trackTilt": true, "trackZoom": true,
+///       "mixNames": [ "Live stream", "Side screens" ],
+///       "screens": [ { "name": "Lobby TVs", "aux": [4, 5], "note": "VCV 104, VCV 105" } ],
+///       "routes": [ { "label": "Lobby: stream", "set": [ { "aux": 4, "source": 10010 }, { "aux": 5, "source": 10010 } ] } ]
 ///     }
 ///
 /// `ndi` names an NDI source exactly as it appears on the network (Setup lists them).
@@ -82,10 +115,16 @@ struct CueConfig: Codable, Equatable {
     /// Auto tracking zooms to hold the shot size (shoulders, waist or full length) as people
     /// move nearer or farther. Off: zoom is left entirely to the volunteer.
     var trackZoom = true
+    /// What each M/E is for, counted from 1: ["Live stream", "Side screens"].
+    var mixNames: [String] = []
+    /// The screens and other destinations the aux outputs feed.
+    var screens: [ScreenOutput] = []
+    /// Volunteer routing buttons, bottom right of the main window.
+    var routes: [RouteButton] = []
 
     init() {}
 
-    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, trackTilt, trackZoom }
+    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, trackTilt, trackZoom, mixNames, screens, routes }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -97,6 +136,9 @@ struct CueConfig: Codable, Equatable {
         trackSpeed = min(2, max(0.5, try c.decodeIfPresent(Double.self, forKey: .trackSpeed) ?? 1))
         trackTilt = try c.decodeIfPresent(Bool.self, forKey: .trackTilt) ?? true
         trackZoom = try c.decodeIfPresent(Bool.self, forKey: .trackZoom) ?? true
+        mixNames = try c.decodeIfPresent([String].self, forKey: .mixNames) ?? []
+        screens = try c.decodeIfPresent([ScreenOutput].self, forKey: .screens) ?? []
+        routes = try c.decodeIfPresent([RouteButton].self, forKey: .routes) ?? []
     }
 }
 
@@ -160,6 +202,25 @@ final class ConfigStore: ObservableObject {
         guard let input, let n = config.sources.first(where: { $0.input == input })?.ndi, !n.isEmpty else { return nil }
         return n
     }
+
+    /// What an M/E is for: "Live stream (M/E 1)", or just "M/E 2".
+    func mixName(_ me: Int) -> String {
+        let n = config.mixNames.indices.contains(me) ? config.mixNames[me] : ""
+        return n.isEmpty ? "M/E \(me + 1)" : "\(n) (M/E \(me + 1))"
+    }
+
+    /// A routing source in plain words: M/E outputs by what they're for, others by label.
+    func routeLabel(_ source: Int?, _ state: ATEMState) -> String {
+        guard let source else { return "Nothing" }
+        if (10000..<11000).contains(source) {
+            let me = (source - 10000) / 10 - 1, preview = source % 10 == 1
+            return preview ? "\(mixName(me)) preview" : mixName(me)
+        }
+        return label(source, state)
+    }
+
+    /// The screen an aux (from 1) feeds, if named.
+    func screen(aux: Int) -> ScreenOutput? { config.screens.first { $0.aux.contains(aux) } }
 
     func label(_ input: Int?, _ state: ATEMState) -> String {
         guard let input else { return "Nothing" }
