@@ -25,6 +25,7 @@ struct ContentView: View {
             switch n.object as? String {
             case "setup": openWindow(id: "setup")
             case "switcher": openWindow(id: "switcher")
+            case "routing": openWindow(id: "routing")
             default: NSApp.windows.first { $0.title == "CueVideo" }?.makeKeyAndOrderFront(nil)
             }
         }

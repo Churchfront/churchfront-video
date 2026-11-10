@@ -5,6 +5,7 @@ import CueATEM
 /// Top half: the Next and Live monitors and the source row. Bottom half: saved shots, camera
 /// control (center, under the tiles) and the take buttons. Everything else lives in Setup and the Full Switcher window.
 struct VolunteerView: View {
+    @EnvironmentObject var store: ConfigStore
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
@@ -34,7 +35,14 @@ struct VolunteerView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 FramePanel().fixedSize()
-                TakePanel().frame(width: 250).frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .top, spacing: T.s5) {
+                    TakePanel().frame(width: 250)
+                    // Routing buttons, like macros: which picture goes to which screen.
+                    if !store.config.routes.isEmpty || !store.config.screens.isEmpty {
+                        RoutePanel().frame(width: 270)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(T.s4)
             .frame(height: 290)
