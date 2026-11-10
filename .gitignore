@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+CueVideo.app/
+*.xcodeproj/
+.DS_Store
+__pycache__/
