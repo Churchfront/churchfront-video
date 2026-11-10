@@ -42,7 +42,104 @@ public struct PTZCamera: Codable, Identifiable, Hashable {
     public var firstPreset = 0
     /// Names for preset buttons, by preset number (1 based).
     public var presetNames: [Int: String] = [:]
+    /// Shots saved in CueVideo (not on the camera), in button order.
+    public var shots: [PTZShot] = []
     public init() {}
+
+    private enum Keys: String, CodingKey { case id, name, host, port, proto, atemInput, firstPreset, presetNames, shots }
+
+    /// Lenient, so a camera can be written by hand (or by Claude) in the config file:
+    /// only `host` is needed, everything else has a sensible default. The port follows
+    /// the protocol when it's left out.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Camera"
+        host = try c.decodeIfPresent(String.self, forKey: .host) ?? ""
+        proto = try c.decodeIfPresent(VISCAProtocol.self, forKey: .proto) ?? .sonyUDP
+        port = try c.decodeIfPresent(UInt16.self, forKey: .port) ?? proto.defaultPort
+        atemInput = try c.decodeIfPresent(Int.self, forKey: .atemInput)
+        firstPreset = try c.decodeIfPresent(Int.self, forKey: .firstPreset) ?? 0
+        presetNames = try c.decodeIfPresent([Int: String].self, forKey: .presetNames) ?? [:]
+        shots = try c.decodeIfPresent([PTZShot].self, forKey: .shots) ?? []
+    }
+}
+
+/// Where a camera is pointing, in the camera's own units. For Canon: pan and tilt in
+/// hundredths of a degree (pan -17000 to 17000), zoom in the camera's zoom steps.
+public struct PTZPosition: Codable, Hashable {
+    public var pan: Int
+    public var tilt: Int
+    public var zoom: Int
+    public init(pan: Int, tilt: Int, zoom: Int) { self.pan = pan; self.tilt = tilt; self.zoom = zoom }
+}
+
+/// Manual exposure in the camera's own units. For Canon: gain in tenths of a dB (65 is
+/// 6.5 dB), shutter as the speed's denominator (60 is 1/60), iris as the f-number times
+/// 100 (450 is f/4.5). Any left out stay as they are.
+public struct PTZExposure: Codable, Hashable {
+    public var gain: Int?
+    public var shutter: Int?
+    public var iris: Int?
+    public init(gain: Int? = nil, shutter: Int? = nil, iris: Int? = nil) { self.gain = gain; self.shutter = shutter; self.iris = iris }
+}
+
+/// What a camera's exposure is now, and the values it accepts, for the controls.
+public struct CameraExposure: Hashable {
+    public var value = PTZExposure()
+    /// Which of gain, shutter and iris the camera is setting itself.
+    public var gainAuto = false, shutterAuto = false, irisAuto = false
+    public var gainList: [Int] = [], shutterList: [Int] = [], irisList: [Int] = []
+    public init() {}
+
+    public static func gainText(_ v: Int?) -> String { v.map { String(format: "%.1f dB", Double($0) / 10) } ?? "?" }
+    public static func shutterText(_ v: Int?) -> String { v.map { "1/\($0)" } ?? "?" }
+    public static func irisText(_ v: Int?) -> String { v.map { String(format: "f/%.1f", Double($0) / 100) } ?? "?" }
+}
+
+public enum ShotKind: String, Codable, CaseIterable {
+    case position, exposure
+}
+
+/// A named shot saved in CueVideo's config file, so it can be made and edited from any Mac,
+/// by hand or by Claude, without the camera's admin login. A shot holds either a position
+/// (pan, tilt, zoom) or an exposure (gain, shutter, iris).
+public struct PTZShot: Codable, Hashable, Identifiable {
+    public var id = UUID()
+    public var name: String
+    public var kind: ShotKind = .position
+    public var pan = 0
+    public var tilt = 0
+    public var zoom = 0
+    public var exposure: PTZExposure?
+    public var position: PTZPosition { PTZPosition(pan: pan, tilt: tilt, zoom: zoom) }
+
+    public init(name: String, _ p: PTZPosition) { self.name = name; pan = p.pan; tilt = p.tilt; zoom = p.zoom }
+    public init(name: String, exposure e: PTZExposure) { self.name = name; kind = .exposure; exposure = e }
+
+    private enum Keys: String, CodingKey { case id, name, kind, pan, tilt, zoom, exposure }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Shot"
+        exposure = try c.decodeIfPresent(PTZExposure.self, forKey: .exposure)
+        kind = try c.decodeIfPresent(ShotKind.self, forKey: .kind) ?? (exposure != nil ? .exposure : .position)
+        pan = try c.decodeIfPresent(Int.self, forKey: .pan) ?? 0
+        tilt = try c.decodeIfPresent(Int.self, forKey: .tilt) ?? 0
+        zoom = try c.decodeIfPresent(Int.self, forKey: .zoom) ?? 0
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: Keys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(kind, forKey: .kind)
+        if kind == .position {
+            try c.encode(pan, forKey: .pan); try c.encode(tilt, forKey: .tilt); try c.encode(zoom, forKey: .zoom)
+        } else {
+            try c.encodeIfPresent(exposure, forKey: .exposure)
+        }
+    }
 }
 
 /// One camera connection, whatever the protocol.
@@ -51,6 +148,11 @@ protocol PTZLink: AnyObject {
     /// Preset names the camera reports, by number from 1.
     var onPresets: (([Int: String]) -> Void)? { get set }
     var onModel: ((String) -> Void)? { get set }
+    /// Numbers of the camera's presets that hold only exposure, not a position.
+    var onExposurePresets: ((Set<Int>) -> Void)? { get set }
+    var onExposure: ((CameraExposure) -> Void)? { get set }
+    /// Whether this app holds control of the camera (Canon gives control to one session at a time).
+    var onControl: ((Bool) -> Void)? { get set }
     func start()
     func stop()
     /// Speeds from -1 to 1; up is positive tilt. Zero stops that axis.
@@ -61,6 +163,16 @@ protocol PTZLink: AnyObject {
     func home()
     func recall(_ n: Int)
     func store(_ n: Int)
+    /// Where the camera is now, or nil if it can't say.
+    func readPosition(_ done: @escaping (PTZPosition?) -> Void)
+    /// Move straight to a saved position.
+    func goTo(_ p: PTZPosition)
+    /// Delete a preset stored on the camera itself. Calls back with nil when it worked, or why not.
+    func deletePreset(_ n: Int, _ done: @escaping (String?) -> Void)
+    /// Read the exposure now (reported through onExposure).
+    func readExposure()
+    /// Set any of gain, shutter and iris, switching just those to manual.
+    func setExposure(_ e: PTZExposure)
 }
 
 // MARK: - VISCA
@@ -73,6 +185,9 @@ final class VISCALink: PTZLink {
     var onState: ((Bool) -> Void)?
     var onPresets: (([Int: String]) -> Void)?
     var onModel: ((String) -> Void)?
+    var onExposurePresets: ((Set<Int>) -> Void)?
+    var onExposure: ((CameraExposure) -> Void)?
+    var onControl: ((Bool) -> Void)?
     private var online = false { didSet { if online != oldValue { onState?(online) } } }
 
     init(_ camera: PTZCamera, queue: DispatchQueue) {
@@ -153,6 +268,14 @@ final class VISCALink: PTZLink {
     func home() { send([0x81, 0x01, 0x06, 0x04, 0xFF]) }
     func recall(_ n: Int) { send([0x81, 0x01, 0x04, 0x3F, 0x02, UInt8(clamping: n - 1 + camera.firstPreset), 0xFF]) }
     func store(_ n: Int) { send([0x81, 0x01, 0x04, 0x3F, 0x01, UInt8(clamping: n - 1 + camera.firstPreset), 0xFF]) }
+    // VISCA cameras keep shots in their own presets (store/recall above) for now.
+    func readPosition(_ done: @escaping (PTZPosition?) -> Void) { done(nil) }
+    func goTo(_ p: PTZPosition) {}
+    // VISCA has no delete; a preset is replaced by saving over it.
+    func deletePreset(_ n: Int, _ done: @escaping (String?) -> Void) { done("VISCA cameras can't delete presets; save over one instead.") }
+    // Exposure over VISCA isn't wired up yet.
+    func readExposure() {}
+    func setExposure(_ e: PTZExposure) {}
 }
 
 // MARK: - Canon (HTTP)
@@ -171,6 +294,9 @@ final class CanonLink: PTZLink {
     var onState: ((Bool) -> Void)?
     var onPresets: (([Int: String]) -> Void)?
     var onModel: ((String) -> Void)?
+    var onExposurePresets: ((Set<Int>) -> Void)?
+    var onExposure: ((CameraExposure) -> Void)?
+    var onControl: ((Bool) -> Void)?
     private var online = false { didSet { if online != oldValue { onState?(online) } } }
 
     init(_ camera: PTZCamera, queue: DispatchQueue) {
@@ -227,6 +353,7 @@ final class CanonLink: PTZLink {
         if let s = session { get("close.cgi?s=\(s)") }
         session = nil
         online = false
+        hasControl = false
     }
 
     private func open() {
@@ -241,19 +368,41 @@ final class CanonLink: PTZLink {
                 return
             }
             self.session = s
-            self.get("claim.cgi?s=\(s)") { [weak self] _ in
-                self?.online = true
-                self?.readInfo()
+            self.claim(s) { [weak self] in self?.readInfo() }
+        }
+    }
+
+    /// Whether this session holds control. Canon hands control to one session at a time;
+    /// the rest are told to wait (a logged-in session, such as the camera's own web page,
+    /// outranks this one).
+    private var hasControl = false { didSet { if hasControl != oldValue { onControl?(hasControl) } } }
+    private var claimRetry = false
+
+    /// Asks for control and reads the answer. While told to wait, asks again every 1.5 s.
+    private func claim(_ s: String, then: (() -> Void)? = nil) {
+        get("claim.cgi?s=\(s)") { [weak self] text in
+            guard let self, self.session == s else { return }
+            guard let text else {
+                // The session is gone; start a new one.
+                self.session = nil; self.hasControl = false; self.online = false; self.open(); return
             }
+            self.online = true
+            self.hasControl = (Self.parse(text)["s.control"] ?? "").hasPrefix("enabled")
+            if !self.hasControl && !self.claimRetry {
+                self.claimRetry = true
+                self.queue.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                    guard let self else { return }
+                    self.claimRetry = false
+                    if !self.stopped, !self.hasControl, let cur = self.session { self.claim(cur) }
+                }
+            }
+            then?()
         }
     }
 
     private func keepAlive() {
         guard let s = session else { open(); return }
-        get("claim.cgi?s=\(s)") { [weak self] text in
-            guard let self else { return }
-            if text == nil { self.session = nil; self.online = false; self.open() }
-        }
+        claim(s)
         if Date().timeIntervalSince(lastPresetRead) > 60 { readInfo() }
     }
 
@@ -264,20 +413,86 @@ final class CanonLink: PTZLink {
             let kv = Self.parse(text)
             if let model = kv["s.hardware"] { self.onModel?(model) }
             var names: [Int: String] = [:]
+            var exposureOnly: Set<Int> = []
             for (k, v) in kv where k.hasPrefix("p.") && k.hasSuffix(".name.utf8") && !v.isEmpty {
-                if let n = Int(k.dropFirst(2).dropLast(10)) { names[n] = v }
+                guard let n = Int(k.dropFirst(2).dropLast(10)), kv["p.\(n).content"] != "disabled" else { continue }
+                names[n] = v
+                // Presets like "Exposure" hold the picture's exposure but no position.
+                if kv["p.\(n).content.ptz"] == "disabled" { exposureOnly.insert(n) }
             }
             self.onPresets?(names)
+            self.onExposurePresets?(exposureOnly)
+            self.onExposure?(Self.exposure(kv))
         }
     }
 
-    private func control(_ query: String) {
-        guard let s = session else { open(); return }
-        get("control.cgi?s=\(s)&\(query)") { [weak self] text in
-            guard let self, text == nil else { return }
-            // The session timed out or was taken over; open a new one.
-            self.session = nil
-            self.open()
+    static func exposure(_ kv: [String: String]) -> CameraExposure {
+        func list(_ k: String) -> [Int] { (kv["c.1.\(k).list"] ?? "").split(separator: ",").compactMap { Int($0) } }
+        var e = CameraExposure()
+        e.value = PTZExposure(gain: kv["c.1.me.gain"].flatMap(Int.init), shutter: kv["c.1.me.shutter"].flatMap(Int.init),
+                              iris: kv["c.1.me.diaphragm"].flatMap(Int.init))
+        let auto = kv["c.1.exp"] == "auto"
+        e.gainAuto = auto || kv["c.1.me.gain.mode"] == "auto"
+        e.shutterAuto = auto || kv["c.1.me.shutter.mode"] == "auto"
+        e.irisAuto = auto || kv["c.1.me.diaphragm.mode"] == "auto"
+        e.gainList = list("me.gain"); e.shutterList = list("me.shutter"); e.irisList = list("me.diaphragm")
+        return e
+    }
+
+    func readExposure() {
+        get("info.cgi") { [weak self] text in
+            guard let self, let text else { return }
+            self.onExposure?(Self.exposure(Self.parse(text)))
+        }
+    }
+
+    /// Exposure goes through the same control channel as pan and tilt, as on the camera's own
+    /// web page. Each value set also switches that one setting (and the camera) to manual.
+    func setExposure(_ e: PTZExposure) {
+        var q = ["exp=manual"]
+        if let g = e.gain { q += ["me.gain.mode=manual", "me.gain=\(g)"] }
+        if let s = e.shutter { q += ["me.shutter.mode=speed", "me.shutter=\(s)"] }
+        if let i = e.iris { q += ["me.diaphragm.mode=manual", "me.diaphragm=\(i)"] }
+        guard q.count > 1 else { return }
+        control(q.joined(separator: "&"))
+        // Read back what the camera actually took, once the command has gone.
+        queue.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.readExposure() }
+    }
+
+    // One control request at a time, and the newest joystick or zoom move replaces any
+    // that is still waiting. A drag makes dozens of updates a second; sent in parallel
+    // they queued up (lag) and could land out of order, so a stop overtaken by an older
+    // move left the camera drifting.
+    private var sending = false
+    private var queued: [(key: String?, query: String)] = []
+    private var lastDrive = "", lastZoom = ""
+
+    private func control(_ query: String, key: String? = nil) {
+        if let key, let i = queued.firstIndex(where: { $0.key == key }) {
+            queued[i].query = query
+        } else {
+            queued.append((key, query))
+        }
+        pump()
+    }
+
+    private func pump() {
+        guard !sending, !queued.isEmpty else { return }
+        guard let s = session else { queued.removeAll(); open(); return }
+        let next = queued.removeFirst()
+        sending = true
+        get("control.cgi?s=\(s)&\(next.query)") { [weak self] text in
+            guard let self else { return }
+            self.sending = false
+            if text == nil {
+                // Control was taken (or the session expired): drop what's waiting and ask
+                // for control again. claim() opens a new session if this one is gone.
+                self.queued.removeAll()
+                self.hasControl = false
+                self.claim(s)
+            } else {
+                self.pump()
+            }
         }
     }
 
@@ -287,11 +502,26 @@ final class CanonLink: PTZLink {
     func drive(pan: Double, tilt: Double) {
         let p = pan == 0 ? "pan=stop" : "pan=\(pan < 0 ? "left" : "right")&pan.speed=\(speed(pan))"
         let t = tilt == 0 ? "tilt=stop" : "tilt=\(tilt > 0 ? "up" : "down")&tilt.speed=\(speed(tilt))"
-        control(p + "&" + t)
+        let q = p + "&" + t
+        lastDrive = q
+        control(q, key: "drive")
+        if pan == 0 && tilt == 0 { resendStop(q, key: "drive") { $0.lastDrive } }
     }
 
     func zoom(_ v: Double) {
-        control(v == 0 ? "zoom=stop" : "zoom=\(v > 0 ? "tele" : "wide")&zoom.speed=\(Int(1 + abs(v) * 60))")
+        let q = v == 0 ? "zoom=stop" : "zoom=\(v > 0 ? "tele" : "wide")&zoom.speed=\(Int(1 + abs(v) * 60))"
+        lastZoom = q
+        control(q, key: "zoom")
+        if v == 0 { resendStop(q, key: "zoom") { $0.lastZoom } }
+    }
+
+    /// Sends a stop once more shortly after, unless something newer was sent, so a camera
+    /// never keeps moving because one stop went missing.
+    private func resendStop(_ q: String, key: String, latest: @escaping (CanonLink) -> String) {
+        queue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, latest(self) == q else { return }
+            self.control(q, key: key)
+        }
     }
 
     func autoFocus(_ on: Bool) { control("focus=\(on ? "auto" : "manual")") }
@@ -299,6 +529,72 @@ final class CanonLink: PTZLink {
     func home() { control("pan=0&tilt=0") }
     func recall(_ n: Int) { control("p=\(n)") }
     func store(_ n: Int) {}
+
+    func readPosition(_ done: @escaping (PTZPosition?) -> Void) {
+        get("info.cgi") { text in
+            let kv = text.map(Self.parse) ?? [:]
+            guard let p = kv["c.1.pan"].flatMap(Int.init), let t = kv["c.1.tilt"].flatMap(Int.init),
+                  let z = kv["c.1.zoom"].flatMap(Int.init) else { done(nil); return }
+            done(PTZPosition(pan: p, tilt: t, zoom: z))
+        }
+    }
+
+    /// Deletes a preset the way the camera's own web page does: changing presets needs a
+    /// logged-in session (priority 40, above the anonymous one CueVideo drives with), so this
+    /// opens one with the saved admin login, takes control, deletes, and closes it again.
+    /// CueVideo's everyday session gets control back on its next keep-alive.
+    func deletePreset(_ n: Int, _ done: @escaping (String?) -> Void) {
+        guard let login = CameraLogin.load() else {
+            done("No camera login saved. Add the cameras' admin login in Setup, under PTZ cameras."); return
+        }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = 5
+        let admin = URLSession(configuration: cfg, delegate: LoginDelegate(login), delegateQueue: nil)
+        // Every step reports the HTTP status, the camera's livescope-status and the body.
+        func call(_ path: String, _ next: @escaping (Int, String, String) -> Void) {
+            guard let url = URL(string: base + path) else { next(0, "", ""); return }
+            admin.dataTask(with: url) { data, resp, _ in
+                let r = resp as? HTTPURLResponse
+                let status = r?.value(forHTTPHeaderField: "livescope-status") ?? ""
+                let body = data.map { String(decoding: $0, as: UTF8.self) } ?? ""
+                self.queue.async { next(r?.statusCode ?? 0, status, body) }
+            }.resume()
+        }
+        func finish(_ why: String?, _ sid: String?) {
+            if let sid { call("close.cgi?s=\(sid)") { _, _, _ in } }
+            admin.finishTasksAndInvalidate()
+            done(why)
+            readInfo()  // refresh the preset list either way
+        }
+        call("open.cgi?s.priority=40") { code, _, body in
+            if code == 401 { finish("The camera turned down the saved login. Check the user name and password in Setup.", nil); return }
+            guard let sid = Self.parse(body)["s"] else { finish("The camera wouldn't open a logged-in session (HTTP \(code)).", nil); return }
+            var tries = 0
+            func claim() {
+                call("claim.cgi?s=\(sid)") { _, _, body in
+                    let control = Self.parse(body)["s.control"] ?? ""
+                    if control.hasPrefix("enabled") {
+                        call("preset/set?p=\(n)&cmd=delete&s=\(sid)") { _, status, body in
+                            if status.hasPrefix("0") { finish(nil, sid) }
+                            else { finish("The camera said: \(status.isEmpty ? body.trimmingCharacters(in: .whitespacesAndNewlines) : status)", sid) }
+                        }
+                    } else if tries < 6 {
+                        tries += 1
+                        self.queue.asyncAfter(deadline: .now() + 0.5) { claim() }
+                    } else {
+                        finish("Another controller has the camera, so it wouldn't hand over control (\(control)).", sid)
+                    }
+                }
+            }
+            claim()
+        }
+    }
+
+    func goTo(_ p: PTZPosition) {
+        let q = "pan=\(p.pan)&tilt=\(p.tilt)&zoom=\(p.zoom)"
+        lastDrive = q  // so a joystick stop still waiting to be re-sent can't cut this move short
+        control(q, key: "drive")
+    }
 }
 
 // MARK: - Controller
@@ -310,6 +606,13 @@ public final class PTZController: ObservableObject {
     /// Preset names the cameras report themselves (Canon), by camera.
     @Published public private(set) var reportedPresets: [UUID: [Int: String]] = [:]
     @Published public private(set) var models: [UUID: String] = [:]
+    /// Each camera's exposure now and the values it accepts.
+    @Published public private(set) var exposure: [UUID: CameraExposure] = [:]
+    /// Camera presets that hold only exposure, by camera.
+    @Published public private(set) var exposurePresets: [UUID: Set<Int>] = [:]
+    /// Cameras this app currently holds control of. A camera can be answering but not in
+    /// here when another controller (such as its web page) has it.
+    @Published public private(set) var controlled: Set<UUID> = []
 
     private let queue = DispatchQueue(label: "cuevideo.ptz")
     private var links: [UUID: PTZLink] = [:]
@@ -345,6 +648,11 @@ public final class PTZController: ObservableObject {
                 }
                 l.onPresets = { [weak self] names in DispatchQueue.main.async { self?.reportedPresets[c.id] = names } }
                 l.onModel = { [weak self] m in DispatchQueue.main.async { self?.models[c.id] = m } }
+                l.onExposure = { [weak self] e in DispatchQueue.main.async { self?.exposure[c.id] = e } }
+                l.onControl = { [weak self] on in
+                    DispatchQueue.main.async { if on { self?.controlled.insert(c.id) } else { self?.controlled.remove(c.id) } }
+                }
+                l.onExposurePresets = { [weak self] s in DispatchQueue.main.async { self?.exposurePresets[c.id] = s } }
                 self.links[c.id] = l
                 l.start()
             }
@@ -372,25 +680,109 @@ public final class PTZController: ObservableObject {
     }
 
     /// Pan and tilt from a joystick: x and y from -1 to 1, up is positive y.
-    public func drive(x: Double, y: Double) {
+    /// Every camera command below goes to the selected camera unless `camera` names another.
+    public func drive(x: Double, y: Double, camera: UUID? = nil) {
         let dead = 0.08
         let px = abs(x) < dead ? 0 : max(-1, min(1, x)), py = abs(y) < dead ? 0 : max(-1, min(1, y))
         // Only send when the direction or speed step changes, so a drag doesn't flood the camera.
         let step = (Int((px * 12).rounded()), Int((py * 12).rounded()))
-        if let l = lastDrive, l == step { return }
-        lastDrive = step
-        with { $0.drive(pan: px, tilt: py) }
+        if camera == nil, let l = lastDrive, l == step { return }
+        if camera == nil { lastDrive = step }
+        with(camera) { $0.drive(pan: px, tilt: py) }
     }
 
-    public func stopDrive() { lastDrive = nil; with { $0.drive(pan: 0, tilt: 0) } }
+    public func stopDrive(camera: UUID? = nil) { if camera == nil { lastDrive = nil }; with(camera) { $0.drive(pan: 0, tilt: 0) } }
 
     /// Zoom speed from -1 (wide) to 1 (tele); 0 stops.
-    public func zoom(_ v: Double) { let z = abs(v) < 0.05 ? 0 : v; with { $0.zoom(z) } }
-    public func autoFocus(_ on: Bool) { with { $0.autoFocus(on) } }
-    public func focusOnce() { with { $0.focusOnce() } }
-    public func home() { with { $0.home() } }
+    public func zoom(_ v: Double, camera: UUID? = nil) { let z = abs(v) < 0.05 ? 0 : v; with(camera) { $0.zoom(z) } }
+    public func autoFocus(_ on: Bool, camera: UUID? = nil) { with(camera) { $0.autoFocus(on) } }
+    public func focusOnce(camera: UUID? = nil) { with(camera) { $0.focusOnce() } }
+    public func home(camera: UUID? = nil) { with(camera) { $0.home() } }
 
     /// Presets are numbered from 1 here, whatever the camera counts from.
     public func recall(_ n: Int, camera: UUID? = nil) { with(camera) { $0.recall(n) } }
     public func store(_ n: Int) { with { $0.store(n) } }
+
+    /// Recall a saved shot: move to its position, or set its exposure.
+    public func go(to shot: PTZShot, camera: UUID? = nil) {
+        switch shot.kind {
+        case .position: with(camera) { $0.goTo(shot.position) }
+        case .exposure: if let e = shot.exposure { setExposure(e, camera: camera) }
+        }
+    }
+
+    /// Set any of gain, shutter and iris on a camera (the selected one by default).
+    public func setExposure(_ e: PTZExposure, camera: UUID? = nil) {
+        // Show the new value straight away; the camera's read-back confirms it.
+        if let id = camera ?? selected {
+            var x = exposure[id] ?? CameraExposure()
+            if let g = e.gain { x.value.gain = g; x.gainAuto = false }
+            if let s = e.shutter { x.value.shutter = s; x.shutterAuto = false }
+            if let i = e.iris { x.value.iris = i; x.irisAuto = false }
+            exposure[id] = x
+        }
+        with(camera) { $0.setExposure(e) }
+    }
+
+    /// Re-read a camera's exposure, for when someone may have changed it elsewhere.
+    public func refreshExposure(camera: UUID? = nil) { with(camera) { $0.readExposure() } }
+
+    /// Reads the camera now and saves it as a shot: a new one, or over `replacing`. A position
+    /// shot keeps pan, tilt and zoom; an exposure shot keeps gain, shutter and iris.
+    /// Calls back on the main thread with false if the camera couldn't say.
+    public func saveShot(_ name: String, camera id: UUID, kind: ShotKind = .position, replacing: UUID? = nil, done: ((Bool) -> Void)? = nil) {
+        if kind == .exposure {
+            refreshExposure(camera: id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                guard let e = self.exposure[id]?.value, e.gain != nil || e.shutter != nil || e.iris != nil,
+                      let i = self.cameras.firstIndex(where: { $0.id == id }) else { done?(false); return }
+                if let r = replacing, let j = self.cameras[i].shots.firstIndex(where: { $0.id == r }) {
+                    self.cameras[i].shots[j].kind = .exposure
+                    self.cameras[i].shots[j].exposure = e
+                    if !name.isEmpty { self.cameras[i].shots[j].name = name }
+                } else {
+                    let n = self.cameras[i].shots.filter { $0.kind == .exposure }.count + 1
+                    self.cameras[i].shots.append(PTZShot(name: name.isEmpty ? "Exposure \(n)" : name, exposure: e))
+                }
+                done?(true)
+            }
+            return
+        }
+        queue.async {
+            guard let l = self.links[id] else { DispatchQueue.main.async { done?(false) }; return }
+            l.readPosition { p in
+                DispatchQueue.main.async {
+                    guard let p, let i = self.cameras.firstIndex(where: { $0.id == id }) else { done?(false); return }
+                    if let r = replacing, let j = self.cameras[i].shots.firstIndex(where: { $0.id == r }) {
+                        self.cameras[i].shots[j].kind = .position
+                        self.cameras[i].shots[j].pan = p.pan
+                        self.cameras[i].shots[j].tilt = p.tilt
+                        self.cameras[i].shots[j].zoom = p.zoom
+                        if !name.isEmpty { self.cameras[i].shots[j].name = name }
+                    } else {
+                        self.cameras[i].shots.append(PTZShot(name: name.isEmpty ? "Shot \(self.cameras[i].shots.count + 1)" : name, p))
+                    }
+                    done?(true)
+                }
+            }
+        }
+    }
+
+    /// Deletes a preset stored on the camera. Calls back on the main thread with nil when it
+    /// worked, or the reason it didn't.
+    public func deleteCameraPreset(_ n: Int, camera id: UUID, done: @escaping (String?) -> Void) {
+        queue.async {
+            guard let l = self.links[id] else { DispatchQueue.main.async { done("That camera isn't set up.") }; return }
+            l.deletePreset(n) { why in DispatchQueue.main.async { done(why) } }
+        }
+    }
+
+    /// Whether moves will reach the camera: Canon needs this app to hold control; VISCA
+    /// cameras take commands from anyone, so answering is enough.
+    public func hasControl(_ c: PTZCamera) -> Bool {
+        c.proto == .canonXC ? controlled.contains(c.id) : online.contains(c.id)
+    }
+
+    /// Whether this camera can save shots in CueVideo (Canon's HTTP control reports its position).
+    public func canSaveShots(_ c: PTZCamera) -> Bool { c.proto == .canonXC }
 }

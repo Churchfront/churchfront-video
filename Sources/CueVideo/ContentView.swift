@@ -5,54 +5,54 @@ struct ContentView: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
+    @Environment(\.openWindow) var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
             TopBar()
             Rectangle().fill(T.line).frame(height: 1)
             if booth.connectedOnce || atem.link == .online {
-                VStack(spacing: 0) {
-                    HStack(spacing: 0) {
-                        MonitorView().padding(T.s4)
-                        Rectangle().fill(T.line).frame(width: 1)
-                        CameraPanel().frame(width: 330)
-                    }
-                    Rectangle().fill(T.line).frame(height: 1)
-                    SurfaceView()
-                }
-                .overlay(alignment: .top) { LinkBanner() }
+                VolunteerView()
+                    .overlay(alignment: .top) { LinkBanner() }
             } else {
                 ConnectView()
             }
         }
         .background(T.bg)
         .foregroundStyle(T.ink)
-        .sheet(isPresented: $booth.showSettings) { SettingsView() }
-        .onChange(of: atem.state.preview[booth.me]) { _, v in if booth.followPreview { ptz.follow(atemInput: v) } }
+        // Windows opened by Claude through the show_window tool.
+        .onReceive(NotificationCenter.default.publisher(for: .cueVideoShowWindow)) { n in
+            switch n.object as? String {
+            case "setup": openWindow(id: "setup")
+            case "switcher": openWindow(id: "switcher")
+            default: NSApp.windows.first { $0.title == "CueVideo" }?.makeKeyAndOrderFront(nil)
+            }
+        }
     }
 }
 
+/// Kept short for volunteers: are we connected, recording and streaming, and the way into Setup.
 struct TopBar: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
+    @EnvironmentObject var ptz: PTZController
+    @Environment(\.openWindow) var openWindow
 
     var body: some View {
         HStack(spacing: T.s4) {
             Text("CueVideo").font(.sans(16, .bold)).padding(.leading, 64)
             LinkPill()
-            if !atem.state.product.isEmpty { Text(atem.state.product).font(.sans(13)).foregroundStyle(T.inkMuted) }
+            let down = ptz.cameras.filter { !$0.host.isEmpty && !ptz.online.contains($0.id) }
+            let waiting = ptz.cameras.filter { ptz.online.contains($0.id) && !ptz.hasControl($0) }
+            if !ptz.cameras.isEmpty {
+                let problem = (down.isEmpty ? [] : ["\(down.map(\.name).joined(separator: ", ")) not answering"])
+                    + (waiting.isEmpty ? [] : ["\(waiting.map(\.name).joined(separator: ", ")) waiting for control"])
+                Text(problem.isEmpty ? "\(ptz.cameras.count) cameras" : problem.joined(separator: " · "))
+                    .font(.sans(12, problem.isEmpty ? .regular : .semibold))
+                    .foregroundStyle(problem.isEmpty ? T.inkMuted : T.warning)
+                    .help("Canon cameras take commands from one controller at a time. A logged-in session, like the camera's own web page, outranks CueVideo.")
+            }
             Spacer()
-            if atem.state.meCount > 1 {
-                Picker("", selection: $booth.me) {
-                    ForEach(0..<atem.state.meCount, id: \.self) { Text("M/E \($0 + 1)").tag($0) }
-                }.pickerStyle(.segmented).frame(width: 60 * CGFloat(atem.state.meCount))
-            }
-            Picker("", selection: $booth.simple) {
-                Text("Simple").tag(true)
-                Text("Full").tag(false)
-            }
-            .pickerStyle(.segmented).frame(width: 140)
-            .help("Simple shows only what a volunteer needs: what's live, what's next, and the cameras.")
             if atem.state.hasRecording {
                 StatusButton(title: atem.state.recording ? "Recording" : "Record", on: atem.state.recording, color: T.program) {
                     atem.setRecording(!atem.state.recording)
@@ -62,8 +62,8 @@ struct TopBar: View {
                          on: atem.state.streaming || atem.state.streamConnecting, color: atem.state.streaming ? T.program : T.warning) {
                 atem.setStreaming(!(atem.state.streaming || atem.state.streamConnecting))
             } }
-            Button { booth.showSettings = true } label: { Image(systemName: "gearshape").font(.system(size: 15)) }
-                .buttonStyle(.plain).foregroundStyle(T.inkMuted).help("Switcher and cameras")
+            Button { openWindow(id: "setup") } label: { Image(systemName: "gearshape").font(.system(size: 15)) }
+                .buttonStyle(.plain).foregroundStyle(T.inkMuted).help("Setup and status (⌘,)")
         }
         .padding(.horizontal, T.s4)
         .frame(height: 48)
@@ -122,7 +122,7 @@ struct LinkBanner: View {
 
 struct ConnectView: View {
     @EnvironmentObject var atem: ATEMClient
-    @State private var host = UserDefaults.standard.string(forKey: "atemHost") ?? ""
+    @State private var host = Booth.shared.store.config.atemHost
 
     var body: some View {
         VStack(spacing: T.s4) {
@@ -155,7 +155,6 @@ struct ConnectView: View {
     }
 
     func go() {
-        UserDefaults.standard.set(host, forKey: "atemHost")
-        atem.connect(host)
+        Booth.shared.store.update { $0.atemHost = host.trimmingCharacters(in: .whitespaces) }
     }
 }
