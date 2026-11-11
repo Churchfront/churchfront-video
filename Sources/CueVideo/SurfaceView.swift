@@ -1,62 +1,49 @@
 import SwiftUI
 import CueATEM
 
-/// The switcher panel, laid out like an ATEM control surface: keys on the left,
-/// program and preview rows in the middle, the transition block on the right.
+/// The switcher panel: program and preview rows with the transition block beside them,
+/// then keys, macros and aux outputs below. Rows wrap to fit the page, so nothing is cut off.
 struct SurfaceView: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
+    @EnvironmentObject var store: ConfigStore
 
     var me: Int = 0
     var st: ATEMState { atem.state }
-    /// The volunteer screen has its own simple layout now; this window is the full panel.
-    var simple: Bool { false }
-    var bw: CGFloat { simple ? 100 : 76 }
-    var bh: CGFloat { simple ? 72 : 56 }
 
     var body: some View {
-        HStack(alignment: .top, spacing: T.s5) {
-            if !simple && (st.keyerCount > 0 || st.dskCount > 0) {
-                keys.fixedSize()
-                divider
+        VStack(alignment: .leading, spacing: T.s4) {
+            HStack(alignment: .top, spacing: T.s4) {
+                Card {
+                    bus("Program", st.program[me], T.program) { atem.setProgram($0, me: me) }
+                    bus("Preview", st.preview[me], T.preview) { atem.setPreview($0, me: me) }
+                }
+                Card(title: "Transition") { transition }.fixedSize()
             }
-            VStack(alignment: .leading, spacing: T.s3) {
-                bus(simple ? "Live" : "Program", st.program[me], T.program) { atem.setProgram($0, me: me) }
-                bus(simple ? "Next" : "Preview", st.preview[me], T.preview) { atem.setPreview($0, me: me) }
-                if !simple && (!st.macros.isEmpty || st.auxCount > 0) {
-                    HStack(alignment: .top, spacing: T.s5) {
-                        if !st.macros.isEmpty { macros }
-                        if st.auxCount > 0 { aux }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, T.s2)
+            HStack(alignment: .top, spacing: T.s4) {
+                if st.keyerCount > 0 || st.dskCount > 0 {
+                    Card(title: "Keys") { keys }.fixedSize()
+                }
+                if !st.macros.isEmpty {
+                    Card(title: "Macros") { macros }
                 }
             }
-            .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(-1)
-            divider
-            transition.fixedSize()
+            if st.auxCount > 0 {
+                Card(title: "Aux outputs", help: "The same outputs as the Routing page, by number. Routing shows them by the screen each one feeds.") { aux }
+            }
         }
-        .padding(T.s4)
-        .background(T.surfaceSunken)
     }
-
-    var divider: some View { Rectangle().fill(T.line).frame(width: 1).frame(maxHeight: 150) }
 
     // MARK: Buses
 
     func bus(_ label: String, _ selected: Int?, _ color: Color, _ pick: @escaping (Int) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).panelLabel(color)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: T.s2) {
-                    ForEach(st.busSources.filter { !simple || $0.isExternal || $0.id == 0 || ($0.id >= 3000 && $0.id < 4000) }) { s in
-                        PanelButton(title: s.short, subtitle: simple ? s.long : nil, lit: s.id == selected ? color : nil,
-                                    width: bw, height: bh, titleSize: simple ? 18 : 14) { pick(s.id) }
-                            .help(s.long)
-                    }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 76, maximum: 76), spacing: T.s2)], alignment: .leading, spacing: T.s2) {
+                ForEach(st.busSources) { s in
+                    PanelButton(title: s.short, lit: s.id == selected ? color : nil, width: 76, height: 52, titleSize: 14) { pick(s.id) }
+                        .help(s.long)
                 }
-                .padding(.vertical, 6).padding(.horizontal, 2)
             }
         }
     }
@@ -64,10 +51,10 @@ struct SurfaceView: View {
     // MARK: Keys
 
     var keys: some View {
-        HStack(alignment: .top, spacing: T.s4) {
+        HStack(alignment: .top, spacing: T.s5) {
             if st.keyerCount > 0 {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Next transition").panelLabel()
+                    Text("Next transition takes").font(.sans(11)).foregroundStyle(T.inkSubtle)
                     let sel = st.nextSelection[me] ?? 1
                     HStack(spacing: T.s2) {
                         PanelButton(title: "BKGD", lit: sel & 1 != 0 ? T.warning : nil, width: 62, height: 40, titleSize: 12) {
@@ -79,7 +66,7 @@ struct SurfaceView: View {
                             }
                         }
                     }
-                    Text("Key on air").panelLabel().padding(.top, T.s2)
+                    Text("On air").font(.sans(11)).foregroundStyle(T.inkSubtle).padding(.top, T.s2)
                     HStack(spacing: T.s2) {
                         ForEach(0..<st.keyerCount, id: \.self) { k in
                             let on = st.keyOnAir[me]?[k] ?? false
@@ -92,7 +79,7 @@ struct SurfaceView: View {
             }
             ForEach(0..<st.dskCount, id: \.self) { d in
                 VStack(spacing: T.s2) {
-                    Text("DSK \(d + 1)").panelLabel()
+                    Text("DSK \(d + 1)").font(.sans(11)).foregroundStyle(T.inkSubtle)
                     PanelButton(title: "TIE", lit: st.dskTie[d] == true ? T.warning : nil, width: 62, height: 34, titleSize: 12) {
                         atem.setDSKTie(d, !(st.dskTie[d] ?? false))
                     }
@@ -111,40 +98,32 @@ struct SurfaceView: View {
     // MARK: Macros and aux
 
     var macros: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Macros").panelLabel()
-                if st.macroRunning != nil {
-                    Button("Stop") { atem.stopMacro() }.buttonStyle(.plain).font(.sans(11, .bold)).foregroundStyle(T.danger)
+        VStack(alignment: .leading, spacing: T.s2) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110, maximum: 150), spacing: T.s2)], alignment: .leading, spacing: T.s2) {
+                ForEach(st.macros.keys.sorted(), id: \.self) { i in
+                    PanelButton(title: st.macros[i] ?? "", subtitle: "\(i + 1)", lit: st.macroRunning == i ? T.warning : nil,
+                                width: 110, height: 40, titleSize: 12, blink: st.macroRunning == i) { atem.runMacro(i) }
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: T.s2) {
-                    ForEach(st.macros.keys.sorted(), id: \.self) { i in
-                        PanelButton(title: st.macros[i] ?? "", subtitle: "\(i + 1)", lit: st.macroRunning == i ? T.warning : nil,
-                                    width: 96, height: 40, titleSize: 12, blink: st.macroRunning == i) { atem.runMacro(i) }
-                    }
-                }
-                .padding(.vertical, 6).padding(.horizontal, 2)
+            if st.macroRunning != nil {
+                Button("Stop the macro") { atem.stopMacro() }.buttonStyle(CueButton(kind: .danger))
             }
         }
     }
 
     var aux: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Aux outputs").panelLabel()
-            ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: T.s2) {
-                ForEach(st.aux.keys.sorted(), id: \.self) { a in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("AUX \(a + 1)").font(.sans(9, .bold)).foregroundStyle(T.inkSubtle)
-                        Picker("", selection: Binding(get: { st.aux[a] ?? 0 }, set: { atem.setAux(a, $0) })) {
-                            ForEach(st.auxSources) { Text($0.long).tag($0.id) }
-                        }
-                        .labelsHidden().pickerStyle(.menu).frame(width: 150)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 280), spacing: T.s3, alignment: .top)], alignment: .leading, spacing: T.s3) {
+            ForEach(st.aux.keys.sorted(), id: \.self) { a in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text("Aux \(a + 1)").font(.sans(11, .bold)).foregroundStyle(T.inkMuted)
+                        if let name = store.screen(aux: a + 1)?.name { Text(name).font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1) }
+                    }
+                    MenuField(text: st.inputs[st.aux[a] ?? 0]?.long ?? "Input \(st.aux[a] ?? 0)") {
+                        ForEach(st.auxSources) { s in Button(s.long) { atem.setAux(a, s.id) } }
                     }
                 }
-            } }
-            .padding(.vertical, 6)
+            }
         }
     }
 
@@ -153,36 +132,28 @@ struct SurfaceView: View {
     var transition: some View {
         let inT = st.inTransition[me] ?? false
         let black = st.ftbBlack[me] ?? false
-        return HStack(alignment: .top, spacing: T.s3) {
-            if !simple {
-                VStack(spacing: T.s2) {
-                    Text("Style").panelLabel()
-                    ForEach([(0, "MIX"), (1, "DIP"), (2, "WIPE"), (3, "DVE")], id: \.0) { id, name in
-                        PanelButton(title: name, lit: (st.style[me] ?? 0) == id ? T.warning : nil, width: 62, height: 30, titleSize: 11) {
-                            atem.setStyle(id, me: me)
-                        }
+        return HStack(alignment: .top, spacing: T.s4) {
+            VStack(spacing: T.s2) {
+                ForEach([(0, "MIX"), (1, "DIP"), (2, "WIPE"), (3, "DVE")], id: \.0) { id, name in
+                    PanelButton(title: name, lit: (st.style[me] ?? 0) == id ? T.warning : nil, width: 62, height: 32, titleSize: 11) {
+                        atem.setStyle(id, me: me)
                     }
-                    HStack(spacing: 2) {
-                        Button { atem.setMixRate((st.mixRate[me] ?? 30) - 5, me: me) } label: { Image(systemName: "minus") }
-                        Text(rate(st.mixRate[me] ?? 30)).font(.sans(11, .semibold)).frame(width: 34)
-                        Button { atem.setMixRate((st.mixRate[me] ?? 30) + 5, me: me) } label: { Image(systemName: "plus") }
-                    }
-                    .buttonStyle(.plain).font(.system(size: 9, weight: .bold)).foregroundStyle(T.inkMuted)
-                    .help("Mix rate in seconds and frames")
                 }
+                HStack(spacing: 2) {
+                    IconButton(icon: "minus", help: "Shorter mix") { atem.setMixRate((st.mixRate[me] ?? 30) - 5, me: me) }
+                    Text(rate(st.mixRate[me] ?? 30)).font(.sans(12, .semibold)).frame(width: 34)
+                    IconButton(icon: "plus", help: "Longer mix") { atem.setMixRate((st.mixRate[me] ?? 30) + 5, me: me) }
+                }
+                .help("Mix length in seconds and frames")
             }
             VStack(spacing: T.s2) {
-                Text(" ").panelLabel()
-                PanelButton(title: "CUT", width: simple ? 110 : 84, height: simple ? 64 : 52, titleSize: simple ? 18 : 15) { atem.cut(me: me) }
-                PanelButton(title: simple ? "FADE" : "AUTO", lit: inT ? T.program : nil, width: simple ? 110 : 84,
-                            height: simple ? 64 : 52, titleSize: simple ? 18 : 15) { atem.auto(me: me) }
-                PanelButton(title: simple ? "BLACK" : "FTB", lit: black || (st.ftbInTransition[me] ?? false) ? T.program : nil,
-                            width: simple ? 110 : 84, height: 36, titleSize: 12, blink: black) { atem.fadeToBlack(me: me) }
+                PanelButton(title: "CUT", width: 84, height: 52, titleSize: 15) { atem.cut(me: me) }
+                PanelButton(title: "AUTO", lit: inT ? T.program : nil, width: 84, height: 52, titleSize: 15) { atem.auto(me: me) }
+                PanelButton(title: "FTB", lit: black || (st.ftbInTransition[me] ?? false) ? T.program : nil,
+                            width: 84, height: 36, titleSize: 12, blink: black) { atem.fadeToBlack(me: me) }
                     .help("Fade to black")
             }
-            if !simple {
-                TBar(me: me).frame(width: 56, height: 170).padding(.top, 18)
-            }
+            TBar(me: me).frame(width: 56, height: 170)
         }
     }
 

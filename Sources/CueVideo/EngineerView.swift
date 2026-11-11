@@ -98,8 +98,8 @@ struct EngineerView: View {
         case .scan: StageScanWindow()
         case .routing: RoutingWindow()
         case .switcher: SwitcherWindow()
-        case .setup: SetupTab().padding(T.s3)
-        case .status: StatusTab().padding(T.s3)
+        case .setup: SetupTab()
+        case .status: StatusTab()
         }
     }
 

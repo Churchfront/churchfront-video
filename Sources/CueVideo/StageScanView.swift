@@ -1,8 +1,8 @@
 import SwiftUI
 import CueATEM
 
-/// Window → Stage Scan (⇧⌘S): find everyone on stage, label them, and save a shot for each
-/// person on each camera. See StageScan.
+/// Engineer → Stage scan (⇧⌘S): find everyone on stage, label them, and save a shot for
+/// each person on each camera. Laid out as its three steps. See StageScan.
 struct StageScanWindow: View {
     @ObservedObject private var scan = StageScan.shared
     @ObservedObject private var cast = StageCast.shared
@@ -11,96 +11,98 @@ struct StageScanWindow: View {
     @State private var saved: [String] = []
 
     private var cameras: [PTZCamera] { ptz.cameras.filter { !$0.host.isEmpty } }
+    private var ready: Int { cameras.filter { scan.blocked($0) == nil }.count }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: T.s4) {
-                VStack(alignment: .leading, spacing: T.s1) {
-                    Text("Stage scan").font(.sans(22, .bold))
-                    Text("With everyone in place, each camera that isn't on Live goes to a wide shot, finds the people in it, and comes back. Label each person, and CueVideo saves a shot of them on every camera that saw them and can follow them by name for the rest of the day.")
-                        .font(.sans(13)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
-                    Text("The wide shot is a camera's shot named Stage or Wide if it has one. Otherwise it's where the camera points now, zoomed all the way out.")
-                        .font(.sans(12)).foregroundStyle(T.inkSubtle).fixedSize(horizontal: false, vertical: true)
-                }
-
-                // Which cameras will take part.
-                VStack(alignment: .leading, spacing: 6) {
+        Page {
+            PageHeader(title: "Stage scan", purpose: "With everyone in place, find each person, name them, and save a shot of them on every camera.",
+                       help: "Each camera that isn't on Live goes to a wide shot, finds the people in it, and comes back. Label each person, and CueVideo saves a shot of them on every camera that saw them and can follow them by name for the rest of the day.\n\nThe wide shot is a camera's shot named Stage or Wide if it has one. Otherwise it's where the camera points now, zoomed all the way out. A tighter Stage shot makes people bigger in the picture and easier to find.\n\nThe shots are for where people stood during the scan, so run it at rehearsal or soundcheck.")
+            HStack(alignment: .top, spacing: T.s4) {
+                step(1, "Cameras") {
+                    if cameras.isEmpty {
+                        Text("No cameras set up yet. Add them in Setup.").font(.sans(13)).foregroundStyle(T.inkMuted)
+                    }
                     ForEach(cameras) { c in
                         let why = scan.blocked(c)
                         HStack(spacing: T.s2) {
                             Circle().fill(why == nil ? T.success : T.lineStrong).frame(width: 8, height: 8)
-                            Text(c.name).font(.sans(13, .semibold))
-                            Text(why.map { "Left out: \($0)" } ?? "Will be scanned").font(.sans(12))
-                                .foregroundStyle(why == nil ? T.inkMuted : T.warning)
+                            Text(c.name).font(.sans(13, .semibold)).frame(width: 90, alignment: .leading).lineLimit(1)
+                            Text(why.map { "Left out: \($0)" } ?? "Will go wide and come back").font(.sans(12))
+                                .foregroundStyle(why == nil ? T.inkMuted : T.warning).fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    if cameras.isEmpty { Text("No cameras set up yet. Add them in Setup (⌘,).").font(.sans(13)).foregroundStyle(T.inkMuted) }
                 }
-
-                HStack(spacing: T.s3) {
-                    Text("Frame each person").font(.sans(12)).foregroundStyle(T.inkMuted)
-                    Picker("", selection: $scan.size) {
-                        ForEach(ShotSize.allCases) { Text($0.name).tag($0) }
+                step(2, "Scan") {
+                    HStack(spacing: T.s3) {
+                        Text("Frame each person").font(.sans(12)).foregroundStyle(T.inkMuted)
+                        Segments(items: ShotSize.allCases.map { ($0.name, $0) }, selection: $scan.size)
                     }
-                    .pickerStyle(.segmented).labelsHidden().frame(width: 320)
-                    Button { saved = []; Task { await scan.scan() } } label: {
-                        Text(scan.running ? "Scanning…" : (scan.people.isEmpty ? "Scan the stage" : "Scan again"))
-                            .font(.sans(14, .bold)).foregroundStyle(T.onAction)
-                            .padding(.horizontal, T.s4).frame(height: 34)
-                            .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.accent.opacity(scan.running ? 0.5 : 1)))
+                    HStack(spacing: T.s3) {
+                        Button { saved = []; Task { await scan.scan() } } label: {
+                            Text(scan.running ? "Scanning…" : (scan.people.isEmpty ? "Scan the stage" : "Scan again"))
+                        }
+                        .buttonStyle(CueButton(kind: .primary))
+                        .disabled(scan.running || ready == 0)
+                        .help("Moves each camera marked \"Will go wide and come back\". Cameras on Live don't move.")
+                        if scan.running {
+                            ProgressView().controlSize(.small)
+                            Text(scan.progress).font(.sans(12)).foregroundStyle(T.inkMuted)
+                        } else if ready == 0 {
+                            Text("No camera is free to scan right now.").font(.sans(12)).foregroundStyle(T.warning)
+                        } else {
+                            Text("\(ready) camera\(ready == 1 ? "" : "s") will move.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(scan.running || cameras.allSatisfy { scan.blocked($0) != nil })
-                    .help("Moves each camera listed as \"Will be scanned\" to its wide shot and back. Cameras on Live don't move.")
-                    if scan.running {
-                        ProgressView().controlSize(.small)
-                        Text(scan.progress).font(.sans(12)).foregroundStyle(T.inkMuted)
+                    ForEach(scan.notes, id: \.self) { n in
+                        Text(n).font(.sans(12, .semibold)).foregroundStyle(T.warning).fixedSize(horizontal: false, vertical: true)
                     }
                 }
-
-                ForEach(scan.notes, id: \.self) { n in
-                    Text(n).font(.sans(12, .semibold)).foregroundStyle(T.warning)
-                }
-
-                if !scan.people.isEmpty {
-                    Rectangle().fill(T.line).frame(height: 1)
-                    Text("Who is who").font(.sans(16, .bold))
-                    Text("Type a name or a role under each person. The letter is CueVideo's guess at who is the same person on another camera: naming one fills in the others with the same letter. Fix any it got wrong. Leave a person blank to skip them.")
+            }
+            step(3, "Name people and save") {
+                if scan.people.isEmpty {
+                    Text(scan.scannedAt == nil ? "After a scan, each person each camera saw appears here with a box for their name."
+                                               : "The last scan found no one. Check the notes above, then scan again.")
+                        .font(.sans(13)).foregroundStyle(T.inkMuted)
+                } else {
+                    Text("Type a name or a role under each person. The letter is CueVideo's guess at the same person on another camera: naming one fills in the others with that letter. Fix any it got wrong, and leave a person blank to skip them.")
                         .font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
                     ForEach(cameras.filter { c in scan.people.contains { $0.camera == c.id } }) { c in
                         VStack(alignment: .leading, spacing: T.s2) {
-                            Text(c.name).panelLabel()
+                            Text(c.name).font(.sans(13, .bold))
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 170), spacing: T.s3, alignment: .top)], alignment: .leading, spacing: T.s3) {
                                 ForEach(scan.people.filter { $0.camera == c.id }) { p in PersonCard(person: p, camera: c) }
                             }
                         }
                     }
                     HStack(spacing: T.s3) {
-                        Button { saved = scan.save() } label: {
-                            Text("Save shots and names").font(.sans(14, .bold)).foregroundStyle(T.onAction)
-                                .padding(.horizontal, T.s4).frame(height: 34)
-                                .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.accent))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(scan.people.allSatisfy { $0.label.trimmingCharacters(in: .whitespaces).isEmpty })
+                        Button("Save shots and names") { saved = scan.save() }
+                            .buttonStyle(CueButton(kind: .primary))
+                            .disabled(scan.people.allSatisfy { $0.label.trimmingCharacters(in: .whitespaces).isEmpty })
                         Text("Replaces the shots from the last scan. Shots you made yourself are kept.")
                             .font(.sans(12)).foregroundStyle(T.inkSubtle)
                     }
                     ForEach(saved, id: \.self) { line in Text(line).font(.sans(12, .semibold)).foregroundStyle(T.success) }
                 }
-
-                if !cast.names.isEmpty {
-                    Rectangle().fill(T.line).frame(height: 1)
-                    Text("Can follow by name: \(cast.names.joined(separator: ", "))").font(.sans(13, .semibold))
-                    Text("Under Track on the main screen, choose Follow by name. This lasts until CueVideo quits or the next scan is saved.")
+            }
+            if !cast.names.isEmpty {
+                Card(title: "Can follow by name") {
+                    Text(cast.names.joined(separator: ", ")).font(.sans(13, .semibold))
+                    Text("In the Operator view, under Track, choose Follow by name. This lasts until CueVideo quits or the next scan is saved.")
                         .font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
             }
-            .padding(T.s5)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(T.bg)
-        .foregroundStyle(T.ink)
+    }
+
+    private func step<C: View>(_ n: Int, _ title: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: T.s3) {
+            StepLabel(n: n, text: title)
+            content()
+        }
+        .padding(T.s4)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surface))
+        .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(T.line))
     }
 }
 
@@ -126,10 +128,10 @@ private struct PersonCard: View {
             .clipShape(RoundedRectangle(cornerRadius: T.rMD))
             .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
             TextField("Name or role", text: Binding(get: { person.label }, set: { scan.label(person.id, $0) }))
-                .textFieldStyle(.roundedBorder).font(.sans(13))
+                .textFieldStyle(CueFieldStyle())
             HStack(spacing: 6) {
                 Button("Try the shot") { ptz.go(to: PTZShot(name: "", person.shot), camera: camera.id) }
-                    .buttonStyle(.borderless).font(.sans(11, .semibold)).foregroundStyle(T.accentStrong)
+                    .buttonStyle(CueButton(kind: .quiet))
                     .disabled(scan.running || scan.blocked(camera) != nil)
                     .help(scan.blocked(camera).map { "\(camera.name) can't move now: \($0)." } ?? "Send \(camera.name) to this shot to check it")
                 if person.rough {
