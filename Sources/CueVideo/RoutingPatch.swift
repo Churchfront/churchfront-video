@@ -291,14 +291,13 @@ struct RoutingSchematic: View {
                      ?? (message.isEmpty ? "Drag a source or a mix onto a destination, or click one and then the other. It changes right away." : message))
                     .font(.sans(12, message.isEmpty || selected != nil ? .regular : .semibold))
                     .foregroundStyle(selected != nil ? T.accent : (message.isEmpty ? T.inkSubtle : T.success))
+                HelpButton(text: "Each switcher output feeds a screen or a piece of gear. Drag a source or a mix onto a destination to change what it shows, right away. The pencil on a destination names it, sets which outputs feed it (a pair listed together switches together) and notes how it's wired. Outputs that feed encoders and recorders are locked so nobody changes the stream by accident, and ports that only go to the patch bay fold away as spare.")
                 Spacer()
                 Button("Undo") { if let u = undo.popLast() { u.back(); message = "\(u.what) is back to what it was." } }
                     .buttonStyle(CueButton()).disabled(undo.isEmpty).help("Put back the last thing changed here")
             }
         }
-        .padding(T.s4)
-        .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surface))
-        .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(T.line))
+        // No card around it: the schematic is the page.
     }
 
     @State private var height: CGFloat = 400
@@ -357,7 +356,7 @@ struct RoutingSchematic: View {
     private func sourceRow(_ s: Src, _ c: Color?, on: Bool, _ L: Layout, _ w: CGFloat) -> some View {
         HStack(spacing: T.s2) {
             if s.pic { thumb(s.id, w) }
-            Text(store.label(s.id, atem.state)).font(.sans(s.pic ? 14 : 13, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
+            Text(store.label(s.id, atem.state)).font(.sans(s.pic ? 14 : 13, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
             Spacer(minLength: 0)
             if (1...999).contains(s.id) { port("IN \(s.id)") }
             if (1...999).contains(s.id), !ptz.cameras.contains(where: { $0.atemInput == s.id && $0.proto == .canonXC && !$0.host.isEmpty }) {

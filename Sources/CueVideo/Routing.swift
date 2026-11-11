@@ -113,8 +113,7 @@ struct RoutingWindow: View {
 
     var body: some View {
         Page(wide: true) {
-            PageHeader(title: "Routing", purpose: "What feeds what on the switcher. Drag a source or a mix onto a destination to change it right away.",
-                       help: "Each switcher aux output feeds a screen or a piece of gear. Name the outputs, note how they're wired, and choose what each one shows. Outputs listed together (such as a pair of lobby TVs) switch together. Outputs that feed encoders, recorders or the patch bay can be hidden from operators so nobody changes the stream by accident.")
+            // No page title: the Routing tab above already says where this is.
             if atem.state.aux.isEmpty {
                 Text("The switcher hasn't reported its outputs yet.").font(.sans(13)).foregroundStyle(T.inkMuted)
             } else {
