@@ -6,12 +6,14 @@ import SwiftUI
 
 /// A scrolling Engineer page. Content keeps a comfortable width and sits at the left.
 struct Page<Content: View>: View {
+    /// Use the whole window instead of a comfortable reading width: for the routing schematic.
+    var wide = false
     @ViewBuilder let content: Content
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: T.s5) { content }
                 .padding(T.s5)
-                .frame(maxWidth: 1240, alignment: .leading)
+                .frame(maxWidth: wide ? .infinity : 1240, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(T.bg)

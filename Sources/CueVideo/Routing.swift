@@ -108,21 +108,11 @@ struct RoutingWindow: View {
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var store: ConfigStore
     @State private var newButton = false
-    @AppStorage("routingShowNames") private var showNames = false
 
     private let columns = [GridItem(.adaptive(minimum: 250, maximum: 380), spacing: T.s3, alignment: .top)]
 
-    /// Aux outputs nobody has named yet.
-    private var spare: [ScreenOutput] {
-        let used = Set(store.config.screens.flatMap(\.aux))
-        return (1...max(1, atem.state.auxCount)).filter { !used.contains($0) && atem.state.aux[$0 - 1] != nil }
-            .map { ScreenOutput(name: "", aux: [$0]) }
-    }
-
     var body: some View {
-        let screens = store.config.screens.filter(\.forVolunteers)
-        let feeds = store.config.screens.filter { !$0.forVolunteers }
-        Page {
+        Page(wide: true) {
             PageHeader(title: "Routing", purpose: "What feeds what on the switcher. Drag a source or a mix onto a destination to change it right away.",
                        help: "Each switcher aux output feeds a screen or a piece of gear. Name the outputs, note how they're wired, and choose what each one shows. Outputs listed together (such as a pair of lobby TVs) switch together. Outputs that feed encoders, recorders or the patch bay can be hidden from operators so nobody changes the stream by accident.")
             if atem.state.aux.isEmpty {
@@ -130,40 +120,7 @@ struct RoutingWindow: View {
             } else {
                 RoutingSchematic()
             }
-            // Names, which outputs feed each screen, and how they're wired.
-            Fold(title: "Names and wiring", count: store.config.screens.count, open: $showNames) {
-                mixNames
-                LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
-                    ForEach(screens) { ScreenCard(screen: $0) }
-                    ForEach(feeds) { ScreenCard(screen: $0) }
-                    ForEach(spare) { ScreenCard(screen: $0) }
-                }
-            }
             buttons
-        }
-    }
-
-    // MARK: Mixes
-
-    /// What each mix is for, such as "Live stream" and "Side screens".
-    var mixNames: some View {
-        HStack(alignment: .top, spacing: T.s3) {
-            ForEach(atem.state.program.keys.sorted(), id: \.self) { me in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: T.s2) {
-                        Text("M/E \(me + 1) is for").font(.sans(11, .semibold)).foregroundStyle(T.inkMuted)
-                        if me == booth.me { Tag(text: "Operator's mix", color: T.accent, ink: T.onAction) }
-                    }
-                    TextField("Such as Live stream", text: Binding(
-                        get: { store.config.mixNames.indices.contains(me) ? store.config.mixNames[me] : "" },
-                        set: { v in store.update { c in
-                            while c.mixNames.count <= me { c.mixNames.append("") }
-                            c.mixNames[me] = v
-                        } }))
-                    .textFieldStyle(CueFieldStyle())
-                }
-                .frame(maxWidth: 320, alignment: .leading)
-            }
         }
     }
 
@@ -222,9 +179,8 @@ struct RoutingWindow: View {
     }
 }
 
-/// One screen (or an aux nobody has named): its name, what it shows now with a menu to
-/// change it, and how it's wired. The pencil opens its name, outputs and wiring.
-struct ScreenCard: View {
+/// The pencil on a destination: opens its name, which outputs feed it, and its wiring note.
+struct ScreenEditButton: View {
     let screen: ScreenOutput
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var store: ConfigStore
@@ -233,32 +189,13 @@ struct ScreenCard: View {
     @State private var auxText = ""
     @State private var note = ""
 
-    var named: Bool { !screen.name.isEmpty }
+    /// Already in the setup file, rather than an output nobody has named.
+    var named: Bool { store.config.screens.contains(screen) }
     var auxLabel: String { screen.aux.count == 1 ? "Aux \(screen.aux[0])" : "Aux " + screen.aux.map(String.init).joined(separator: ", ") }
 
     var body: some View {
-        let s = atem.state
-        let showing = Set(screen.aux.map { s.aux[$0 - 1] })
-        VStack(alignment: .leading, spacing: T.s2) {
-            HStack(alignment: .center, spacing: T.s2) {
-                Text(named ? screen.name : auxLabel).font(.sans(14, .bold)).foregroundStyle(named ? T.ink : T.inkMuted).lineLimit(1)
-                Spacer(minLength: 2)
-                if named { Text(auxLabel).font(.system(size: 11, design: .monospaced)).foregroundStyle(T.inkSubtle) }
-                IconButton(icon: "pencil", help: named ? "Change the name, outputs or wiring note" : "Name this output") { load(); editing = true }
-                    .popover(isPresented: $editing, arrowEdge: .bottom) { editor }
-            }
-            SourceMenu(current: showing.count == 1 ? s.aux[screen.aux[0] - 1] : nil, mixed: showing.count > 1) { src in
-                for a in screen.aux { atem.setAux(a - 1, src) }
-            }
-            if let n = screen.note, !n.isEmpty {
-                Text(n).font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-            } else if !named {
-                Text("Not named yet").font(.sans(11)).foregroundStyle(T.inkSubtle)
-            }
-        }
-        .padding(T.s3)
-        .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surface))
-        .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(T.line))
+        IconButton(icon: "pencil", help: named ? "Change the name, outputs or wiring note" : "Name this output") { load(); editing = true }
+            .popover(isPresented: $editing, arrowEdge: .trailing) { editor }
     }
 
     var editor: some View {
@@ -299,7 +236,7 @@ struct ScreenCard: View {
     }
 
     func load() {
-        name = screen.name
+        name = named ? screen.name : ""
         auxText = screen.aux.map(String.init).joined(separator: ", ")
         note = screen.note ?? ""
     }
@@ -319,36 +256,6 @@ struct ScreenCard: View {
 
     func update(_ f: (inout ScreenOutput) -> Void) {
         store.update { c in if let i = c.screens.firstIndex(of: screen) { f(&c.screens[i]) } }
-    }
-}
-
-/// Picks any source an aux can take, grouped: the mixes first, then the operator's sources, then everything.
-struct SourceMenu: View {
-    let current: Int?
-    var mixed = false
-    let pick: (Int) -> Void
-    @EnvironmentObject var atem: ATEMClient
-    @EnvironmentObject var store: ConfigStore
-
-    var body: some View {
-        let s = atem.state
-        let all = s.auxSources
-        let mixes = all.filter { (10000..<11000).contains($0.id) }
-        let favorites = store.volunteerSources(s).map(\.input).filter { id in all.contains { $0.id == id } }
-        MenuField(text: mixed ? "Mixed" : store.routeLabel(current, s), icon: "play.rectangle", strong: true) {
-            Section("Mixes") {
-                ForEach(mixes) { i in Button(store.routeLabel(i.id, s)) { pick(i.id) } }
-            }
-            Section("Sources") {
-                ForEach(favorites, id: \.self) { id in Button(store.label(id, s)) { pick(id) } }
-            }
-            Menu("Everything else") {
-                ForEach(all.filter { i in !mixes.contains(i) && !favorites.contains(i.id) }) { i in
-                    Button("\(i.long) (\(i.short))") { pick(i.id) }
-                }
-            }
-        }
-        .help("What this shows now. Choose another picture to change it right away.")
     }
 }
 
