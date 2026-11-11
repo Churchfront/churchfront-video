@@ -71,8 +71,16 @@ struct RoutingSchematic: View {
     struct Layout { var heads: [Head] = [], srcs: [Src] = [], dsts: [Dst] = [], mixes: [Mix] = [], wires: [Wire] = []
         var colors: [Int: Color] = [:]; var height: CGFloat = 0 }
 
-    private let sw: CGFloat = 196, mw: CGFloat = 236, dw: CGFloat = 220
-    private let picH: CGFloat = 62, rowH: CGFloat = 30, headH: CGFloat = 24, gap: CGFloat = 6
+    private let rowH: CGFloat = 30, headH: CGFloat = 24, gap: CGFloat = 6
+
+    /// Sizes grow with the page, so a wide window gets bigger pictures instead of empty space.
+    struct Sizes { let side: CGFloat, mix: CGFloat, thumb: CGSize
+        var picH: CGFloat { thumb.height + 8 } }
+    private func sizes(_ w: CGFloat) -> Sizes {
+        let side = min(340, max(196, (w * 0.235).rounded()))
+        let tw = (side * 0.5).rounded()
+        return Sizes(side: side, mix: min(440, max(236, (w * 0.28).rounded())), thumb: CGSize(width: tw, height: (tw * 9 / 16).rounded()))
+    }
     /// None is tally red or green, which only ever mean Live and Next.
     private static let palette: [Color] = [0x7CC2EE, 0xF2B84B, 0xB39DF5, 0xD9DE6A, 0xF58FB8, 0xFF9E6B, 0x9BB7C9, 0xC9C9C9].map(T.hex)
 
@@ -102,6 +110,7 @@ struct RoutingSchematic: View {
     private func layout(_ w: CGFloat) -> Layout {
         let s = atem.state
         var L = Layout()
+        let z = sizes(w), sw = z.side, dw = z.side, mw = z.mix, picH = z.picH
 
         // Destinations: every aux, named or not.
         let named = store.config.screens
@@ -256,7 +265,7 @@ struct RoutingSchematic: View {
                         mixCard(m, L.colors[m.output] ?? T.lineStrong, target: canDrop(on: m), L, w).position(x: m.frame.midX, y: m.frame.midY)
                     }
                     ForEach(L.dsts, id: \.screen.id) { d in
-                        destRow(d, d.source.flatMap { L.colors[$0] }, target: target(d, L, w)).position(x: d.frame.midX, y: d.frame.midY)
+                        destRow(d, d.source.flatMap { L.colors[$0] }, target: target(d, L, w), w).position(x: d.frame.midX, y: d.frame.midY)
                     }
                     if let drag {
                         Text(store.routeLabel(drag.source, atem.state)).font(.sans(12, .semibold)).foregroundStyle(T.onAction)
@@ -303,7 +312,7 @@ struct RoutingSchematic: View {
                 .help(feedsUnlocked ? "Lock these again" : "One of these may carry the live stream. Unlock to change them.")
             }
         }
-        .frame(width: right ? dw : sw, height: headH - 4, alignment: .leading)
+        .frame(width: sizes(w).side, height: headH - 4, alignment: .leading)
         .contentShape(Rectangle())
         .onTapGesture {
             switch h.group {
@@ -314,17 +323,18 @@ struct RoutingSchematic: View {
             }
         }
         .help(h.group == .spareIn || h.group == .spareOut ? "Ports that only go to patch bay tie lines" : "")
-        .position(x: (right ? w - dw / 2 : sw / 2), y: h.y + (headH - 4) / 2)
+        .position(x: (right ? w - sizes(w).side / 2 : sizes(w).side / 2), y: h.y + (headH - 4) / 2)
     }
 
-    private func thumb(_ input: Int?) -> some View {
-        SourcePicture(input: input, named: false).frame(width: 96, height: 54).clipShape(RoundedRectangle(cornerRadius: T.rSM))
+    private func thumb(_ input: Int?, _ w: CGFloat) -> some View {
+        let t = sizes(w).thumb
+        return SourcePicture(input: input, named: false).frame(width: t.width, height: t.height).clipShape(RoundedRectangle(cornerRadius: T.rSM))
     }
 
     private func sourceRow(_ s: Src, _ c: Color?, on: Bool, _ L: Layout, _ w: CGFloat) -> some View {
         HStack(spacing: T.s2) {
-            if s.pic { thumb(s.id) }
-            Text(store.label(s.id, atem.state)).font(.sans(13, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
+            if s.pic { thumb(s.id, w) }
+            Text(store.label(s.id, atem.state)).font(.sans(s.pic ? 14 : 13, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
             Spacer(minLength: 0)
         }
         .padding(.leading, s.pic ? 4 : 10).padding(.trailing, 8)
@@ -343,6 +353,7 @@ struct RoutingSchematic: View {
                 Text(name.isEmpty ? "M/E \(m.me + 1)" : name).font(.sans(14, .bold)).lineLimit(1)
                 Spacer()
                 Text("M/E \(m.me + 1)").font(.sans(11)).foregroundStyle(T.inkSubtle)
+                MixNameButton(me: m.me)
             }
             .frame(height: 18)
             ZStack(alignment: .topLeading) {
@@ -380,7 +391,7 @@ struct RoutingSchematic: View {
                    : "\(store.mixName(m.me)): drop a source here to put it live, or drag this onto a destination")
     }
 
-    private func destRow(_ d: Dst, _ c: Color?, target: Bool) -> some View {
+    private func destRow(_ d: Dst, _ c: Color?, target: Bool, _ w: CGFloat) -> some View {
         // A mix by its short name ("Live stream"); the M/E number is on its card.
         var label = d.mixed ? "Mixed" : (d.source == nil ? "" : store.routeLabel(d.source, atem.state))
         if let src = d.source, isMix(src), src % 10 == 0 {
@@ -388,11 +399,11 @@ struct RoutingSchematic: View {
             if store.config.mixNames.indices.contains(me), !store.config.mixNames[me].isEmpty { label = store.config.mixNames[me] }
         }
         return HStack(spacing: T.s2) {
-            if d.pic { thumb(d.source) }
+            if d.pic { thumb(d.source, w) }
             if d.pic {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(d.screen.name).font(.sans(13, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
-                    Text(label).font(.sans(11)).foregroundStyle(T.inkMuted).lineLimit(1).minimumScaleFactor(0.8)
+                    Text(d.screen.name).font(.sans(14, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
+                    Text(label).font(.sans(12)).foregroundStyle(T.inkMuted).lineLimit(1).minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 0)
             } else {
@@ -402,8 +413,9 @@ struct RoutingSchematic: View {
                 Text(label).font(.sans(11)).foregroundStyle(T.inkMuted).lineLimit(1).minimumScaleFactor(0.8)
             }
             if d.locked { Image(systemName: "lock.fill").font(.system(size: 10)).foregroundStyle(T.warning) }
+            ScreenEditButton(screen: d.screen)
         }
-        .padding(.leading, d.pic ? 4 : 10).padding(.trailing, 8)
+        .padding(.leading, d.pic ? 4 : 10).padding(.trailing, 2)
         .frame(width: d.frame.width, height: d.frame.height)
         .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
         .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(target ? T.accent : (c ?? T.line), lineWidth: target ? 4 : (c == nil ? 1 : 2)))
@@ -479,5 +491,30 @@ private extension View {
             .gesture(DragGesture(minimumDistance: 6, coordinateSpace: .named("schematic"))
                 .onChanged { owner.setDrag((id, $0.location)) }
                 .onEnded { v in owner.drop(id, at: v.location, L); owner.setDrag(nil) })
+    }
+}
+
+/// The pencil on a mix: what that M/E is for, such as "Live stream".
+struct MixNameButton: View {
+    let me: Int
+    @EnvironmentObject var store: ConfigStore
+    @State private var editing = false
+
+    var body: some View {
+        IconButton(icon: "pencil", help: "Name what this mix is for") { editing = true }
+            .popover(isPresented: $editing, arrowEdge: .top) {
+                VStack(alignment: .leading, spacing: T.s2) {
+                    Text("What M/E \(me + 1) is for").font(.sans(14, .bold))
+                    TextField("Such as Live stream", text: Binding(
+                        get: { store.config.mixNames.indices.contains(me) ? store.config.mixNames[me] : "" },
+                        set: { v in store.update { c in
+                            while c.mixNames.count <= me { c.mixNames.append("") }
+                            c.mixNames[me] = v
+                        } }))
+                    .textFieldStyle(CueFieldStyle()).frame(width: 260).onSubmit { editing = false }
+                    HStack { Spacer(); Button("Done") { editing = false }.buttonStyle(CueButton(kind: .primary)) }
+                }
+                .padding(T.s4).foregroundStyle(T.ink)
+            }
     }
 }
