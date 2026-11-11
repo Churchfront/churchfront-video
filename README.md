@@ -35,9 +35,19 @@ can set CueVideo up by editing it. The camera admin login is never in this file.
 action in the app (status, Next/Live/Cut/Fade/Black, keys, record and stream,
 camera moves, exposure, shots and presets, the full switcher, setup). It passes
 calls to the running app over 127.0.0.1:9911, using the key in
-`~/Library/Application Support/CueVideo/control-token`, and opens CueVideo if it
-isn't running. `.mcp.json` registers it for Claude Code sessions in this folder.
+`~/Library/Application Support/CueVideo/control-token`. Calling a tool opens
+CueVideo if it isn't running; listing the tools (which every Claude session does
+when it starts) does not. `.mcp.json` registers it for Claude Code sessions in this folder.
 Camera tools refuse a camera that's on Live unless the call says `allow_live: true`.
+
+## Safeguards
+
+- **A camera is never left moving.** If Next is cut to Live while the joystick or an arrow key is held, the camera that was moving is stopped. Quitting CueVideo stops every camera it is moving, tracking included. Arrow keys let go when another window or app comes to the front. A stop that is waiting for a Canon camera is kept and re-sent if the request before it fails.
+- **Keys only work in the main window.** Space, Return, the number keys and the arrows do nothing in Setup, Video Routing, the Full Switcher, or while a dialog or popover is open.
+- **The setup file is protected.** Every setup that loads or saves cleanly is copied to `config.last-good.json`. If `config.json` has a mistake when CueVideo opens, it runs on that copy and says so on the main screen. Before CueVideo saves over a file it couldn't read, it keeps that file as `config.unreadable-<date>.json`.
+- **Claude's tools don't guess.** `set_recording` and `set_streaming` need a clear `on: true` or `on: false`. A part of a name is accepted only when it fits exactly one source, screen or routing button.
+
+`swift test` runs the camera code against pretend cameras on this Mac and checks the stops go out.
 
 ## Camera speed, exposure and color matching
 

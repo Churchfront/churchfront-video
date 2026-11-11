@@ -194,6 +194,12 @@ final class ConfigStore: ObservableObject {
     /// cameras; they must never be written over the real setup.
     let readOnly: Bool
     private var lastModified: Date?
+    /// True while config.json is on disk but couldn't be read (a typing mistake in it). The
+    /// app never writes over a file in that state without setting a copy of it aside first.
+    private var unreadable = false
+    /// A copy of the last setup that loaded or saved cleanly, beside config.json. If
+    /// config.json can't be read when CueVideo opens, it runs on this instead of on nothing.
+    private var lastGoodURL: URL { url.deletingLastPathComponent().appendingPathComponent("config.last-good.json") }
     private var timer: Timer?
     private var bag = Set<AnyCancellable>()
     private weak var booth: Booth?
@@ -211,6 +217,9 @@ final class ConfigStore: ObservableObject {
         } else if fileError == nil {
             config = migrated(booth)
             write()
+        } else if let data = try? Data(contentsOf: lastGoodURL), let c = try? JSONDecoder().decode(CueConfig.self, from: data) {
+            // config.json has a mistake in it: open on the last setup that worked, and say so.
+            config = c
         }
         apply()
         // Cameras edited in the app go back to the file.
@@ -295,10 +304,13 @@ final class ConfigStore: ObservableObject {
         do {
             let c = try JSONDecoder().decode(CueConfig.self, from: data)
             fileError = nil
+            unreadable = false
             loadedAt = Date()
+            keepLastGood(c, data)
             return c
         } catch {
             fileError = Self.explain(error)
+            unreadable = true
             return nil
         }
     }
@@ -311,12 +323,31 @@ final class ConfigStore: ObservableObject {
         if let old = try? Data(contentsOf: url), old == data { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         do {
+            if unreadable {
+                // The file on disk has a mistake in it and may hold work that isn't in the
+                // app. Keep it under another name before saving over it; if that fails,
+                // leave it alone.
+                let f = DateFormatter()
+                f.locale = Locale(identifier: "en_US_POSIX")
+                f.dateFormat = "yyyyMMdd-HHmmss"
+                let aside = url.deletingLastPathComponent().appendingPathComponent("config.unreadable-\(f.string(from: Date())).json")
+                try FileManager.default.copyItem(at: url, to: aside)
+                unreadable = false
+            }
             try data.write(to: url, options: .atomic)
             lastModified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
             fileError = nil
+            keepLastGood(config, data)
         } catch {
             fileError = "Couldn't save the setup: \(error.localizedDescription)"
         }
+    }
+
+    /// Remembers a setup that loaded or saved cleanly (never an empty one, and never during self-tests).
+    private func keepLastGood(_ c: CueConfig, _ data: Data) {
+        guard !readOnly, c != CueConfig() else { return }
+        if let old = try? Data(contentsOf: lastGoodURL), old == data { return }
+        try? data.write(to: lastGoodURL, options: .atomic)
     }
 
     /// First run with a config file: carry over what earlier versions kept in the app's preferences.

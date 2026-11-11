@@ -16,13 +16,31 @@ final class Booth: ObservableObject {
     @Published var me = 0
     @Published var showSettings = false
     private var heldArrows: Set<UInt16> = []
+    /// The title of the volunteer's window (the WindowGroup in CueVideoApp).
+    static let mainWindowTitle = "CueVideo"
+
+    /// Lets go of any arrow keys being held and stops that camera. Used when the key release
+    /// may never reach CueVideo: another window or another app came to the front.
+    func releaseArrows() {
+        guard !heldArrows.isEmpty else { return }
+        heldArrows.removeAll()
+        ptz.stopDrive()
+    }
 
     var connectedOnce: Bool { !atem.state.inputs.isEmpty }
 
     /// Keyboard: 1 to 9 and 0 put that tile of the volunteer's source row on Next, shift
     /// puts it on Live, space cuts, return fades, arrows move the camera on Next.
+    ///
+    /// These only work in the volunteer's main window, and not while it shows a dialog or a
+    /// popover: Space or Return in Setup, Video Routing, or on a "Delete this shot?" question
+    /// must never cut or fade what's live.
     func key(_ e: NSEvent, down: Bool) -> Bool {
-        if let r = NSApp.keyWindow?.firstResponder, r is NSTextView { return false }
+        guard let w = NSApp.keyWindow, w.title == Booth.mainWindowTitle, w.attachedSheet == nil else {
+            releaseArrows()
+            return false
+        }
+        if let r = w.firstResponder, r is NSTextView { return false }
         if e.modifierFlags.contains(.command) { return false }
         let arrows: [UInt16: (Double, Double)] = [123: (-0.6, 0), 124: (0.6, 0), 125: (0, -0.6), 126: (0, 0.6)]
         if let a = arrows[e.keyCode] {
@@ -66,6 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { e in
             booth.key(e, down: e.type == .keyDown) ? nil : e
         }
+        // An arrow key held while another app or window comes forward never sends its release.
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in booth.releaseArrows() }
+        center.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { n in
+            if (n.object as? NSWindow)?.title == Booth.mainWindowTitle { booth.releaseArrows() }
+        }
         let env = ProcessInfo.processInfo.environment
         // Self-tests name their own switcher; otherwise the config file says where it is.
         if let host = env["CUEVIDEO_HOST"], !host.isEmpty { booth.atem.connect(host, port: env["CUEVIDEO_PORT"].flatMap(UInt16.init) ?? 9910) }
@@ -90,6 +114,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if env["CUEVIDEO_FOLLOWTEST"] != nil { SelfTest.followTest() } else if let cams = env["CUEVIDEO_PTZTEST"] { SelfTest.ptzTest(cams) } else if env["CUEVIDEO_REALTEST"] != nil { SelfTest.realTest() } else if env["CUEVIDEO_PROBE"] != nil { SelfTest.probe() } else if env["CUEVIDEO_SELFTEST"] != nil { SelfTest.run() }
     }
 
+    /// Quitting stops every camera CueVideo is moving (auto tracking, the joystick, zoom, a
+    /// move Claude started), then waits a moment for the stops to reach the cameras. A Canon
+    /// camera keeps turning at the last speed it was given until it's told to stop.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        AutoTracker.shared.stopAll()
+        Booth.shared.ptz.stopAllManual()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { sender.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
@@ -99,7 +133,7 @@ struct CueVideoApp: App {
     init() { Fonts.register() }
 
     var body: some Scene {
-        WindowGroup("CueVideo") {
+        WindowGroup(Booth.mainWindowTitle) {
             ContentView()
                 .booth()
                 .frame(minWidth: 1100, minHeight: 720)
