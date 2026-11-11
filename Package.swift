@@ -21,5 +21,7 @@ let package = Package(
             dependencies: ["CueATEM", "NDIBridge"],
             path: "Sources/CueVideo"
         ),
+        // Runs the camera code against pretend cameras on this Mac: swift test
+        .testTarget(name: "CueATEMTests", dependencies: ["CueATEM"], path: "Tests/CueATEMTests"),
     ]
 )

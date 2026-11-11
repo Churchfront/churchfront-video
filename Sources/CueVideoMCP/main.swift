@@ -4,11 +4,14 @@ import Foundation
 // passes every tool call to the running CueVideo app through its local control interface
 // (127.0.0.1:9911, with the key in ~/Library/Application Support/CueVideo/control-token).
 // The tools themselves are defined in the app (ControlTools.swift), so this stays tiny.
-// If CueVideo isn't open, this opens it in the background first.
+// If CueVideo isn't open, calling a tool opens it in the background first. Listing the tools doesn't.
 
 let port = 9911
 let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     .appendingPathComponent("CueVideo", isDirectory: true)
+
+/// The tool list CueVideo gave last time, for when it's closed.
+let toolsCache = support.appendingPathComponent("mcp-tools.json")
 
 func token() -> String {
     (try? String(contentsOf: support.appendingPathComponent("control-token"), encoding: .utf8))?
@@ -87,7 +90,14 @@ while let line = readLine(strippingNewline: true) {
     case "ping":
         result(id, [:])
     case "tools/list":
-        if ensureApp(), let r = app("GET", "/tools"), let tools = r["tools"] {
+        // Listing the tools never opens CueVideo: a Claude session starting in this folder
+        // must not bring up an app that connects to the switcher and takes control of the
+        // cameras. While CueVideo is closed, the list it gave last time is used; calling a
+        // tool is what opens it.
+        if let r = app("GET", "/tools", timeout: 2), let tools = r["tools"] {
+            if let data = try? JSONSerialization.data(withJSONObject: tools) { try? data.write(to: toolsCache, options: .atomic) }
+            result(id, ["tools": tools])
+        } else if let data = try? Data(contentsOf: toolsCache), let tools = try? JSONSerialization.jsonObject(with: data) {
             result(id, ["tools": tools])
         } else {
             result(id, ["tools": [["name": "get_status", "description": "Status of CueVideo. (CueVideo isn't running right now.)",

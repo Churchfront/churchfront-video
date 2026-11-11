@@ -431,6 +431,7 @@ final class CanonLink: PTZLink {
                     if !self.stopped, !self.hasControl, let cur = self.session { self.claim(cur) }
                 }
             }
+            if self.hasControl { self.pump() }  // anything kept while control was away (a stop)
             then?()
         }
     }
@@ -506,30 +507,41 @@ final class CanonLink: PTZLink {
     // they queued up (lag) and could land out of order, so a stop overtaken by an older
     // move left the camera drifting.
     private var sending = false
-    private var queued: [(key: String?, query: String)] = []
+    private var queued: [(key: String?, query: String, tries: Int)] = []
     private var lastDrive = "", lastZoom = ""
 
     private func control(_ query: String, key: String? = nil) {
         if let key, let i = queued.firstIndex(where: { $0.key == key }) {
             queued[i].query = query
+            queued[i].tries = 0
         } else {
-            queued.append((key, query))
+            queued.append((key, query, 0))
         }
         pump()
     }
 
+    private static func isStop(_ query: String) -> Bool { query == "pan=stop&tilt=stop" || query == "zoom=stop" }
+
     private func pump() {
         guard !sending, !queued.isEmpty else { return }
-        guard let s = session else { queued.removeAll(); open(); return }
+        // No session: moves that were waiting are dropped, but a stop is kept and sent as
+        // soon as the camera is back, so it can't be left moving.
+        guard let s = session else { queued.removeAll { !Self.isStop($0.query) }; open(); return }
         let next = queued.removeFirst()
         sending = true
         get("control.cgi?s=\(s)&\(next.query)") { [weak self] text in
             guard let self else { return }
             self.sending = false
             if text == nil {
-                // Control was taken (or the session expired): drop what's waiting and ask
-                // for control again. claim() opens a new session if this one is gone.
-                self.queued.removeAll()
+                // The camera turned the request down, didn't answer, or control was taken.
+                // Drop the moves that were waiting, but never a stop: keep any that is
+                // queued, and try a failed stop again (a few times) unless something newer
+                // for the same control has replaced it. Then ask for control again;
+                // claim() opens a new session if this one is gone, and sends what's kept.
+                self.queued.removeAll { !Self.isStop($0.query) }
+                if Self.isStop(next.query), next.tries < 3, !self.queued.contains(where: { $0.key == next.key }) {
+                    self.queued.insert((next.key, next.query, next.tries + 1), at: 0)
+                }
                 self.hasControl = false
                 self.claim(s)
             } else {
@@ -660,7 +672,16 @@ final class CanonLink: PTZLink {
 
 public final class PTZController: ObservableObject {
     @Published public var cameras: [PTZCamera] = [] { didSet { save(); if links(differ: oldValue) { restart() } } }
-    @Published public var selected: UUID?
+    /// The camera the joystick, zoom and arrow keys drive. When it changes while the old
+    /// camera is being moved by hand (Next was cut to Live with the joystick still held),
+    /// the old camera is stopped, so it is never left moving on Live.
+    @Published public var selected: UUID? {
+        didSet {
+            guard oldValue != selected else { return }
+            lastDrive = nil
+            if let old = oldValue { stopManual(old) }
+        }
+    }
     @Published public private(set) var online: Set<UUID> = []
     /// Preset names the cameras report themselves (Canon), by camera.
     @Published public private(set) var reportedPresets: [UUID: [Int: String]] = [:]
@@ -676,6 +697,8 @@ public final class PTZController: ObservableObject {
     private let queue = DispatchQueue(label: "cuevideo.ptz")
     private var links: [UUID: PTZLink] = [:]
     private var lastDrive: (Int, Int)?
+    /// Cameras being panned, tilted or zoomed by hand (or by Claude) right now. Main thread.
+    private var moving: Set<UUID> = [], zooming: Set<UUID> = []
     private let key = "ptzCameras"
 
     public init(load: Bool = true) {
@@ -779,18 +802,39 @@ public final class PTZController: ObservableObject {
         // Only send when the direction or speed step changes, so a drag doesn't flood the camera.
         let step = (Int((px * 12).rounded()), Int((py * 12).rounded()))
         if px != 0 || py != 0 { manual(camera) }
+        if let id = camera ?? selected {
+            if px != 0 || py != 0 { moving.insert(id) } else { moving.remove(id) }
+        }
         if camera == nil, let l = lastDrive, l == step { return }
         if camera == nil { lastDrive = step }
         let k = manualSpeed
         with(camera) { $0.drive(pan: px * k, tilt: py * k) }
     }
 
-    public func stopDrive(camera: UUID? = nil) { if camera == nil { lastDrive = nil }; with(camera) { $0.drive(pan: 0, tilt: 0) } }
+    public func stopDrive(camera: UUID? = nil) {
+        if camera == nil { lastDrive = nil }
+        if let id = camera ?? selected { moving.remove(id) }
+        with(camera) { $0.drive(pan: 0, tilt: 0) }
+    }
+
+    /// Stops one camera's manual pan, tilt and zoom, if it has any under way.
+    private func stopManual(_ id: UUID) {
+        if moving.remove(id) != nil { with(id) { $0.drive(pan: 0, tilt: 0) } }
+        if zooming.remove(id) != nil { with(id) { $0.zoom(0) } }
+    }
+
+    /// Stops every camera that is being moved or zoomed by hand. Called when CueVideo quits
+    /// or stops being the front app, when a key or mouse release may never arrive.
+    public func stopAllManual() {
+        lastDrive = nil
+        for id in moving.union(zooming) { stopManual(id) }
+    }
 
     /// Zoom speed from -1 (wide) to 1 (tele); 0 stops.
     public func zoom(_ v: Double, camera: UUID? = nil) {
         let z = abs(v) < 0.05 ? 0 : v
         if let id = camera ?? selected {
+            if z != 0 { zooming.insert(id) } else { zooming.remove(id) }
             if Thread.isMainThread { onManualZoom?(id) } else { DispatchQueue.main.async { self.onManualZoom?(id) } }
         }
         let k = manualSpeed

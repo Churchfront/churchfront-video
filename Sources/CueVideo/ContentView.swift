@@ -13,7 +13,7 @@ struct ContentView: View {
             Rectangle().fill(T.line).frame(height: 1)
             if booth.connectedOnce || atem.link == .online {
                 VolunteerView()
-                    .overlay(alignment: .top) { LinkBanner() }
+                    .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner() } }
             } else {
                 ConnectView()
             }
@@ -26,7 +26,7 @@ struct ContentView: View {
             case "setup": openWindow(id: "setup")
             case "switcher": openWindow(id: "switcher")
             case "routing": openWindow(id: "routing")
-            default: NSApp.windows.first { $0.title == "CueVideo" }?.makeKeyAndOrderFront(nil)
+            default: NSApp.windows.first { $0.title == Booth.mainWindowTitle }?.makeKeyAndOrderFront(nil)
             }
         }
     }
@@ -121,7 +121,21 @@ struct LinkBanner: View {
     }
 }
 
+/// Tells the booth when the setup file has a mistake in it, on the main screen and not only in Setup.
+struct ConfigBanner: View {
+    @EnvironmentObject var store: ConfigStore
+    var body: some View {
+        if store.fileError != nil {
+            Text("The setup file has a mistake in it, so CueVideo is using the last good setup. Details are in Setup (⌘,).")
+                .font(.sans(13, .semibold)).foregroundStyle(T.onAction)
+                .padding(.horizontal, T.s4).padding(.vertical, T.s2)
+                .background(Capsule().fill(T.warning)).padding(.top, T.s3)
+        }
+    }
+}
+
 struct ConnectView: View {
+    @EnvironmentObject var store: ConfigStore
     @EnvironmentObject var atem: ATEMClient
     @State private var host = Booth.shared.store.config.atemHost
 
@@ -143,6 +157,10 @@ struct ConnectView: View {
                         .padding(.horizontal, T.s5).frame(height: 40)
                         .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.accent))
                 }.buttonStyle(.plain)
+            }
+            if let e = store.fileError {
+                Text("The setup file couldn't be read, so nothing from it is loaded: \(e)\nFix it in Setup (⌘,), or connect here to start again. The file is kept under another name before anything is saved over it.")
+                    .foregroundStyle(T.warning).multilineTextAlignment(.center).frame(maxWidth: 560)
             }
             switch atem.link {
             case .connecting: Text("Connecting to \(atem.host)…").foregroundStyle(T.warning)

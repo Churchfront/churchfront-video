@@ -181,10 +181,13 @@ enum ControlTools {
             done(ok("\(k.label) \(want ? "on" : "off") air"))
         case "set_recording":
             guard s.hasRecording else { throw fail("This switcher doesn't record.") }
-            atem.setRecording(a["on"] as? Bool ?? false); done(ok("Recording \((a["on"] as? Bool ?? false) ? "started" : "stopped")"))
+            // Never guess: a call without a clear true or false must not stop the recording.
+            guard let on = a["on"] as? Bool else { throw fail("Give on as true (record) or false (stop). Nothing was changed.") }
+            atem.setRecording(on); done(ok("Recording \(on ? "started" : "stopped")"))
         case "set_streaming":
             guard s.hasStreaming else { throw fail("This switcher doesn't stream.") }
-            atem.setStreaming(a["on"] as? Bool ?? false); done(ok("Streaming \((a["on"] as? Bool ?? false) ? "started" : "stopped")"))
+            guard let on = a["on"] as? Bool else { throw fail("Give on as true (stream) or false (stop). Nothing was changed.") }
+            atem.setStreaming(on); done(ok("Streaming \(on ? "started" : "stopped")"))
 
         case "camera_move":
             let c = try cam(a, changing: true)
@@ -224,7 +227,8 @@ enum ControlTools {
                 auxes = [n]; what = store.screen(aux: n)?.name ?? "Aux \(n)"; hidden = !(store.screen(aux: n)?.forVolunteers ?? true)
             } else {
                 let q = (a["screen"] as? String ?? "").lowercased().trimmingCharacters(in: .whitespaces)
-                guard let sc = store.config.screens.first(where: { $0.name.lowercased() == q }) ?? store.config.screens.first(where: { $0.name.lowercased().contains(q) }), !q.isEmpty else {
+                guard !q.isEmpty, let sc = try store.config.screens.first(where: { $0.name.lowercased() == q })
+                        ?? onlyOne(store.config.screens.filter { $0.name.lowercased().contains(q) }, q, "screen", \.name) else {
                     throw fail("No screen called \(a["screen"] ?? ""). Screens: \(store.config.screens.map(\.name).joined(separator: ", ")), or use an aux number.")
                 }
                 auxes = sc.aux; what = sc.name; hidden = !sc.forVolunteers
@@ -235,7 +239,8 @@ enum ControlTools {
             done(ok("\(what) now shows \(store.routeLabel(src, s))"))
         case "run_route_button":
             let q = (a["button"] as? String ?? "").lowercased()
-            guard let r = store.config.routes.first(where: { $0.label.lowercased() == q }) ?? store.config.routes.first(where: { $0.label.lowercased().contains(q) }), !q.isEmpty else {
+            guard !q.isEmpty, let r = try store.config.routes.first(where: { $0.label.lowercased() == q })
+                    ?? onlyOne(store.config.routes.filter { $0.label.lowercased().contains(q) }, q, "routing button", \.label) else {
                 throw fail("No routing button called \(a["button"] ?? ""). Buttons: \(store.config.routes.map(\.label).joined(separator: ", ")).")
             }
             r.run(atem); done(ok("Ran \(r.label): \(RoutingText.detail(r, store, s).replacingOccurrences(of: "\n", with: "; "))"))
@@ -453,8 +458,16 @@ enum ControlTools {
         if let hit = store.config.sources.first(where: { $0.label?.lowercased() == q }) { return hit.input }
         if let c = store.config.cameras.first(where: { $0.name.lowercased() == q }), let i = c.atemInput { return i }
         if let i = pool.first(where: { $0.long.lowercased() == q || $0.short.lowercased() == q }) { return i.id }
-        if let i = pool.first(where: { $0.long.lowercased().contains(q) }) { return i.id }
+        if let i = try onlyOne(pool.filter { $0.long.lowercased().contains(q) }, q, "source", \.long) { return i.id }
         throw fail("No source called \(v ?? ""). Use get_status to see the sources.")
+    }
+
+    /// A part of a name is accepted only when it fits exactly one thing. When it fits several,
+    /// this refuses and lists them, so a loose name can't put the wrong picture on Live or on
+    /// a screen.
+    private static func onlyOne<T>(_ hits: [T], _ asked: String, _ what: String, _ name: (T) -> String) throws -> T? {
+        guard hits.count > 1 else { return hits.first }
+        throw fail("\"\(asked)\" fits more than one \(what): \(hits.map(name).joined(separator: ", ")). Use the full name. Nothing was changed.")
     }
 
     private static func cam(_ a: [String: Any], changing: Bool) throws -> PTZCamera {
