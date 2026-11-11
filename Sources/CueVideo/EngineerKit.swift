@@ -136,11 +136,12 @@ struct IconButton: View {
     let icon: String
     let help: String
     var color: Color = T.inkMuted
+    var size: CGFloat = 12
     let action: () -> Void
     @Environment(\.isEnabled) private var enabled
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundStyle(color)
+            Image(systemName: icon).font(.system(size: size, weight: .semibold)).foregroundStyle(color)
                 .frame(width: 26, height: 26).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -208,9 +209,10 @@ struct Tag: View {
     let text: String
     var color: Color = T.lineStrong
     var ink: Color = T.ink
+    var size: CGFloat = 9
     var body: some View {
-        Text(text).font(.sans(9, .bold)).tracking(0.6).textCase(.uppercase).foregroundStyle(ink)
-            .padding(.horizontal, 5).frame(height: 16)
+        Text(text).font(.sans(size, .bold)).tracking(0.6).textCase(.uppercase).foregroundStyle(ink)
+            .padding(.horizontal, 5).frame(height: size + 7)
             .background(RoundedRectangle(cornerRadius: T.rSM).fill(color))
             .fixedSize()
     }
