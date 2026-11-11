@@ -193,7 +193,7 @@ struct ScreenEditButton: View {
     var auxLabel: String { screen.aux.count == 1 ? "Aux \(screen.aux[0])" : "Aux " + screen.aux.map(String.init).joined(separator: ", ") }
 
     var body: some View {
-        IconButton(icon: "pencil", help: named ? "Change the name, outputs or wiring note" : "Name this output") { load(); editing = true }
+        IconButton(icon: "pencil", help: named ? "Change the name, outputs or wiring note" : "Name this output", size: 15) { load(); editing = true }
             .popover(isPresented: $editing, arrowEdge: .trailing) { editor }
     }
 

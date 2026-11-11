@@ -79,7 +79,7 @@ struct RoutingSchematic: View {
     struct Layout { var heads: [Head] = [], srcs: [Src] = [], dsts: [Dst] = [], mixes: [Mix] = [], wires: [Wire] = []
         var colors: [Int: Color] = [:]; var height: CGFloat = 0 }
 
-    private let rowH: CGFloat = 30, headH: CGFloat = 24, gap: CGFloat = 6
+    private let rowH: CGFloat = 38, headH: CGFloat = 24, gap: CGFloat = 6
 
     /// Sizes grow with the page, so a wide window gets bigger pictures instead of empty space.
     struct Sizes { let side: CGFloat, mix: CGFloat, thumb: CGSize
@@ -142,9 +142,9 @@ struct RoutingSchematic: View {
         for me in s.program.keys.sorted() {
             let pic = hasPicture(s.program[me]), nextPic = hasPicture(s.preview[me])
             let slotH: CGFloat = pic || nextPic ? (slotW * 9 / 16).rounded() : 40
-            let live = CGRect(x: 10, y: y + 32, width: slotW, height: slotH)
-            let next = CGRect(x: 16 + slotW, y: y + 32, width: slotW, height: slotH)
-            let f = CGRect(x: 0, y: y, width: sw, height: 32 + slotH + 10)
+            let live = CGRect(x: 10, y: y + 38, width: slotW, height: slotH)
+            let next = CGRect(x: 16 + slotW, y: y + 38, width: slotW, height: slotH)
+            let f = CGRect(x: 0, y: y, width: sw, height: 38 + slotH + 10)
             L.mixes.append(Mix(me: me, frame: f, live: live, next: next, pic: pic, nextPic: nextPic))
             y = f.maxY + gap + 2
         }
@@ -315,8 +315,8 @@ struct RoutingSchematic: View {
 
     /// Which connector on the switcher this is: "IN 9", "OUT 4+5".
     private func port(_ text: String) -> some View {
-        Text(text).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(T.inkMuted)
-            .padding(.horizontal, 5).frame(height: 18)
+        Text(text).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundStyle(T.inkMuted)
+            .padding(.horizontal, 6).frame(height: 22)
             .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceRaised.opacity(0.9)))
             .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(T.line))
             .fixedSize()
@@ -332,12 +332,12 @@ struct RoutingSchematic: View {
             if s.pic { thumb(s.id, w) }
             if s.pic {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.label(s.id, atem.state)).font(.sans(14, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
-                    ForEach(tallies(s.id, short: false), id: \.0) { t in Tag(text: t.0, color: t.1, ink: t.2) }
+                    Text(store.label(s.id, atem.state)).font(.sans(21, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                    ForEach(tallies(s.id, short: false), id: \.0) { t in Tag(text: t.0, color: t.1, ink: t.2, size: 12) }
                 }
             } else {
-                Text(store.label(s.id, atem.state)).font(.sans(13, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
-                ForEach(tallies(s.id, short: true), id: \.0) { t in Tag(text: t.0, color: t.1, ink: t.2) }
+                Text(store.label(s.id, atem.state)).font(.sans(17, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                ForEach(tallies(s.id, short: true), id: \.0) { t in Tag(text: t.0, color: t.1, ink: t.2, size: 11) }
             }
             Spacer(minLength: 0)
             if (1...999).contains(s.id) { port("IN \(s.id)") }
@@ -382,10 +382,10 @@ struct RoutingSchematic: View {
         ZStack(alignment: .topLeading) {
             if pic { SourcePicture(input: input, named: false) } else { T.surfaceSunken }
             HStack(spacing: 5) {
-                Tag(text: tag, color: color, ink: ink)
-                Text(store.label(input, atem.state)).font(.sans(12, .semibold)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.75)
+                Tag(text: tag, color: color, ink: ink, size: 11)
+                Text(store.label(input, atem.state)).font(.sans(15, .semibold)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.75)
             }
-            .padding(.horizontal, 5).frame(height: 22)
+            .padding(.horizontal, 5).frame(height: 27)
             .background(RoundedRectangle(cornerRadius: T.rSM).fill(Color.black.opacity(pic ? 0.6 : 0))).padding(4)
         }
         .frame(width: r.width, height: r.height)
@@ -397,14 +397,14 @@ struct RoutingSchematic: View {
         let s = atem.state, mine = m.me == booth.me
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(shortMix(m.me)).font(.sans(14, .bold)).lineLimit(1)
-                Text("M/E \(m.me + 1)").font(.sans(11)).foregroundStyle(T.inkSubtle)
+                Text(shortMix(m.me)).font(.sans(19, .bold)).lineLimit(1)
+                Text("M/E \(m.me + 1)").font(.sans(13)).foregroundStyle(T.inkSubtle)
                 Spacer(minLength: 0)
                 Text(mine ? "Run from Operate" : "Drop a source to put it live")
-                    .font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1).minimumScaleFactor(0.8)
+                    .font(.sans(13)).foregroundStyle(T.inkSubtle).lineLimit(1).minimumScaleFactor(0.8)
                 MixNameButton(me: m.me)
             }
-            .frame(height: 20)
+            .frame(height: 26)
             HStack(spacing: 6) {
                 slot("Live", T.program, .white, s.program[m.me], pic: m.pic, m.live)
                 slot("Next", T.preview, T.onAction, s.preview[m.me], pic: m.nextPic, m.next)
@@ -435,18 +435,18 @@ struct RoutingSchematic: View {
             // On the picture's corner when there is one, so the name keeps its room.
             if d.pic { thumb(d.source, w).overlay(alignment: .topLeading) { port(out).padding(3) } } else { port(out) }
             if d.pic {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(d.screen.name).font(.sans(14, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
-                    Text(label).font(.sans(12)).foregroundStyle(T.inkMuted).lineLimit(1).minimumScaleFactor(0.8)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(d.screen.name).font(.sans(21, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
+                    if !label.isEmpty { Label(label, systemImage: "arrow.left").font(.sans(15)).foregroundStyle(T.inkMuted).lineLimit(1).minimumScaleFactor(0.8) }
                 }
                 Spacer(minLength: 0)
             } else {
                 // No live picture: one line, the name and what it's showing.
-                Text(d.screen.name).font(.sans(13, .semibold)).lineLimit(1).minimumScaleFactor(0.8).layoutPriority(1)
+                Text(d.screen.name).font(.sans(17, .semibold)).lineLimit(1).minimumScaleFactor(0.8).layoutPriority(1)
                 Spacer(minLength: 4)
-                Text(label).font(.sans(11)).foregroundStyle(T.inkMuted).lineLimit(1).minimumScaleFactor(0.8)
+                Text(label).font(.sans(14)).foregroundStyle(T.inkMuted).lineLimit(1).minimumScaleFactor(0.8)
             }
-            if d.locked { Image(systemName: "lock.fill").font(.system(size: 10)).foregroundStyle(T.warning) }
+            if d.locked { Image(systemName: "lock.fill").font(.system(size: 13)).foregroundStyle(T.warning) }
             ScreenEditButton(screen: d.screen)
         }
         .padding(.leading, d.pic ? 4 : 6).padding(.trailing, 2)
@@ -535,7 +535,7 @@ struct MixNameButton: View {
     @State private var editing = false
 
     var body: some View {
-        IconButton(icon: "pencil", help: "Name what this mix is for") { editing = true }
+        IconButton(icon: "pencil", help: "Name what this mix is for", size: 15) { editing = true }
             .popover(isPresented: $editing, arrowEdge: .top) {
                 VStack(alignment: .leading, spacing: T.s2) {
                     Text("What M/E \(me + 1) is for").font(.sans(14, .bold))
@@ -561,7 +561,7 @@ struct SourcePictureButton: View {
     @State private var editing = false
 
     var body: some View {
-        IconButton(icon: "pencil", help: "Choose a live picture for this source") { editing = true }
+        IconButton(icon: "pencil", help: "Choose a live picture for this source", size: 15) { editing = true }
             .popover(isPresented: $editing, arrowEdge: .trailing) {
                 VStack(alignment: .leading, spacing: T.s2) {
                     Text("Picture for \(store.label(input, atem.state))").font(.sans(14, .bold))
