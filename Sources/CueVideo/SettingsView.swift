@@ -271,13 +271,13 @@ struct SetupTab: View {
 struct CameraLoginRow: View {
     @State private var user = CameraLogin.savedUser ?? ""
     @State private var password = ""
-    @State private var saved = CameraLogin.savedUser != nil
+    @State private var saved = CameraLogin.isSaved
     @State private var note: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: T.s2) {
             Text("Camera admin login").font(.sans(13, .semibold))
-            Text("Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the configuration file. One login for every Canon camera.")
+            Text("Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the configuration file. One login for every Canon camera. macOS may ask for this Mac's password the first time CueVideo uses it after an update.")
                 .font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: T.s2) {
                 TextField("User name", text: $user).textFieldStyle(.roundedBorder).frame(width: 160)

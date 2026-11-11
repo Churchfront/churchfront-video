@@ -7,6 +7,9 @@ import Security
 public enum CameraLogin {
     private static let service = "CueVideo camera admin login"
     private static let account = "canon"
+    /// The user name alone, kept in the app's preferences so Setup can show it without
+    /// opening the Keychain. It isn't a secret; the password never leaves the Keychain.
+    private static let userKey = "cameraLoginUser"
 
     public struct Credential { public let user: String; public let password: String }
 
@@ -24,6 +27,7 @@ public enum CameraLogin {
     @discardableResult
     public static func save(user: String, password: String) -> Bool {
         clear()
+        UserDefaults.standard.set(user, forKey: userKey)
         let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                    kSecAttrAccount as String: account, kSecAttrLabel as String: service,
                                    kSecValueData as String: Data("\(user)\n\(password)".utf8)]
@@ -34,10 +38,24 @@ public enum CameraLogin {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                 kSecAttrAccount as String: account]
         SecItemDelete(q as CFDictionary)
+        UserDefaults.standard.removeObject(forKey: userKey)
     }
 
-    /// The saved user name, for showing in Setup (the password is never shown).
-    public static var savedUser: String? { load()?.user }
+    /// Whether a login is saved. Asks the Keychain only whether the item is there, not for
+    /// what's in it, so macOS never asks for the Mac's password to answer this.
+    public static var isSaved: Bool {
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                kSecAttrAccount as String: account, kSecReturnAttributes as String: true,
+                                kSecMatchLimit as String: kSecMatchLimitOne]
+        var out: AnyObject?
+        return SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess
+    }
+
+    /// The saved user name, for showing in Setup (the password is never shown). Read from
+    /// the app's preferences, not the Keychain: opening the Keychain item makes macOS ask
+    /// for the Mac's password whenever the app has been rebuilt, and Setup redraws often.
+    /// Nil for a login saved before this was kept (the login still works).
+    public static var savedUser: String? { UserDefaults.standard.string(forKey: userKey) }
 }
 
 /// Answers the camera's login challenge (Basic or Digest) once with the saved login.

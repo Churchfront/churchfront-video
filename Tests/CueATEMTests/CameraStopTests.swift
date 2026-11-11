@@ -197,3 +197,15 @@ final class FakeCanonCamera {
         }
     }
 }
+
+/// Showing Setup must not open the Keychain item (macOS asks for the Mac's password when it does).
+final class CameraLoginTests: XCTestCase {
+    func testTheUserNameComesFromPreferencesNotTheKeychain() {
+        let before = UserDefaults.standard.string(forKey: "cameraLoginUser")
+        defer { UserDefaults.standard.set(before, forKey: "cameraLoginUser") }
+        UserDefaults.standard.set("booth", forKey: "cameraLoginUser")
+        XCTAssertEqual(CameraLogin.savedUser, "booth")
+        UserDefaults.standard.removeObject(forKey: "cameraLoginUser")
+        XCTAssertNil(CameraLogin.savedUser)
+    }
+}
