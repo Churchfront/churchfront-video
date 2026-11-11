@@ -106,7 +106,8 @@ while let line = readLine(strippingNewline: true) {
     case "tools/call":
         let name = params["name"] as? String ?? ""
         let args = params["arguments"] as? [String: Any] ?? [:]
-        guard ensureApp(), let r = app("POST", "/call", ["name": name, "arguments": args]) else {
+        // A stage scan moves each camera to a wide shot and back, which can take a while.
+        guard ensureApp(), let r = app("POST", "/call", ["name": name, "arguments": args], timeout: 120) else {
             result(id, ["content": [["type": "text", "text": notRunning]], "isError": true]); continue
         }
         // Pictures (camera_snapshots) go back as MCP image content, each after a label.

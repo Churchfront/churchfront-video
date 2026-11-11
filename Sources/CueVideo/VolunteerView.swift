@@ -727,6 +727,7 @@ struct TakePanel: View {
 struct TrackButton: View {
     let camera: PTZCamera
     @ObservedObject var tracker = AutoTracker.shared
+    @ObservedObject var cast = StageCast.shared
     @EnvironmentObject var store: ConfigStore
 
     var body: some View {
@@ -772,12 +773,23 @@ struct TrackButton: View {
                     speedButton("plus", 0.25)
                 }
                 .help("How quickly tracking cameras follow. Raise it if the camera falls behind, lower it if it overshoots.")
-                Text([TrackingBadge.words(s.phase), s.phase == .following ? s.size.name : nil].compactMap { $0 }.joined(separator: " · "))
+                Text([TrackingBadge.words(s.phase), s.person, s.phase == .following ? s.size.name : nil].compactMap { $0 }.joined(separator: " · "))
                     .font(.sans(11, .semibold))
                     .foregroundStyle(s.phase == .following ? T.accent : T.warning)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Or click a person on Next").font(.sans(11)).foregroundStyle(T.inkSubtle)
+                // People labelled in the stage scan can be followed by name, wherever they are in the shot.
+                if !cast.names.isEmpty {
+                    Menu {
+                        ForEach(cast.names, id: \.self) { n in Button(n) { tracker.start(camera, person: n) } }
+                    } label: {
+                        Text("Follow by name").font(.sans(11, .semibold))
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .disabled(camera.proto != .canonXC)
+                    .help("Follow someone labelled in the stage scan")
+                }
             }
         }
     }

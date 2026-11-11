@@ -154,6 +154,12 @@ struct CueVideoApp: App {
         }
         .defaultSize(width: 1100, height: 820)
 
+        // Before a service: find everyone on stage, label them, save a shot of each on every camera.
+        Window("Stage Scan", id: "scan") {
+            StageScanWindow().booth().frame(minWidth: 760, minHeight: 520)
+        }
+        .defaultSize(width: 1000, height: 820)
+
         // Every switcher control (keys, DSKs, aux, macros, T-bar), kept away from volunteers.
         Window("Full Switcher", id: "switcher") {
             SwitcherWindow().booth().frame(minWidth: 900, minHeight: 320)
@@ -169,6 +175,7 @@ struct BoothCommands: Commands {
             Button("Setup…") { openWindow(id: "setup") }.keyboardShortcut(",")
             Button("Video Routing") { openWindow(id: "routing") }.keyboardShortcut("r", modifiers: [.command, .shift])
             Button("Full Switcher") { openWindow(id: "switcher") }.keyboardShortcut("k", modifiers: [.command, .shift])
+            Button("Stage Scan") { openWindow(id: "scan") }.keyboardShortcut("s", modifiers: [.command, .shift])
         }
     }
 }

@@ -132,12 +132,14 @@ public struct PTZShot: Codable, Hashable, Identifiable {
     public var tilt = 0
     public var zoom = 0
     public var exposure: PTZExposure?
+    /// Made by a stage scan, not by hand. The next scan replaces these; yours are kept.
+    public var auto = false
     public var position: PTZPosition { PTZPosition(pan: pan, tilt: tilt, zoom: zoom) }
 
     public init(name: String, _ p: PTZPosition) { self.name = name; pan = p.pan; tilt = p.tilt; zoom = p.zoom }
     public init(name: String, exposure e: PTZExposure) { self.name = name; kind = .exposure; exposure = e }
 
-    private enum Keys: String, CodingKey { case id, name, kind, pan, tilt, zoom, exposure }
+    private enum Keys: String, CodingKey { case id, name, kind, pan, tilt, zoom, exposure, auto }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -147,6 +149,7 @@ public struct PTZShot: Codable, Hashable, Identifiable {
         pan = try c.decodeIfPresent(Int.self, forKey: .pan) ?? 0
         tilt = try c.decodeIfPresent(Int.self, forKey: .tilt) ?? 0
         zoom = try c.decodeIfPresent(Int.self, forKey: .zoom) ?? 0
+        auto = try c.decodeIfPresent(Bool.self, forKey: .auto) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -154,6 +157,7 @@ public struct PTZShot: Codable, Hashable, Identifiable {
         try c.encode(id, forKey: .id)
         try c.encode(name, forKey: .name)
         try c.encode(kind, forKey: .kind)
+        if auto { try c.encode(true, forKey: .auto) }
         if kind == .position {
             try c.encode(pan, forKey: .pan); try c.encode(tilt, forKey: .tilt); try c.encode(zoom, forKey: .zoom)
         } else {

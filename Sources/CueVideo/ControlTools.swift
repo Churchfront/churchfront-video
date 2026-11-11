@@ -43,7 +43,7 @@ enum ControlTools {
         tool("get_config", "The setup as saved in CueVideo's config file (JSON): switcher address, volunteer M/E, source row, key buttons, cameras and their saved shots."),
         tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 4, ptzSpeed 0.25 to 2 (manual camera control speed), trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources. Routing: mixNames (what each M/E is for, from M/E 1), screens ([{name, aux: [numbers from 1], note, volunteer}]), routes (volunteer routing buttons: [{label, set: [{aux, source}]}], source as an input number; M/E 1 program is 10010, M/E 2 program 10020); each one given replaces that whole field. Read get_config first and send back the edited field.",
              ["config": ["type": "object", "description": "Fields to replace, in the config file's format."]], required: ["config"]),
-        tool("show_window", "Open one of CueVideo's windows on screen.", ["window": choice("Which window.", ["main", "setup", "routing", "switcher"])], required: ["window"]),
+        tool("show_window", "Open one of CueVideo's windows on screen.", ["window": choice("Which window.", ["main", "setup", "routing", "switcher", "scan"])], required: ["window"]),
 
         // Volunteer screen
         tool("set_next", "Put a source on Next (preview), like tapping its tile.", ["source": source, "me": me], required: ["source"]),
@@ -71,8 +71,15 @@ enum ControlTools {
               "allow_hidden": bool("Required as true to change a screen hidden from volunteers.")], required: ["screen", "source"]),
         tool("run_route_button", "Press one of the volunteer routing buttons, by label.", ["button": str("The button's label.")], required: ["button"]),
         tool("list_ndi_sources", "The NDI sources on the network now, by their exact names, for the ndi field of a volunteer source (a picture for its tile and the Next and Live monitors, such as CueScreens' graphics) or of a key button (a picture with alpha laid over Next and Live when that key is on them, such as CueScreens' lower thirds). Set them with update_config."),
-        tool("start_tracking", "Auto tracking: make a Canon camera follow a person, by watching its preview picture. It frames them as a broadcast follow shot: shoulders up, waist up or full length (the shot the camera is closest to unless shot is given), eyes near the upper third, lead room on the side they face or walk toward, eased pan and tilt, and slow zooms to hold the size. Picks the person nearest the middle, or nearest x/y if given (0 to 1 across and down the picture). Waits up to 4 seconds for someone to be found. Any manual pan, tilt, shot or preset stops tracking; a manual zoom keeps it and holds the new size.",
-             ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "x": num("0 (left) to 1 (right) across the picture."), "y": num("0 (top) to 1 (bottom) down the picture."), "allow_live": allowLive]),
+        tool("start_tracking", "Auto tracking: make a Canon camera follow a person, by watching its preview picture. It frames them as a broadcast follow shot: shoulders up, waist up or full length (the shot the camera is closest to unless shot is given), eyes near the upper third, lead room on the side they face or walk toward, eased pan and tilt, and slow zooms to hold the size. Picks the person nearest the middle, or nearest x/y if given (0 to 1 across and down the picture), or with person, someone labelled in the last stage scan, by name, wherever they are in the shot. It keeps to that person by what they look like, so it stays with them when people cross and waits for them after losing sight. Waits up to 4 seconds for someone to be found. Any manual pan, tilt, shot or preset stops tracking; a manual zoom keeps it and holds the new size.",
+             ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "x": num("0 (left) to 1 (right) across the picture."), "y": num("0 (top) to 1 (bottom) down the picture."), "person": str("A name given in the last stage scan (get_status lists them)."), "allow_live": allowLive]),
+        tool("scan_stage", "Stage scan, for before a service with everyone in place: each Canon camera that isn't on Live, tracking or out of CueVideo's control goes to a wide shot (its shot named Stage or Wide, else where it points now zoomed all the way out), CueVideo finds the people in it and works out the shot that frames each one from that camera, and the camera goes back. Returns every person each camera saw, with a number, a small picture, the proposed shot, and a letter: the same letter is a guess (by their look) at the same person on another camera. Nothing is saved until label_stage_scan. This moves cameras, so confirm with the person first.",
+             ["cameras": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to scan. Leave out for all."],
+              "shot": choice("How to frame each person. Default waist.", ["shoulders", "waist", "full"]),
+              "pictures": bool("Include each person's picture (default true).")]),
+        tool("label_stage_scan", "Name the people from the last scan_stage and save: a shot per labelled person on each camera that saw them (replacing shots from earlier scans, keeping hand-made ones), and their look, so start_tracking can follow them by name until CueVideo quits. Label each number, or a letter to label everyone with that letter at once. Unlabelled people are skipped.",
+             ["labels": ["type": "array", "items": ["type": "object", "properties": ["person": any("A person's number, or a letter for everyone with that letter."), "label": str("A name or role, such as Pastor or Keys.")] as [String: Any]] as [String: Any],
+                         "description": "Who is who."]], required: ["labels"]),
         tool("get_framing", "The follow-shot framing rules auto tracking uses for each shot size (shoulders, waist, full), the built-in standard and any changes, plus the tracking response settings. Use with camera_snapshots to judge framing."),
         tool("set_framing", "Change how a follow shot is framed, live, while CueVideo runs: takes effect on tracking cameras within a frame. All measured as a share of the frame. eye_line: where the eyes sit, down from the top (less = less headroom). size: eyes-to-shoulders drop against frame height (bigger = tighter). lead_room: offset toward where they face or walk. dead_x / dead_y: how far they can drift before the camera moves. reset: true returns this size to the standard.",
              ["shot": choice("Shot size.", ["shoulders", "waist", "full"]), "eye_line": num("0.1 to 0.5."), "size": num("Shoulders about 0.36, waist 0.21, full 0.095."),
@@ -255,10 +262,50 @@ enum ControlTools {
             let c = try cam(a, changing: true)
             let pt: CGPoint? = (a["x"] == nil && a["y"] == nil) ? nil : CGPoint(x: dbl(a["x"] ?? 0.5), y: dbl(a["y"] ?? 0.5))
             let size = (a["shot"] as? String).flatMap(ShotSize.init(rawValue:))
-            AutoTracker.shared.start(c, at: pt, size: size) { why in
-                let z = AutoTracker.shared.sessions[c.id]?.size.name.lowercased() ?? ""
-                done(why == nil ? ok("\(c.name) is following someone, framed \(z)", ["warning": controlWarning(c)].compactMapValues { $0 })
+            let person = (a["person"] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+            AutoTracker.shared.start(c, at: pt, size: size, person: person) { why in
+                let t = AutoTracker.shared.sessions[c.id]
+                let z = t?.size.name.lowercased() ?? ""
+                done(why == nil ? ok("\(c.name) is following \(t?.person ?? "someone"), framed \(z)", ["warning": controlWarning(c)].compactMapValues { $0 })
                                 : ["error": "\(c.name): \(why!) It keeps looking until stop_tracking."])
+            }
+        case "scan_stage":
+            let cams: [PTZCamera]? = try (a["cameras"] as? [Any]).map { list in try list.map { try cam(["camera": $0], changing: false) } }
+            let pictures = a["pictures"] as? Bool ?? true
+            Task { @MainActor in
+                let scan = StageScan.shared
+                guard !scan.running else { done(["error": "A stage scan is already running."]); return }
+                if let z = (a["shot"] as? String).flatMap(ShotSize.init(rawValue:)) { scan.size = z }
+                await scan.scan(cams)
+                var out = scanReport()
+                if pictures {
+                    out["images"] = scan.people.compactMap { p -> [String: Any]? in
+                        guard let t = p.thumb, let jpg = Snapshots.jpeg(t, width: 200) else { return nil }
+                        return ["label": "Person \(p.id) (\(p.letter)) on \(p.cameraName)", "mimeType": "image/jpeg", "data": jpg.base64EncodedString()]
+                    }
+                }
+                done(out)
+            }
+        case "label_stage_scan":
+            guard let labels = a["labels"] as? [[String: Any]], !labels.isEmpty else { throw fail("Give labels as [{person, label}].") }
+            Task { @MainActor in
+                let scan = StageScan.shared
+                guard !scan.people.isEmpty else { done(["error": "There's no scan to label. Run scan_stage first."]); return }
+                var unknown: [String] = []
+                for l in labels {
+                    let text = (l["label"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                    if let n = intValue(l["person"]), scan.people.contains(where: { $0.id == n }) {
+                        scan.label(n, text)
+                    } else if let letter = (l["person"] as? String)?.uppercased().trimmingCharacters(in: .whitespaces),
+                              case let ids = scan.people.filter({ $0.letter == letter }).map(\.id), !ids.isEmpty {
+                        for id in ids { scan.label(id, text) }
+                    } else {
+                        unknown.append("\(l["person"] ?? "?")")
+                    }
+                }
+                guard unknown.isEmpty else { done(["error": "No one in the scan is \(unknown.joined(separator: ", ")). Nothing was saved."]); return }
+                let said = scan.save()
+                done(ok(said.joined(separator: " "), scanReport()))
             }
         case "get_framing":
             done(framingReport())
@@ -553,6 +600,18 @@ enum ControlTools {
         return try source(v, aux: true)
     }
 
+    @MainActor static func scanReport() -> [String: Any] {
+        let scan = StageScan.shared
+        return [
+            "people": scan.people.map { p -> [String: Any] in
+                ["person": p.id, "camera": p.cameraName, "same_person_letter": p.letter, "label": p.label,
+                 "shot": ["pan": p.shot.pan, "tilt": p.shot.tilt, "zoom": p.shot.zoom], "size_is_a_guess": p.rough]
+            },
+            "notes": scan.notes,
+            "can_follow_by_name": StageCast.shared.names,
+        ]
+    }
+
     static func framingReport() -> [String: Any] {
         func d(_ r: FramingRule) -> [String: Any] {
             ["eye_line": r.eyeLine ?? 0, "size": r.scale ?? 0, "lead_room": r.leadRoom ?? 0, "dead_x": r.deadX ?? 0, "dead_y": r.deadY ?? 0]
@@ -624,7 +683,7 @@ enum ControlTools {
                 "on_next": c.atemInput.map { (s.tally[$0] ?? 0) & 2 != 0 } ?? false,
                 "shots": shots, "camera_presets": presets,
                 "tracking": AutoTracker.shared.sessions[c.id].map { t -> Any in
-                    ["state": t.phase.rawValue, "framing": t.size.rawValue, "picture_is": t.seen?.rawValue ?? "unknown"]
+                    ["state": t.phase.rawValue, "framing": t.size.rawValue, "picture_is": t.seen?.rawValue ?? "unknown", "person": t.person ?? ""]
                 } ?? false,
             ]
             if let x {
@@ -661,6 +720,7 @@ enum ControlTools {
                         "alpha": NDIFeedHub.shared.feed(n).hasAlpha, "on_live": k.isOn(s), "on_next": k.onNext(s)]
             }),
             "cameras": cams,
+            "stage_scan_names": StageCast.shared.names,
             "config_file": store.url.path,
         ]
     }
