@@ -13,7 +13,6 @@ import CueATEM
 struct RoutePanel: View {
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var store: ConfigStore
-    @Environment(\.openWindow) var openWindow
 
     var body: some View {
         let s = atem.state
@@ -22,7 +21,7 @@ struct RoutePanel: View {
             HStack {
                 Text("Screens").panelLabel()
                 Spacer()
-                Button { openWindow(id: "routing") } label: { Image(systemName: "arrow.triangle.branch").font(.system(size: 11)) }
+                Button { Booth.shared.show(.routing) } label: { Image(systemName: "arrow.triangle.branch").font(.system(size: 11)) }
                     .buttonStyle(.borderless).foregroundStyle(T.inkSubtle).help("Open the Routing page")
             }
             if !routes.isEmpty {

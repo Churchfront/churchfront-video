@@ -43,7 +43,7 @@ enum ControlTools {
         tool("get_config", "The setup as saved in CueVideo's config file (JSON): switcher address, volunteer M/E, source row, key buttons, cameras and their saved shots."),
         tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 4, ptzSpeed 0.25 to 2 (manual camera control speed), trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources. Routing: mixNames (what each M/E is for, from M/E 1), screens ([{name, aux: [numbers from 1], note, volunteer}]), routes (volunteer routing buttons: [{label, set: [{aux, source}]}], source as an input number; M/E 1 program is 10010, M/E 2 program 10020); each one given replaces that whole field. Read get_config first and send back the edited field.",
              ["config": ["type": "object", "description": "Fields to replace, in the config file's format."]], required: ["config"]),
-        tool("show_window", "Open one of CueVideo's windows on screen.", ["window": choice("Which window.", ["main", "setup", "routing", "switcher", "scan"])], required: ["window"]),
+        tool("show_window", "Show a view of CueVideo's window on screen: operator (the booth screen, also called main), or a page of the Engineer view: scan (stage scan), routing, switcher (the full switcher), setup or status.", ["window": choice("Which view or page.", ["operator", "main", "scan", "routing", "switcher", "setup", "status"])], required: ["window"]),
 
         // Volunteer screen
         tool("set_next", "Put a source on Next (preview), like tapping its tile.", ["source": source, "me": me], required: ["source"]),
@@ -164,7 +164,7 @@ enum ControlTools {
             let w = a["window"] as? String ?? "main"
             NotificationCenter.default.post(name: .cueVideoShowWindow, object: w)
             NSApp.activate(ignoringOtherApps: true)
-            done(ok("Opened the \(w) window"))
+            done(ok("Showing \(w)"))
 
         case "set_next":
             let m = try me(a), i = try source(a["source"])
@@ -727,6 +727,6 @@ enum ControlTools {
 }
 
 extension Notification.Name {
-    /// Asks the app to open a window: object is "main", "setup" or "switcher".
+    /// Asks the app to show a view or an Engineer page: object is "operator" (or "main"), "scan", "routing", "switcher", "setup" or "status".
     static let cueVideoShowWindow = Notification.Name("CueVideoShowWindow")
 }

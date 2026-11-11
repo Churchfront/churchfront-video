@@ -15,6 +15,26 @@ final class Booth: ObservableObject {
     }
     @Published var me = 0
     @Published var showSettings = false
+    /// Which view the main window shows. It always opens on Operator. Leaving Operator lets
+    /// go of the cameras: the joystick or an arrow key may still be held when the view changes.
+    @Published var view: AppView = .operate {
+        didSet {
+            guard view != oldValue, oldValue == .operate else { return }
+            heldArrows.removeAll()
+            ptz.stopAllManual()
+        }
+    }
+    /// The page showing in the Engineer view.
+    @Published var section: EngineerSection = .scan
+
+    /// Opens a page of the Engineer view.
+    func show(_ s: EngineerSection) { section = s; view = .engineer }
+
+    /// The camera on Next, which the camera controls and the Camera menu act on.
+    var cameraOnNext: PTZCamera? {
+        let next = atem.state.preview[me]
+        return ptz.cameras.first { $0.atemInput == next && !$0.host.isEmpty }
+    }
     private var heldArrows: Set<UInt16> = []
     /// The title of the volunteer's window (the WindowGroup in CueVideoApp).
     static let mainWindowTitle = "CueVideo"
@@ -32,11 +52,11 @@ final class Booth: ObservableObject {
     /// Keyboard: 1 to 9 and 0 put that tile of the volunteer's source row on Next, shift
     /// puts it on Live, space cuts, return fades, arrows move the camera on Next.
     ///
-    /// These only work in the volunteer's main window, and not while it shows a dialog or a
-    /// popover: Space or Return in Setup, Video Routing, or on a "Delete this shot?" question
-    /// must never cut or fade what's live.
+    /// These only work in the Operator view, and not while it shows a dialog or a popover:
+    /// Space or Return in the Engineer view, or on a "Delete this shot?" question, must never
+    /// cut or fade what's live.
     func key(_ e: NSEvent, down: Bool) -> Bool {
-        guard let w = NSApp.keyWindow, w.title == Booth.mainWindowTitle, w.attachedSheet == nil else {
+        guard view == .operate, let w = NSApp.keyWindow, w.title == Booth.mainWindowTitle, w.attachedSheet == nil else {
             releaseArrows()
             return false
         }
@@ -107,6 +127,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Claude's way in (through the CueVideo MCP server). Not during self-tests, which
         // may run beside the real app.
         if !booth.store.readOnly { ControlServer.shared.start() }
+        // For screenshots in self-tests: CUEVIDEO_VIEW=engineer or engineer:routing.
+        if let v = env["CUEVIDEO_VIEW"] {
+            let parts = v.split(separator: ":").map(String.init)
+            if parts.first == "engineer" { booth.show(parts.count > 1 ? EngineerSection(rawValue: parts[1]) ?? .scan : .scan) }
+        }
         if let src = env["CUEVIDEO_NDI"] ?? UserDefaults.standard.string(forKey: "ndiSource") {
             NDIMonitor.shared.start(src)
         }
@@ -141,41 +166,67 @@ struct CueVideoApp: App {
         .defaultSize(width: 1440, height: 900)
         .windowStyle(.hiddenTitleBar)
         .commands { BoothCommands() }
-
-        // For the system owner: how CueVideo is set up and how it's talking to the gear.
-        Window("CueVideo Setup", id: "setup") {
-            SetupWindow().booth()
-        }
-        .defaultSize(width: 980, height: 760)
-
-        // Which picture goes to which screen: mixes, aux outputs and the volunteer routing buttons.
-        Window("Video Routing", id: "routing") {
-            RoutingWindow().booth()
-        }
-        .defaultSize(width: 1100, height: 820)
-
-        // Before a service: find everyone on stage, label them, save a shot of each on every camera.
-        Window("Stage Scan", id: "scan") {
-            StageScanWindow().booth().frame(minWidth: 760, minHeight: 520)
-        }
-        .defaultSize(width: 1000, height: 820)
-
-        // Every switcher control (keys, DSKs, aux, macros, T-bar), kept away from volunteers.
-        Window("Full Switcher", id: "switcher") {
-            SwitcherWindow().booth().frame(minWidth: 900, minHeight: 320)
-        }
-        .defaultSize(width: 1300, height: 420)
     }
 }
 
+/// The menu bar. View switches between Operator and Engineer; Switcher and Camera hold what
+/// the Operator view's buttons do, so the keys can be found; Engineer opens each of its pages.
 struct BoothCommands: Commands {
-    @Environment(\.openWindow) var openWindow
+    @ObservedObject private var booth = Booth.shared
+    @ObservedObject private var store = Booth.shared.store
+    @ObservedObject private var cast = StageCast.shared
+
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
-            Button("Setup…") { openWindow(id: "setup") }.keyboardShortcut(",")
-            Button("Video Routing") { openWindow(id: "routing") }.keyboardShortcut("r", modifiers: [.command, .shift])
-            Button("Full Switcher") { openWindow(id: "switcher") }.keyboardShortcut("k", modifiers: [.command, .shift])
-            Button("Stage Scan") { openWindow(id: "scan") }.keyboardShortcut("s", modifiers: [.command, .shift])
+            Button("Settings…") { booth.show(.setup) }.keyboardShortcut(",")
+        }
+        CommandGroup(before: .sidebar) {
+            Button("Operator") { booth.view = .operate }.keyboardShortcut("1")
+            Button("Engineer") { booth.view = .engineer }.keyboardShortcut("2")
+            Divider()
+        }
+        // Switching and camera commands act only from the Operator view, where the person
+        // can see what they're about to change.
+        CommandMenu("Switcher") {
+            Group {
+            Button("Cut (Space)") { booth.atem.cut(me: booth.me) }
+            Button("Fade (Return)") { booth.atem.auto(me: booth.me) }
+            Button("Fade to Black") { booth.atem.fadeToBlack(me: booth.me) }
+            if !store.config.keys.isEmpty {
+                Divider()
+                ForEach(store.config.keys) { k in
+                    Button("\(k.label) On or Off") { k.toggle(booth.atem) }
+                }
+            }
+            }
+            .disabled(booth.view != .operate)
+        }
+        CommandMenu("Camera") {
+            Group {
+            Button("Track the Camera on Next") {
+                guard let c = booth.cameraOnNext else { return }
+                if AutoTracker.shared.isTracking(c.id) { AutoTracker.shared.stop(c.id) } else { AutoTracker.shared.start(c) }
+            }
+            .keyboardShortcut("t")
+            Button("Stop All Tracking") { AutoTracker.shared.stopAll() }.keyboardShortcut(".")
+            Menu("Follow by Name") {
+                ForEach(cast.names, id: \.self) { n in
+                    Button(n) { if let c = booth.cameraOnNext { AutoTracker.shared.start(c, person: n) } }
+                }
+            }
+            .disabled(cast.names.isEmpty)
+            Divider()
+            Button("Focus the Camera on Next") { if let c = booth.cameraOnNext { booth.ptz.focusOnce(camera: c.id) } }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+            }
+            .disabled(booth.view != .operate)
+        }
+        CommandMenu("Engineer") {
+            Button("Stage Scan") { booth.show(.scan) }.keyboardShortcut("s", modifiers: [.command, .shift])
+            Button("Routing") { booth.show(.routing) }.keyboardShortcut("r", modifiers: [.command, .shift])
+            Button("Full Switcher") { booth.show(.switcher) }.keyboardShortcut("k", modifiers: [.command, .shift])
+            Button("Setup") { booth.show(.setup) }
+            Button("Status") { booth.show(.status) }
         }
     }
 }
