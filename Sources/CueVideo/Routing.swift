@@ -100,125 +100,166 @@ enum RoutingText {
 
 // MARK: - Routing page
 
-/// The whole picture for the system owner: what each mix is for, what every aux output
-/// shows and where it's wired, and the volunteer routing buttons.
+/// The whole picture for the system owner: what each mix is for, what every screen shows
+/// and where it's wired, and the operator's routing buttons. Screens the operator cares
+/// about come first; encoders, recorders and patch bay feeds fold away below them.
 struct RoutingWindow: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var store: ConfigStore
-    @State private var editing = false
     @State private var newButton = false
+    @AppStorage("routingShowFeeds") private var showFeeds = false
+    @AppStorage("routingShowSpare") private var showSpare = false
+
+    private let columns = [GridItem(.adaptive(minimum: 250, maximum: 380), spacing: T.s3, alignment: .top)]
+
+    /// Aux outputs nobody has named yet.
+    private var spare: [ScreenOutput] {
+        let used = Set(store.config.screens.flatMap(\.aux))
+        return (1...max(1, atem.state.auxCount)).filter { !used.contains($0) && atem.state.aux[$0 - 1] != nil }
+            .map { ScreenOutput(name: "", aux: [$0]) }
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: T.s4) {
-                mixes
-                screens
-                buttons
+        let screens = store.config.screens.filter(\.forVolunteers)
+        let feeds = store.config.screens.filter { !$0.forVolunteers }
+        Page {
+            PageHeader(title: "Routing", purpose: "Which picture goes to which screen. A change here happens right away.",
+                       help: "Each switcher aux output feeds a screen or a piece of gear. Name the outputs, note how they're wired, and choose what each one shows. Outputs listed together (such as a pair of lobby TVs) switch together. Outputs that feed encoders, recorders or the patch bay can be hidden from operators so nobody changes the stream by accident.")
+            mixes
+            VStack(alignment: .leading, spacing: T.s3) {
+                HStack(spacing: T.s2) {
+                    Text("Screens").panelLabel()
+                    Text("\(screens.count)").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle)
+                }
+                if screens.isEmpty {
+                    Text("No screens named yet. Open \"Outputs not named yet\" below and name the ones that feed screens.")
+                        .font(.sans(13)).foregroundStyle(T.inkMuted)
+                }
+                LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
+                    ForEach(screens) { ScreenCard(screen: $0) }
+                }
             }
-            .padding(T.s4)
+            if !feeds.isEmpty {
+                Fold(title: "Encoders and feeds", count: feeds.count, open: $showFeeds) {
+                    Text("Hidden from operators. One of these may carry the live stream, so change them with care.")
+                        .font(.sans(12)).foregroundStyle(T.inkMuted)
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
+                        ForEach(feeds) { ScreenCard(screen: $0) }
+                    }
+                }
+            }
+            if !spare.isEmpty {
+                Fold(title: "Outputs not named yet", count: spare.count, open: $showSpare) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
+                        ForEach(spare) { ScreenCard(screen: $0) }
+                    }
+                }
+            }
+            buttons
         }
-        .background(T.bg)
-        .frame(minWidth: 820, minHeight: 560)
     }
 
     // MARK: Mixes
 
     var mixes: some View {
         let s = atem.state
-        let mes = s.program.keys.sorted()
-        return SetupSection(title: "Mixes",
-                            note: "Each M/E is its own mix. Name what it's for. The volunteer screen runs \(store.mixName(booth.me)); the other mixes can be switched here.") {
+        return VStack(alignment: .leading, spacing: T.s3) {
+            HStack(spacing: T.s2) {
+                Text("Mixes").panelLabel()
+                HelpButton(text: "Each M/E is its own mix of the sources, such as one for the live stream and one for the side screens. Name what each is for. The Operator view runs one of them; the other can be switched here.")
+            }
             HStack(alignment: .top, spacing: T.s3) {
-                ForEach(mes, id: \.self) { me in
-                    VStack(alignment: .leading, spacing: T.s2) {
-                        HStack {
-                            Text("M/E \(me + 1)").panelLabel()
-                            TextField("What it's for", text: Binding(
-                                get: { store.config.mixNames.indices.contains(me) ? store.config.mixNames[me] : "" },
-                                set: { v in store.update { c in
-                                    while c.mixNames.count <= me { c.mixNames.append("") }
-                                    c.mixNames[me] = v
-                                } }))
-                            .textFieldStyle(.roundedBorder)
+                ForEach(s.program.keys.sorted(), id: \.self) { me in mix(me, s) }
+            }
+        }
+    }
+
+    private func mix(_ me: Int, _ s: ATEMState) -> some View {
+        VStack(alignment: .leading, spacing: T.s2) {
+            HStack(spacing: T.s2) {
+                Text("M/E \(me + 1)").panelLabel()
+                if me == booth.me { Tag(text: "Operator's mix", color: T.accent, ink: T.onAction) }
+            }
+            TextField("What it's for, such as Live stream", text: Binding(
+                get: { store.config.mixNames.indices.contains(me) ? store.config.mixNames[me] : "" },
+                set: { v in store.update { c in
+                    while c.mixNames.count <= me { c.mixNames.append("") }
+                    c.mixNames[me] = v
+                } }))
+            .textFieldStyle(CueFieldStyle())
+            HStack(spacing: T.s3) {
+                HStack(spacing: 6) { Tag(text: "Live", color: T.program, ink: .white); Text(store.label(s.program[me], s)).font(.sans(13, .semibold)).lineLimit(1) }
+                HStack(spacing: 6) { Tag(text: "Next", color: T.preview, ink: T.onAction); Text(store.label(s.preview[me], s)).font(.sans(13, .semibold)).lineLimit(1) }
+            }
+            if me != booth.me {
+                // Quick switching for the mix the operator doesn't run (such as the side screens).
+                Text("Put on this mix now").font(.sans(11)).foregroundStyle(T.inkSubtle).padding(.top, 2)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], spacing: 6) {
+                    ForEach(store.volunteerSources(s)) { src in
+                        let on = s.program[me] == src.input
+                        Button { atem.setProgram(src.input, me: me) } label: {
+                            Text(store.label(src.input, s)).font(.sans(12, .semibold)).lineLimit(1)
+                                .foregroundStyle(on ? .white : T.ink)
+                                .frame(maxWidth: .infinity).frame(height: 30)
+                                .background(RoundedRectangle(cornerRadius: T.rSM).fill(on ? T.program : T.surfaceRaised))
                         }
-                        HStack(spacing: T.s3) {
-                            Label(store.label(s.program[me], s), systemImage: "circle.fill").foregroundStyle(T.program)
-                            Label(store.label(s.preview[me], s), systemImage: "circle").foregroundStyle(T.preview)
-                        }
-                        .font(.sans(13, .semibold))
-                        if me != booth.me {
-                            // Quick switching for the other mix (such as the side screens).
-                            let sources = store.volunteerSources(s)
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], spacing: 6) {
-                                ForEach(sources) { src in
-                                    let on = s.program[me] == src.input
-                                    Button { atem.setProgram(src.input, me: me) } label: {
-                                        Text(store.label(src.input, s)).font(.sans(12, .semibold)).lineLimit(1)
-                                            .foregroundStyle(on ? .white : T.ink)
-                                            .frame(maxWidth: .infinity).frame(height: 30)
-                                            .background(RoundedRectangle(cornerRadius: T.rSM).fill(on ? T.program : T.surfaceRaised))
-                                    }
-                                    .buttonStyle(PressStyle())
-                                    .help("Put \(store.label(src.input, s)) on \(store.mixName(me)) now")
-                                }
-                            }
-                        }
+                        .buttonStyle(PressStyle())
+                        .help("Put \(store.label(src.input, s)) on \(store.mixName(me)) now")
                     }
-                    .padding(T.s3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
                 }
             }
         }
-    }
-
-    // MARK: Screens
-
-    /// Configured screens, then every aux nobody has named yet.
-    var rows: [ScreenOutput] {
-        let named = store.config.screens
-        let used = Set(named.flatMap(\.aux))
-        let spare = (1...max(1, atem.state.auxCount)).filter { !used.contains($0) && atem.state.aux[$0 - 1] != nil }
-        return named + spare.map { ScreenOutput(name: "", aux: [$0]) }
-    }
-
-    var screens: some View {
-        SetupSection(title: "Screens and outputs",
-                     note: "Every switcher aux output: the picture it gets, and where it's wired. Change a picture here and it changes right away. Linked auxes (such as a pair of lobby TVs) switch together.") {
-            HStack {
-                Spacer()
-                Toggle("Edit names and wiring", isOn: $editing).toggleStyle(.switch).controlSize(.small).font(.sans(12))
-            }
-            ForEach(rows) { sc in ScreenRow(screen: sc, editing: editing) }
-        }
+        .padding(T.s3)
+        .frame(maxWidth: 440, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surface))
+        .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(T.line))
     }
 
     // MARK: Buttons
 
     var buttons: some View {
-        SetupSection(title: "Volunteer routing buttons",
-                     note: "Buttons in the bottom right of the main window. Each one sends one or more screens a picture, like a macro, and lights up while the screens match it. The easy way to make one: route the screens the way you want above, then save it as a button.") {
-            ForEach(Array(store.config.routes.enumerated()), id: \.element.id) { i, r in
-                HStack(spacing: T.s2) {
-                    TextField("Label", text: Binding(get: { r.label }, set: { v in store.update { c in
-                        if let j = c.routes.firstIndex(of: r), !v.isEmpty { c.routes[j].label = v }
-                    } }))
-                    .textFieldStyle(.roundedBorder).frame(width: 200)
-                    Text(RoutingText.detail(r, store, atem.state).replacingOccurrences(of: "\n", with: " · "))
-                        .font(.sans(12)).foregroundStyle(T.inkMuted).lineLimit(2)
-                    Spacer()
-                    if r.isActive(atem.state) { Text("ON").font(.sans(10, .bold)).foregroundStyle(T.accent) }
-                    Button("Run") { r.run(atem) }
-                    Button { moveRoute(i, -1) } label: { Image(systemName: "chevron.up") }.disabled(i == 0)
-                    Button { moveRoute(i, 1) } label: { Image(systemName: "chevron.down") }.disabled(i == store.config.routes.count - 1)
-                    Button { store.update { $0.routes.removeAll { $0 == r } } } label: { Image(systemName: "minus.circle") }
-                }
-                .buttonStyle(.borderless)
+        VStack(alignment: .leading, spacing: T.s3) {
+            HStack(spacing: T.s2) {
+                Text("Operator routing buttons").panelLabel()
+                HelpButton(text: "Buttons in the bottom right of the Operator view. Each one sends one or more screens a picture, like a macro, and lights up while the screens match it. The easy way to make one: route the screens the way you want above, then save that as a button.")
+                Spacer()
+                Button("Save the current routing as a button…") { newButton = true }
+                    .buttonStyle(CueButton())
+                    .popover(isPresented: $newButton) { NewRouteButton(done: { newButton = false }) }
             }
-            Button("Save the current routing as a button…") { newButton = true }
-                .popover(isPresented: $newButton) { NewRouteButton(done: { newButton = false }) }
+            if store.config.routes.isEmpty {
+                Text("No buttons yet.").font(.sans(13)).foregroundStyle(T.inkMuted)
+            }
+            LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
+                ForEach(Array(store.config.routes.enumerated()), id: \.element.id) { i, r in routeCard(i, r) }
+            }
         }
+    }
+
+    private func routeCard(_ i: Int, _ r: RouteButton) -> some View {
+        let on = r.isActive(atem.state)
+        return VStack(alignment: .leading, spacing: T.s2) {
+            HStack(spacing: T.s2) {
+                TextField("Label", text: Binding(get: { r.label }, set: { v in store.update { c in
+                    if let j = c.routes.firstIndex(of: r), !v.isEmpty { c.routes[j].label = v }
+                } }))
+                .textFieldStyle(CueFieldStyle())
+                if on { Tag(text: "On", color: T.accent, ink: T.onAction) }
+            }
+            Text(RoutingText.detail(r, store, atem.state)).font(.sans(11)).foregroundStyle(T.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 2) {
+                Button("Run now") { r.run(atem) }.buttonStyle(CueButton())
+                Spacer()
+                IconButton(icon: "chevron.left", help: "Move earlier") { moveRoute(i, -1) }.disabled(i == 0)
+                IconButton(icon: "chevron.right", help: "Move later") { moveRoute(i, 1) }.disabled(i == store.config.routes.count - 1)
+                IconButton(icon: "trash", help: "Remove this button") { store.update { $0.routes.removeAll { $0 == r } } }
+            }
+        }
+        .padding(T.s3)
+        .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surface))
+        .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(on ? T.accent : T.line))
     }
 
     func moveRoute(_ i: Int, _ d: Int) {
@@ -230,60 +271,80 @@ struct RoutingWindow: View {
     }
 }
 
-/// One screen (or a spare aux): source picker → aux numbers → name and wiring.
-struct ScreenRow: View {
+/// One screen (or an aux nobody has named): its name, what it shows now with a menu to
+/// change it, and how it's wired. The pencil opens its name, outputs and wiring.
+struct ScreenCard: View {
     let screen: ScreenOutput
-    let editing: Bool
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var store: ConfigStore
+    @State private var editing = false
     @State private var name = ""
     @State private var auxText = ""
     @State private var note = ""
 
     var named: Bool { !screen.name.isEmpty }
+    var auxLabel: String { screen.aux.count == 1 ? "Aux \(screen.aux[0])" : "Aux " + screen.aux.map(String.init).joined(separator: ", ") }
 
     var body: some View {
         let s = atem.state
-        HStack(spacing: T.s3) {
-            SourceMenu(current: Set(screen.aux.map { s.aux[$0 - 1] }).count == 1 ? s.aux[screen.aux[0] - 1] : nil,
-                       mixed: Set(screen.aux.map { s.aux[$0 - 1] }).count > 1) { src in
+        let showing = Set(screen.aux.map { s.aux[$0 - 1] })
+        VStack(alignment: .leading, spacing: T.s2) {
+            HStack(alignment: .center, spacing: T.s2) {
+                Text(named ? screen.name : auxLabel).font(.sans(14, .bold)).foregroundStyle(named ? T.ink : T.inkMuted).lineLimit(1)
+                Spacer(minLength: 2)
+                if named { Text(auxLabel).font(.system(size: 11, design: .monospaced)).foregroundStyle(T.inkSubtle) }
+                IconButton(icon: "pencil", help: named ? "Change the name, outputs or wiring note" : "Name this output") { load(); editing = true }
+                    .popover(isPresented: $editing, arrowEdge: .bottom) { editor }
+            }
+            SourceMenu(current: showing.count == 1 ? s.aux[screen.aux[0] - 1] : nil, mixed: showing.count > 1) { src in
                 for a in screen.aux { atem.setAux(a - 1, src) }
             }
-            .frame(width: 250, alignment: .leading)
-            Image(systemName: "arrow.right").foregroundStyle(T.inkSubtle)
-            Text(screen.aux.count == 1 ? "Aux \(screen.aux[0])" : "Aux " + screen.aux.map(String.init).joined(separator: ", "))
-                .font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkMuted).frame(width: 90, alignment: .leading)
-            Image(systemName: "arrow.right").foregroundStyle(T.inkSubtle)
-            if editing {
-                TextField("Name (such as Lobby TVs)", text: $name).textFieldStyle(.roundedBorder).frame(width: 170)
-                    .onSubmit(save)
-                TextField("Auxes", text: $auxText).textFieldStyle(.roundedBorder).frame(width: 70).onSubmit(save)
-                    .help("Aux outputs, counted from 1. Several, such as 4, 5, switch together.")
-                TextField("Wiring note", text: $note).textFieldStyle(.roundedBorder).onSubmit(save)
-                if named {
-                    Toggle("Volunteers", isOn: Binding(get: { screen.forVolunteers }, set: { v in update { $0.volunteer = v } }))
-                        .toggleStyle(.checkbox).font(.sans(11))
-                        .help("Show this screen in the volunteer's screen summary")
-                    Button { store.update { $0.screens.removeAll { $0 == screen } } } label: { Image(systemName: "minus.circle") }
-                        .buttonStyle(.borderless).help("Forget this name (the aux stays)")
-                }
-                Button("Save", action: save).controlSize(.small)
-            } else {
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(named ? screen.name : "Not named").font(.sans(13, .semibold)).foregroundStyle(named ? T.ink : T.inkSubtle)
-                        if named, !screen.forVolunteers {
-                            Text("HIDDEN FROM VOLUNTEERS").font(.sans(9, .bold)).foregroundStyle(T.inkSubtle)
-                        }
-                    }
-                    if let n = screen.note, !n.isEmpty { Text(n).font(.sans(11)).foregroundStyle(T.inkMuted).lineLimit(1) }
-                }
-                Spacer()
+            if let n = screen.note, !n.isEmpty {
+                Text(n).font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            } else if !named {
+                Text("Not named yet").font(.sans(11)).foregroundStyle(T.inkSubtle)
             }
         }
-        .padding(.vertical, 4)
-        .onAppear(perform: load)
-        .onChange(of: editing) { _, _ in load() }
+        .padding(T.s3)
+        .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surface))
+        .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(T.line))
+    }
+
+    var editor: some View {
+        VStack(alignment: .leading, spacing: T.s3) {
+            Text(named ? "Edit \(screen.name)" : "Name \(auxLabel)").font(.sans(14, .bold))
+            field("Name") { TextField("Such as Lobby TVs", text: $name).textFieldStyle(CueFieldStyle()).onSubmit(save) }
+            field("Aux outputs") {
+                TextField("4, 5", text: $auxText).textFieldStyle(CueFieldStyle()).onSubmit(save)
+                Text("Counted from 1. Several, such as 4, 5, switch together.").font(.sans(11)).foregroundStyle(T.inkSubtle)
+            }
+            field("Wiring note") { TextField("Such as VCV 104 → TV 103", text: $note).textFieldStyle(CueFieldStyle()).onSubmit(save) }
+            if named {
+                Toggle("Show to operators", isOn: Binding(get: { screen.forVolunteers }, set: { v in update { $0.volunteer = v } }))
+                    .toggleStyle(.switch).controlSize(.small).font(.sans(12))
+                    .help("Off for encoders, recorders and patch bay feeds: they move to Encoders and feeds, and Claude needs to be told to change them.")
+            }
+            HStack(spacing: T.s2) {
+                if named {
+                    Button("Forget this name") { store.update { $0.screens.removeAll { $0 == screen } }; editing = false }
+                        .buttonStyle(CueButton(kind: .danger)).help("The output stays; it goes back to Outputs not named yet.")
+                }
+                Spacer()
+                Button("Cancel") { editing = false }.buttonStyle(CueButton())
+                Button("Save") { save(); editing = false }.buttonStyle(CueButton(kind: .primary))
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(T.s4)
+        .frame(width: 340)
+        .foregroundStyle(T.ink)
+    }
+
+    private func field<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.sans(11, .semibold)).foregroundStyle(T.inkMuted)
+            content()
+        }
     }
 
     func load() {
@@ -310,7 +371,7 @@ struct ScreenRow: View {
     }
 }
 
-/// Picks any source an aux can take, grouped: the mixes first, then the volunteer's sources, then everything.
+/// Picks any source an aux can take, grouped: the mixes first, then the operator's sources, then everything.
 struct SourceMenu: View {
     let current: Int?
     var mixed = false
@@ -323,7 +384,7 @@ struct SourceMenu: View {
         let all = s.auxSources
         let mixes = all.filter { (10000..<11000).contains($0.id) }
         let favorites = store.volunteerSources(s).map(\.input).filter { id in all.contains { $0.id == id } }
-        Menu {
+        MenuField(text: mixed ? "Mixed" : store.routeLabel(current, s), icon: "play.rectangle", strong: true) {
             Section("Mixes") {
                 ForEach(mixes) { i in Button(store.routeLabel(i.id, s)) { pick(i.id) } }
             }
@@ -335,14 +396,12 @@ struct SourceMenu: View {
                     Button("\(i.long) (\(i.short))") { pick(i.id) }
                 }
             }
-        } label: {
-            Text(mixed ? "Mixed" : store.routeLabel(current, s)).font(.sans(13, .semibold)).lineLimit(1)
         }
-        .fixedSize()
+        .help("What this shows now. Choose another picture to change it right away.")
     }
 }
 
-/// Saves what chosen screens show now as a volunteer button.
+/// Saves what chosen screens show now as an operator button.
 struct NewRouteButton: View {
     let done: () -> Void
     @EnvironmentObject var atem: ATEMClient
@@ -354,8 +413,8 @@ struct NewRouteButton: View {
         let s = atem.state
         VStack(alignment: .leading, spacing: T.s3) {
             Text("New routing button").font(.sans(14, .bold))
-            TextField("Label, such as Lobby: stream", text: $label).textFieldStyle(.roundedBorder).frame(width: 300)
-            Text("Screens it sets, to what they show now:").font(.sans(12)).foregroundStyle(T.inkMuted)
+            TextField("Label, such as Lobby: stream", text: $label).textFieldStyle(CueFieldStyle()).frame(width: 320)
+            Text("Screens it sets, to what they show now").font(.sans(12)).foregroundStyle(T.inkMuted)
             ForEach(store.config.screens) { sc in
                 Toggle(isOn: Binding(get: { picked.contains(sc.id) }, set: { v in if v { picked.insert(sc.id) } else { picked.remove(sc.id) } })) {
                     Text("\(sc.name) ← \(RoutingText.showing(sc, s, store))").font(.sans(12))
@@ -363,11 +422,11 @@ struct NewRouteButton: View {
                 .toggleStyle(.checkbox)
             }
             if store.config.screens.isEmpty {
-                Text("Name the screens first (Edit names and wiring).").font(.sans(12)).foregroundStyle(T.warning)
+                Text("Name the screens first.").font(.sans(12)).foregroundStyle(T.warning)
             }
-            HStack {
+            HStack(spacing: T.s2) {
                 Spacer()
-                Button("Cancel", action: done)
+                Button("Cancel", action: done).buttonStyle(CueButton())
                 Button("Save button") {
                     let set = store.config.screens.filter { picked.contains($0.id) }.flatMap { sc in
                         sc.aux.compactMap { a in s.aux[a - 1].map { RouteChange(aux: a, source: $0) } }
@@ -376,10 +435,12 @@ struct NewRouteButton: View {
                     store.update { c in c.routes.removeAll { $0.label == l }; c.routes.append(RouteButton(label: l, set: set)) }
                     done()
                 }
+                .buttonStyle(CueButton(kind: .primary))
                 .keyboardShortcut(.defaultAction)
                 .disabled(label.trimmingCharacters(in: .whitespaces).isEmpty || picked.isEmpty)
             }
         }
         .padding(T.s4)
+        .foregroundStyle(T.ink)
     }
 }

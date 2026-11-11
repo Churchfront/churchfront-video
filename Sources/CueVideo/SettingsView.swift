@@ -2,67 +2,63 @@ import SwiftUI
 import AppKit
 import CueATEM
 
-// MARK: - Full switcher window
+// MARK: - Full switcher page
 
-/// Every switcher control, for experienced operators. Kept out of the volunteer's window.
+/// Every switcher control, for experienced operators. Kept out of the Operator view.
 struct SwitcherWindow: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @State private var me = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: T.s4) {
-                Text("Full Switcher").font(.sans(16, .bold))
-                LinkPill()
-                if !atem.state.product.isEmpty { Text(atem.state.product).font(.sans(13)).foregroundStyle(T.inkMuted) }
-                Spacer()
+        Page {
+            PageHeader(title: "Full switcher", purpose: "Every control on the switcher. What you press here goes to air like the hardware panel.") {
+                if !atem.state.product.isEmpty { Text(atem.state.product).font(.sans(12)).foregroundStyle(T.inkMuted) }
                 if atem.state.meCount > 1 {
-                    Picker("", selection: $me) {
-                        ForEach(0..<atem.state.meCount, id: \.self) { Text("M/E \($0 + 1)").tag($0) }
-                    }
-                    .pickerStyle(.segmented).frame(width: 70 * CGFloat(atem.state.meCount))
+                    Segments(items: (0..<atem.state.meCount).map { ("M/E \($0 + 1)", $0) }, selection: $me)
                 }
             }
-            .padding(.horizontal, T.s4).frame(height: 48).background(T.surface)
-            Rectangle().fill(T.line).frame(height: 1)
             SurfaceView(me: me)
-            Spacer(minLength: 0)
         }
-        .background(T.bg)
-        .foregroundStyle(T.ink)
         .onAppear { me = booth.me }
     }
 }
 
-// MARK: - Setup window
+// MARK: - Setup page
 
-struct SetupWindow: View {
-    var body: some View {
-        TabView {
-            SetupTab().tabItem { Text("Setup") }
-            StatusTab().tabItem { Text("Status") }
+/// The parts of Setup, as tabs across the top of the page.
+enum SetupPage: String, CaseIterable, Identifiable {
+    case switcher, sources, keys, cameras, tracking, file
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .switcher: return "Switcher"
+        case .sources: return "Sources"
+        case .keys: return "Key buttons"
+        case .cameras: return "Cameras"
+        case .tracking: return "Tracking"
+        case .file: return "Setup file"
         }
-        .padding(T.s3)
-        .frame(minWidth: 900, minHeight: 640)
-        .background(T.bg)
-        .foregroundStyle(T.ink)
     }
-}
-
-struct SetupSection<Content: View>: View {
-    let title: String
-    var note: String? = nil
-    @ViewBuilder let content: Content
-    var body: some View {
-        VStack(alignment: .leading, spacing: T.s3) {
-            Text(title).panelLabel()
-            if let note { Text(note).font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true) }
-            content
+    var purpose: String {
+        switch self {
+        case .switcher: return "Where the ATEM is, and which mix the operator runs."
+        case .sources: return "The tiles the operator can put on Next, left to right."
+        case .keys: return "On and off buttons under Fade and Cut, such as lower thirds."
+        case .cameras: return "The PTZ cameras, the switcher input each one feeds, and their saved shots."
+        case .tracking: return "How auto tracking follows a person."
+        case .file: return "Everything in Setup is saved in one file that people and Claude can edit."
         }
-        .padding(T.s4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surface))
+    }
+    var help: String? {
+        switch self {
+        case .switcher: return nil
+        case .sources: return "Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in CueScreens, add an NDI output to that screen) so the tile and the Next and Live monitors show it."
+        case .keys: return "Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in CueScreens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures."
+        case .cameras: return "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it."
+        case .tracking: return "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back."
+        case .file: return "The file is plain JSON. You, the system owner or Claude can edit it directly; CueVideo picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it."
+        }
     }
 }
 
@@ -71,116 +67,144 @@ struct SetupTab: View {
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
     @EnvironmentObject var store: ConfigStore
+    @AppStorage("setupPage") private var pageRaw = SetupPage.switcher.rawValue
     @State private var host = ""
 
+    private var page: SetupPage { SetupPage(rawValue: pageRaw) ?? .switcher }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: T.s4) {
-                switcher
-                sources
-                keyButtons
-                cameras
-                tracking
-                configFile
+        Page {
+            PageHeader(title: "Setup", purpose: page.purpose, help: page.help)
+            Segments(items: SetupPage.allCases.map { ($0.title, $0.rawValue) }, selection: $pageRaw)
+            switch page {
+            case .switcher: switcher
+            case .sources: sources
+            case .keys: keyButtons
+            case .cameras: cameras
+            case .tracking: tracking
+            case .file: configFile
             }
-            .padding(T.s2)
         }
         .onAppear { host = store.config.atemHost }
         .onChange(of: store.config.atemHost) { _, h in host = h }
     }
 
+    private func labeled<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
+        HStack(alignment: .center, spacing: T.s3) {
+            Text(label).font(.sans(12, .semibold)).foregroundStyle(T.inkMuted).frame(width: 130, alignment: .leading)
+            content()
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: Switcher
+
     var switcher: some View {
-        SetupSection(title: "ATEM switcher") {
-            HStack(spacing: T.s2) {
-                TextField("IP address", text: $host).textFieldStyle(.roundedBorder).frame(width: 200)
+        Card(title: "ATEM switcher") {
+            labeled("Address") {
+                TextField("IP address", text: $host).textFieldStyle(CueFieldStyle()).frame(width: 200)
                     .onSubmit { store.update { $0.atemHost = host.trimmingCharacters(in: .whitespaces) } }
                 Button("Connect") { store.update { $0.atemHost = host.trimmingCharacters(in: .whitespaces) } }
+                    .buttonStyle(CueButton(kind: .primary))
                 LinkPill()
-                if !atem.state.product.isEmpty {
-                    Text("\(atem.state.product), protocol \(atem.state.version)").font(.sans(12)).foregroundStyle(T.inkMuted)
-                }
-                Spacer()
-                Button("Open Full Switcher") { booth.show(.switcher) }
+            }
+            labeled("Model") {
+                Text(atem.state.product.isEmpty ? "Unknown until connected" : "\(atem.state.product), protocol \(atem.state.version)")
+                    .font(.sans(13)).foregroundStyle(atem.state.product.isEmpty ? T.inkSubtle : T.ink)
             }
             if atem.state.meCount > 1 {
-                HStack {
-                    Text("Volunteers run").font(.sans(13))
-                    Picker("", selection: Binding(get: { store.config.me }, set: { v in store.update { $0.me = v } })) {
-                        ForEach(1...atem.state.meCount, id: \.self) { Text("M/E \($0)").tag($0) }
-                    }
-                    .pickerStyle(.segmented).frame(width: 70 * CGFloat(atem.state.meCount))
-                    Text("Program on M/E \(store.config.me): \(atem.state.inputs[atem.state.program[store.config.me - 1] ?? -1]?.long ?? "?")")
+                labeled("The operator runs") {
+                    Segments(items: (1...atem.state.meCount).map { ("M/E \($0)", $0) },
+                             selection: Binding(get: { store.config.me }, set: { v in store.update { $0.me = v } }))
+                    Text("Live on it now: \(store.label(atem.state.program[store.config.me - 1], atem.state))")
                         .font(.sans(12)).foregroundStyle(T.inkMuted)
                 }
             }
         }
+        .frame(maxWidth: 760, alignment: .leading)
     }
+
+    // MARK: Sources
 
     var sources: some View {
         let chosen = store.config.sources
         let available = atem.state.busSources.filter { s in !chosen.contains { $0.input == s.id } }
-        return SetupSection(title: "Volunteer source row",
-                            note: "The tiles a volunteer can put on Next, left to right. Keys 1 to 9 and 0 pick them in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, pick the NDI source showing the same picture (in CueScreens, add an NDI output to that screen) so the tile shows it.") {
+        return Card {
+            HStack(spacing: T.s3) {
+                Col("Key", 30); Col("Switcher input", 200); Col("Name on screen", 200); Col("Picture")
+                Spacer()
+            }
+            if chosen.isEmpty {
+                Text("Nothing added yet, so the row shows every camera.").font(.sans(13)).foregroundStyle(T.inkMuted)
+            }
             ForEach(Array(chosen.enumerated()), id: \.element.input) { i, s in
-                HStack(spacing: T.s2) {
-                    Text(i < 10 ? "\((i + 1) % 10)" : "").font(.sans(12, .bold)).foregroundStyle(T.inkSubtle).frame(width: 18)
-                    Text(atem.state.inputs[s.input]?.long ?? "Input \(s.input)").font(.sans(13)).frame(width: 200, alignment: .leading)
+                HStack(spacing: T.s3) {
+                    Text(i < 10 ? "\((i + 1) % 10)" : "").font(.sans(13, .bold)).foregroundStyle(T.inkSubtle).frame(width: 30, alignment: .leading)
+                    Text(atem.state.inputs[s.input]?.long ?? "Input \(s.input)").font(.sans(13)).lineLimit(1).frame(width: 200, alignment: .leading)
                     TextField(store.label(s.input, atem.state), text: Binding(
                         get: { s.label ?? "" },
                         set: { v in store.update { c in
                             if let j = c.sources.firstIndex(where: { $0.input == s.input }) { c.sources[j].label = v.isEmpty ? nil : v }
                         } }
                     ))
-                    .textFieldStyle(.roundedBorder).frame(width: 200)
+                    .textFieldStyle(CueFieldStyle()).frame(width: 200)
                     if ptz.cameras.contains(where: { $0.atemInput == s.input }) {
-                        Image(systemName: "video").foregroundStyle(T.inkSubtle).help("A PTZ camera")
+                        Label("The camera's own picture", systemImage: "video").font(.sans(12)).foregroundStyle(T.inkSubtle)
                     } else {
                         NDIPicker(selection: s.ndi, none: "No picture") { v in store.update { c in
                             if let j = c.sources.firstIndex(where: { $0.input == s.input }) { c.sources[j].ndi = v }
                         } }
+                        .frame(width: 280)
                         .help("An NDI source showing what this input carries, such as a CueScreens screen sent to NDI, for its tile and the Next and Live pictures.")
                     }
-                    Spacer()
-                    Button { move(s.input, by: -1) } label: { Image(systemName: "chevron.up") }.disabled(i == 0)
-                    Button { move(s.input, by: 1) } label: { Image(systemName: "chevron.down") }.disabled(i == chosen.count - 1)
-                    Button { store.update { $0.sources.removeAll { $0.input == s.input } } } label: { Image(systemName: "minus.circle") }
+                    Spacer(minLength: 0)
+                    IconButton(icon: "chevron.up", help: "Move earlier in the row") { move(s.input, by: -1) }.disabled(i == 0)
+                    IconButton(icon: "chevron.down", help: "Move later in the row") { move(s.input, by: 1) }.disabled(i == chosen.count - 1)
+                    IconButton(icon: "trash", help: "Take this tile out of the row") { store.update { $0.sources.removeAll { $0.input == s.input } } }
                 }
-                .buttonStyle(.borderless)
             }
-            Menu("Add a source") {
+            MenuField(text: "Add a source", width: 180, icon: "plus") {
                 ForEach(available) { s in
                     Button("\(s.long) (\(s.short))") { store.update { $0.sources.append(VolunteerSource(input: s.id)) } }
                 }
             }
-            .fixedSize()
             .disabled(available.isEmpty)
         }
     }
 
+    // MARK: Key buttons
+
     var keyButtons: some View {
         let s = atem.state
         func name(_ i: Int?) -> String { i.map { s.inputs[$0]?.long ?? "input \($0)" } ?? "?" }
-        return SetupSection(title: "Key buttons",
-                            note: "On/off buttons under Fade and Cut, such as lower thirds. Upstream keys cut on and off; DSKs fade at their own rate. Pick an NDI preview with alpha (in CueScreens, send the lower thirds screen to NDI with alpha) to see the key over the Next and Live pictures.") {
+        return Card {
+            HStack(spacing: T.s3) {
+                Col("Button label", 180); Col("Key", 110); Col("Fill and key sources", 260); Col("Preview picture")
+                Spacer()
+            }
+            if store.config.keys.isEmpty {
+                Text("No key buttons yet.").font(.sans(13)).foregroundStyle(T.inkMuted)
+            }
             ForEach(store.config.keys) { k in
-                HStack(spacing: T.s2) {
+                HStack(spacing: T.s3) {
                     TextField("Label", text: Binding(get: { k.label }, set: { v in store.update { c in
                         if let i = c.keys.firstIndex(of: k) { c.keys[i].label = v }
                     } }))
-                    .textFieldStyle(.roundedBorder).frame(width: 160)
+                    .textFieldStyle(CueFieldStyle()).frame(width: 180)
                     Text(k.target).font(.sans(13)).frame(width: 110, alignment: .leading)
-                    Text(k.dsk.map { "fill \(name(s.dskFill[$0 - 1])), key \(name(s.dskCut[$0 - 1]))" }
-                         ?? "fill \(name(s.keyFill[(k.me ?? 1) - 1]?[(k.keyer ?? 1) - 1])), key \(name(s.keyCut[(k.me ?? 1) - 1]?[(k.keyer ?? 1) - 1]))")
-                        .font(.sans(12)).foregroundStyle(T.inkMuted)
-                    Spacer()
+                    Text(k.dsk.map { "\(name(s.dskFill[$0 - 1])) / \(name(s.dskCut[$0 - 1]))" }
+                         ?? "\(name(s.keyFill[(k.me ?? 1) - 1]?[(k.keyer ?? 1) - 1])) / \(name(s.keyCut[(k.me ?? 1) - 1]?[(k.keyer ?? 1) - 1]))")
+                        .font(.sans(12)).foregroundStyle(T.inkMuted).lineLimit(1).frame(width: 260, alignment: .leading)
                     NDIPicker(selection: k.ndi, none: "No preview") { v in store.update { c in
                         if let i = c.keys.firstIndex(of: k) { c.keys[i].ndi = v }
                     } }
+                    .frame(width: 280)
                     .help("An NDI source with alpha showing this key, such as CueScreens' lower thirds sent to NDI with alpha. It's laid over the Next and Live pictures when the key is on them.")
-                    Button { store.update { $0.keys.removeAll { $0 == k } } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
+                    Spacer(minLength: 0)
+                    IconButton(icon: "trash", help: "Remove this button") { store.update { $0.keys.removeAll { $0 == k } } }
                 }
             }
-            Menu("Add a key button") {
+            MenuField(text: "Add a key button", width: 180, icon: "plus") {
                 ForEach(s.keyFill.keys.sorted(), id: \.self) { me in
                     ForEach((s.keyFill[me] ?? [:]).keys.sorted(), id: \.self) { k in
                         Button("M/E \(me + 1) Key \(k + 1): \(name(s.keyFill[me]?[k]))") {
@@ -194,7 +218,6 @@ struct SetupTab: View {
                     }
                 }
             }
-            .fixedSize()
         }
     }
 
@@ -207,62 +230,88 @@ struct SetupTab: View {
         }
     }
 
+    // MARK: Cameras
+
     var cameras: some View {
-        SetupSection(title: "PTZ cameras",
-                     note: "Canon (HTTP) works with no camera settings and shows the shots saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the volunteer move it.") {
-            ForEach($ptz.cameras) { $c in
-                VStack(alignment: .leading, spacing: T.s2) {
-                    CameraRow(camera: $c) { ptz.cameras.removeAll { $0.id == c.id } }
-                    if ptz.canSaveShots(c) { ShotEditor(camera: $c).padding(.leading, 16) }
+        VStack(alignment: .leading, spacing: T.s4) {
+            Card {
+                HStack(spacing: T.s2) {
+                    Col("", 10); Col("Name", 120); Col("Address", 140); Col("Control", 170); Col("Port", 64); Col("Switcher input", 170); Col("Presets", 130)
+                    Spacer()
                 }
+                if ptz.cameras.isEmpty {
+                    Text("No cameras yet.").font(.sans(13)).foregroundStyle(T.inkMuted)
+                }
+                ForEach($ptz.cameras) { $c in
+                    VStack(alignment: .leading, spacing: T.s2) {
+                        CameraRow(camera: $c) { ptz.cameras.removeAll { $0.id == c.id } }
+                        if ptz.canSaveShots(c) { ShotEditor(camera: $c).padding(.leading, 18) }
+                    }
+                    if c.id != ptz.cameras.last?.id { Rectangle().fill(T.line).frame(height: 1) }
+                }
+                Button {
+                    var c = PTZCamera()
+                    c.name = "Cam \(ptz.cameras.count + 1)"
+                    c.proto = .canonXC; c.port = 80
+                    ptz.cameras.append(c)
+                } label: { Label("Add a camera", systemImage: "plus") }
+                .buttonStyle(CueButton())
             }
-            Button("Add camera") {
-                var c = PTZCamera()
-                c.name = "Cam \(ptz.cameras.count + 1)"
-                c.proto = .canonXC; c.port = 80
-                ptz.cameras.append(c)
+            Card(title: "Camera admin login",
+                 help: "Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the setup file. One login for every Canon camera. macOS may ask for this Mac's password the first time CueVideo uses it after an update.") {
+                CameraLoginRow()
             }
-            CameraLoginRow().padding(.top, T.s2)
+            .frame(maxWidth: 760, alignment: .leading)
         }
     }
 
+    // MARK: Tracking
+
     var tracking: some View {
-        SetupSection(title: "Auto tracking",
-                     note: "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot (whichever the camera is closest to, or the one picked under Track): eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back.") {
-            HStack(spacing: T.s3) {
-                Text("Follow speed").font(.sans(13))
+        Card(title: "Auto tracking") {
+            labeled("Follow speed") {
                 Slider(value: Binding(get: { store.config.trackSpeed }, set: { v in store.update { $0.trackSpeed = (v * 10).rounded() / 10 } }),
                        in: 0.5...4).frame(width: 240)
                 Text(String(format: "%.1f×", store.config.trackSpeed)).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkMuted)
-                Text("Lower if the camera overshoots or wanders, higher if it falls behind.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                    .frame(width: 40, alignment: .leading)
+                Text("Lower if the camera overshoots, higher if it falls behind.").font(.sans(12)).foregroundStyle(T.inkSubtle)
             }
-            Toggle("Tilt to follow too (off: pan only)", isOn: Binding(get: { store.config.trackTilt }, set: { v in store.update { $0.trackTilt = v } }))
-                .font(.sans(13))
-            Toggle("Zoom to hold the shot size as people move nearer or farther", isOn: Binding(get: { store.config.trackZoom }, set: { v in store.update { $0.trackZoom = v } }))
-                .font(.sans(13))
+            labeled("Tilt") {
+                Toggle("", isOn: Binding(get: { store.config.trackTilt }, set: { v in store.update { $0.trackTilt = v } }))
+                    .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                Text("Tilt to follow as well as pan. Off: pan only.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+            }
+            labeled("Zoom") {
+                Toggle("", isOn: Binding(get: { store.config.trackZoom }, set: { v in store.update { $0.trackZoom = v } }))
+                    .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                Text("Zoom to hold the shot size as people move nearer or farther.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+            }
         }
+        .frame(maxWidth: 760, alignment: .leading)
     }
 
+    // MARK: Setup file
+
     var configFile: some View {
-        SetupSection(title: "Configuration file",
-                     note: "Everything on this page is saved in this file as plain JSON. You, the system owner or Claude can edit it directly; CueVideo picks up changes within a second.") {
+        Card(title: "Setup file") {
+            Text(store.url.path).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
             HStack(spacing: T.s2) {
-                Text(store.url.path).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
-                Spacer()
-                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([store.url]) }
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([store.url]) }.buttonStyle(CueButton())
                 Button("Copy path") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(store.url.path, forType: .string)
                 }
+                .buttonStyle(CueButton())
             }
             if let e = store.fileError {
                 Text("The file has a problem, so CueVideo is still using the last good setup: \(e)")
-                    .font(.sans(12, .semibold)).foregroundStyle(T.danger)
+                    .font(.sans(12, .semibold)).foregroundStyle(T.danger).fixedSize(horizontal: false, vertical: true)
             }
             if store.readOnly {
                 Text("A self-test is running, so changes aren't saved.").font(.sans(12)).foregroundStyle(T.warning)
             }
         }
+        .frame(maxWidth: 760, alignment: .leading)
     }
 }
 
@@ -276,12 +325,9 @@ struct CameraLoginRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: T.s2) {
-            Text("Camera admin login").font(.sans(13, .semibold))
-            Text("Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the configuration file. One login for every Canon camera. macOS may ask for this Mac's password the first time CueVideo uses it after an update.")
-                .font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: T.s2) {
-                TextField("User name", text: $user).textFieldStyle(.roundedBorder).frame(width: 160)
-                SecureField(saved ? "Saved (type to replace)" : "Password", text: $password).textFieldStyle(.roundedBorder).frame(width: 200)
+                TextField("User name", text: $user).textFieldStyle(CueFieldStyle()).frame(width: 160)
+                SecureField(saved ? "Saved (type to replace)" : "Password", text: $password).textFieldStyle(CueFieldStyle()).frame(width: 200)
                 Button("Save") {
                     let u = user.trimmingCharacters(in: .whitespaces)
                     guard !u.isEmpty, !password.isEmpty else { note = "Enter both the user name and the password."; return }
@@ -291,8 +337,10 @@ struct CameraLoginRow: View {
                         note = "The Keychain didn't accept it. Try again."
                     }
                 }
+                .buttonStyle(CueButton(kind: .primary))
                 if saved {
                     Button("Remove") { CameraLogin.clear(); saved = false; user = ""; password = ""; note = "Removed." }
+                        .buttonStyle(CueButton(kind: .danger))
                 }
                 if let note { Text(note).font(.sans(12)).foregroundStyle(T.inkMuted) }
             }
@@ -309,31 +357,32 @@ struct CameraRow: View {
     var body: some View {
         HStack(spacing: T.s2) {
             Circle().fill(ptz.online.contains(camera.id) ? T.success : T.lineStrong).frame(width: 8, height: 8)
-            TextField("Name", text: $camera.name).textFieldStyle(.roundedBorder).frame(width: 110)
-            TextField("IP address", text: $camera.host).textFieldStyle(.roundedBorder).frame(width: 130)
-            Picker("", selection: $camera.proto) {
-                ForEach(VISCAProtocol.allCases) { Text($0.label).tag($0) }
+                .frame(width: 10).help(ptz.online.contains(camera.id) ? "Answering" : "Not answering")
+            TextField("Name", text: $camera.name).textFieldStyle(CueFieldStyle()).frame(width: 120)
+            TextField("IP address", text: $camera.host).textFieldStyle(CueFieldStyle()).frame(width: 140)
+            MenuField(text: camera.proto.label, width: 170) {
+                ForEach(VISCAProtocol.allCases) { p in
+                    Button(p.label) { camera.proto = p; camera.port = p.defaultPort }
+                }
             }
-            .frame(width: 170)
-            .onChange(of: camera.proto) { _, p in camera.port = p.defaultPort }
-            TextField("Port", value: $camera.port, format: .number.grouping(.never)).textFieldStyle(.roundedBorder).frame(width: 64)
-            Picker("", selection: $camera.atemInput) {
-                Text("No input").tag(Int?.none)
-                ForEach(atem.state.busSources.filter(\.isExternal)) { Text($0.long).tag(Int?.some($0.id)) }
+            TextField("Port", value: $camera.port, format: .number.grouping(.never)).textFieldStyle(CueFieldStyle()).frame(width: 64)
+            MenuField(text: camera.atemInput.map { atem.state.inputs[$0]?.long ?? "Input \($0)" } ?? "No input", width: 170) {
+                Button("No input") { camera.atemInput = nil }
+                ForEach(atem.state.busSources.filter(\.isExternal)) { s in Button(s.long) { camera.atemInput = s.id } }
             }
-            .frame(width: 160)
             .help("The switcher input this camera is plugged into")
             if camera.proto != .canonXC {
-                Picker("", selection: $camera.firstPreset) {
-                    Text("Presets from 0").tag(0)
-                    Text("Presets from 1").tag(1)
+                MenuField(text: "Count from \(camera.firstPreset)", width: 130) {
+                    Button("Count from 0") { camera.firstPreset = 0 }
+                    Button("Count from 1") { camera.firstPreset = 1 }
                 }
-                .frame(width: 120)
+                .help("Some VISCA cameras number their presets from 1 instead of 0")
+            } else {
+                Text("Read from the camera").font(.sans(11)).foregroundStyle(T.inkSubtle).frame(width: 130, alignment: .leading)
             }
-            Spacer()
-            Button(action: remove) { Image(systemName: "trash") }.buttonStyle(.plain).foregroundStyle(T.inkSubtle)
+            Spacer(minLength: 0)
+            IconButton(icon: "trash", help: "Remove \(camera.name)", action: remove)
         }
-        .font(.sans(12))
     }
 }
 
@@ -358,7 +407,7 @@ struct ShotEditor: View {
                     HStack(spacing: T.s2) {
                         Text(s.kind == .exposure ? "Exposure" : "Position").font(.sans(11, .semibold))
                             .foregroundStyle(s.kind == .exposure ? T.warning : T.accentStrong).frame(width: 60, alignment: .leading)
-                        TextField("Name", text: $s.name).textFieldStyle(.roundedBorder).frame(width: 140)
+                        TextField("Name", text: $s.name).textFieldStyle(CueFieldStyle()).frame(width: 140)
                         if s.kind == .position {
                             number("Pan", $s.pan); number("Tilt", $s.tilt); number("Zoom", $s.zoom)
                         } else {
@@ -393,6 +442,7 @@ struct ShotEditor: View {
                 }
             }
             .padding(.top, 6)
+            .buttonStyle(CueButton())
         } label: {
             Text("\(camera.shots.count) saved shot\(camera.shots.count == 1 ? "" : "s"), \(ptz.presetNames(camera).count) on the camera")
                 .font(.sans(12, .semibold)).foregroundStyle(T.inkMuted)
@@ -418,7 +468,7 @@ struct ShotEditor: View {
     func number(_ label: String, _ v: Binding<Int>) -> some View {
         HStack(spacing: 4) {
             Text(label).font(.sans(11)).foregroundStyle(T.inkSubtle)
-            TextField("", value: v, format: .number.grouping(.never)).textFieldStyle(.roundedBorder).frame(width: 64)
+            TextField("", value: v, format: .number.grouping(.never)).textFieldStyle(CueFieldStyle()).frame(width: 64)
         }
     }
 
@@ -444,57 +494,58 @@ struct StatusTab: View {
     @EnvironmentObject var store: ConfigStore
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: T.s4) {
-                HStack {
-                    Text("Live view of how CueVideo is talking to the switcher and cameras.").font(.sans(13)).foregroundStyle(T.inkMuted)
-                    Spacer()
-                    Button("Copy report") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(StatusReport.text(booth), forType: .string)
-                    }
-                    .help("Copies everything on this page as text, ready to paste to Claude or the system owner")
+        Page {
+            PageHeader(title: "Status", purpose: "How CueVideo is talking to the switcher and cameras right now.") {
+                Button("Copy report") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(StatusReport.text(booth), forType: .string)
                 }
-                SetupSection(title: "Switcher") {
-                    grid(StatusReport.switcherRows(booth))
-                }
-                SetupSection(title: "Cameras") {
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        VStack(alignment: .leading, spacing: T.s2) {
-                            ForEach(ptz.cameras) { c in
-                                grid(StatusReport.cameraRows(c, booth))
-                                if c.id != ptz.cameras.last?.id { Rectangle().fill(T.line).frame(height: 1) }
+                .buttonStyle(CueButton())
+                .help("Copies everything on this page as text, ready to paste to Claude or the system owner")
+            }
+            HStack(alignment: .top, spacing: T.s4) {
+                Card(title: "Switcher") { grid(StatusReport.switcherRows(booth)) }
+                Card(title: "Setup file") { grid(StatusReport.configRows(store)) }
+            }
+            VStack(alignment: .leading, spacing: T.s3) {
+                Text("Cameras").panelLabel()
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    // Three to a row. Not a lazy grid: its rows are measured before the text wraps.
+                    VStack(alignment: .leading, spacing: T.s3) {
+                        ForEach(Array(stride(from: 0, to: ptz.cameras.count, by: 3)), id: \.self) { start in
+                            HStack(alignment: .top, spacing: T.s3) {
+                                ForEach(ptz.cameras[start..<min(start + 3, ptz.cameras.count)]) { c in
+                                    Card(title: c.name) { grid(Array(StatusReport.cameraRows(c, booth).dropFirst())) }
+                                }
                             }
                         }
                     }
                 }
-                SetupSection(title: "Commands sent to the switcher", note: "Newest first. Only commands from this Mac show here; the switcher's own panel and other software aren't listed.") {
-                    if atem.sentLog.isEmpty {
-                        Text("Nothing sent yet.").font(.sans(12)).foregroundStyle(T.inkSubtle)
-                    }
-                    ForEach(atem.sentLog.reversed()) { e in
-                        HStack(spacing: T.s3) {
-                            Text(StatusReport.time(e.time)).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkSubtle)
-                            Text(e.command).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkMuted).frame(width: 44, alignment: .leading)
-                            Text(e.describe(atem.state)).font(.sans(12))
-                            if !e.sent { Text("not sent, switcher offline").font(.sans(11, .semibold)).foregroundStyle(T.warning) }
-                        }
-                    }
+            }
+            Card(title: "Commands sent to the switcher",
+                 help: "Newest first. Only commands from this Mac show here; the switcher's own panel and other software aren't listed.") {
+                if atem.sentLog.isEmpty {
+                    Text("Nothing sent yet.").font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
-                SetupSection(title: "Configuration file") {
-                    grid(StatusReport.configRows(store))
+                ForEach(atem.sentLog.reversed()) { e in
+                    HStack(spacing: T.s3) {
+                        Text(StatusReport.time(e.time)).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkSubtle)
+                        Text(e.command).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkMuted).frame(width: 44, alignment: .leading)
+                        Text(e.describe(atem.state)).font(.sans(12))
+                        if !e.sent { Text("not sent, switcher offline").font(.sans(11, .semibold)).foregroundStyle(T.warning) }
+                    }
                 }
             }
-            .padding(T.s2)
         }
     }
 
     func grid(_ rows: [(String, String)]) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: T.s4, verticalSpacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(rows.indices, id: \.self) { i in
-                GridRow {
-                    Text(rows[i].0).font(.sans(12)).foregroundStyle(T.inkSubtle)
-                    Text(rows[i].1).font(.sans(12)).textSelection(.enabled)
+                HStack(alignment: .top, spacing: T.s3) {
+                    Text(rows[i].0).font(.sans(12)).foregroundStyle(T.inkSubtle).frame(width: 120, alignment: .leading)
+                    Text(rows[i].1).font(.sans(12)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -520,7 +571,7 @@ enum StatusReport {
             ("Connection", "\(link), \(b.atem.host.isEmpty ? "no address" : "\(b.atem.host) UDP 9910")"),
             ("Model", s.product.isEmpty ? "Unknown until connected" : "\(s.product), protocol \(s.version)"),
             ("Size", "\(s.meCount) M/E, \(s.keyerCount) keys, \(s.dskCount) DSKs, \(s.auxCount) aux, \(s.inputs.count) sources"),
-            ("Volunteers run", "M/E \(b.me + 1)"),
+            ("The operator runs", "M/E \(b.me + 1)"),
         ]
         for me in 0..<s.meCount {
             rows.append(("M/E \(me + 1)", "Live \(s.inputs[s.program[me] ?? -1]?.long ?? "?"), Next \(s.inputs[s.preview[me] ?? -1]?.long ?? "?")"
@@ -594,7 +645,7 @@ struct NDIPicker: View {
     @ObservedObject var ndi = NDIMonitor.shared
 
     var body: some View {
-        Menu {
+        MenuField(text: selection.map(NDIMonitor.shortName) ?? none, icon: "dot.radiowaves.left.and.right") {
             Button(none) { set(nil) }
             Divider()
             if !ndi.hasRuntime {
@@ -607,14 +658,7 @@ struct NDIPicker: View {
             }
             Divider()
             Button("Look again") { ndi.scan() }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                Text(selection.map(NDIMonitor.shortName) ?? none).lineLimit(1)
-            }
-            .font(.sans(12))
         }
-        .fixedSize()
         .onAppear { ndi.scan() }
     }
 }
