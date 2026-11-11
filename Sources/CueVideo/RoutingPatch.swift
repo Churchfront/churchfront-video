@@ -237,6 +237,13 @@ struct RoutingSchematic: View {
     var body: some View {
         let focus = drag?.source ?? selected ?? hover
         VStack(alignment: .leading, spacing: T.s3) {
+            // The three columns, named: left to right is the way the signal flows.
+            ZStack {
+                column("Sources", "Switcher inputs").frame(maxWidth: .infinity, alignment: .leading)
+                column("Mixes", "M/Es: blend sources, cut and fade").frame(maxWidth: .infinity, alignment: .center)
+                column("Destinations", "Switcher outputs").frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            Rectangle().fill(T.line).frame(height: 1)
             GeometryReader { g in
                 let w = g.size.width
                 let L = layout(w)
@@ -326,6 +333,22 @@ struct RoutingSchematic: View {
         .position(x: (right ? w - sizes(w).side / 2 : sizes(w).side / 2), y: h.y + (headH - 4) / 2)
     }
 
+    private func column(_ title: String, _ note: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: T.s2) {
+            Text(title).font(.sans(17, .bold))
+            Text(note).font(.sans(12)).foregroundStyle(T.inkSubtle).lineLimit(1)
+        }
+    }
+
+    /// Which connector on the switcher this is: "IN 9", "OUT 4+5".
+    private func port(_ text: String) -> some View {
+        Text(text).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(T.inkMuted)
+            .padding(.horizontal, 5).frame(height: 18)
+            .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceRaised.opacity(0.9)))
+            .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(T.line))
+            .fixedSize()
+    }
+
     private func thumb(_ input: Int?, _ w: CGFloat) -> some View {
         let t = sizes(w).thumb
         return SourcePicture(input: input, named: false).frame(width: t.width, height: t.height).clipShape(RoundedRectangle(cornerRadius: T.rSM))
@@ -336,13 +359,15 @@ struct RoutingSchematic: View {
             if s.pic { thumb(s.id, w) }
             Text(store.label(s.id, atem.state)).font(.sans(s.pic ? 14 : 13, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
             Spacer(minLength: 0)
+            if (1...999).contains(s.id) { port("IN \(s.id)") }
         }
         .padding(.leading, s.pic ? 4 : 10).padding(.trailing, 8)
         .frame(width: s.frame.width, height: s.frame.height)
         .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
         .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(on ? T.accent : (c ?? T.line), lineWidth: on ? 3 : (c == nil ? 1 : 2)))
         .draggable(s.id, self, L, w)
-        .help("Drag onto a destination or a mix, or click this and then click where it should go")
+        .help(((1...999).contains(s.id) ? "Switcher input \(s.id): \(atem.state.inputs[s.id]?.long ?? "")\n" : "")
+              + "Drag onto a destination or a mix, or click this and then click where it should go")
     }
 
     private func mixCard(_ m: Mix, _ c: Color, target: Bool, _ L: Layout, _ w: CGFloat) -> some View {
@@ -398,8 +423,10 @@ struct RoutingSchematic: View {
             let me = (src - 10000) / 10 - 1
             if store.config.mixNames.indices.contains(me), !store.config.mixNames[me].isEmpty { label = store.config.mixNames[me] }
         }
+        let out = "OUT " + d.screen.aux.map(String.init).joined(separator: "+")
         return HStack(spacing: T.s2) {
-            if d.pic { thumb(d.source, w) }
+            // On the picture's corner when there is one, so the name keeps its room.
+            if d.pic { thumb(d.source, w).overlay(alignment: .topLeading) { port(out).padding(3) } } else { port(out) }
             if d.pic {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(d.screen.name).font(.sans(14, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
@@ -415,14 +442,14 @@ struct RoutingSchematic: View {
             if d.locked { Image(systemName: "lock.fill").font(.system(size: 10)).foregroundStyle(T.warning) }
             ScreenEditButton(screen: d.screen)
         }
-        .padding(.leading, d.pic ? 4 : 10).padding(.trailing, 2)
+        .padding(.leading, d.pic ? 4 : 6).padding(.trailing, 2)
         .frame(width: d.frame.width, height: d.frame.height)
         .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
         .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(target ? T.accent : (c ?? T.line), lineWidth: target ? 4 : (c == nil ? 1 : 2)))
         .contentShape(Rectangle())
         .onHover { hover = $0 ? d.source : (hover == d.source ? nil : hover) }
         .onTapGesture { if let s = selected { route(s, d) } }
-        .help("\(d.screen.name), aux \(d.screen.aux.map(String.init).joined(separator: ", "))"
+        .help("\(d.screen.name), switcher output \(d.screen.aux.map(String.init).joined(separator: ", "))"
               + ((d.screen.note ?? "").isEmpty ? "" : "\n\(d.screen.note!)") + (d.locked ? "\nLocked. Unlock Encoders and feeds to change it." : ""))
     }
 
