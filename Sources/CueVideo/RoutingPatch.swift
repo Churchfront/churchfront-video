@@ -33,14 +33,15 @@ struct SourcePicture: View {
     }
 }
 
-/// Routing as a schematic of the switcher: its sources down the left, its mixes (M/Es) in
-/// the middle, its outputs down the right, and wires showing what feeds what.
+/// Routing as a schematic of the switcher, in two columns: everything that can be sent on
+/// the left, everywhere it can go on the right, and a wire for each output's routing.
 ///
-/// A mix blends sources, so it's drawn as a small switcher with Live and Next and takes a
-/// red wire from its Live source and a dashed green one from Next. A destination is an aux
-/// output: it shows one thing, so it has one wire in. Wires run in lanes through the gaps
-/// between the columns and between the mixes, never behind a tile. Drag a source or a mix
-/// onto a destination (or click one, then the other) to change it right away.
+/// The mixes (M/Es) lead the left column, because to an output a mix is a source like any
+/// other. Each is drawn as a small switcher showing its Live and Next; the sources that
+/// are Live or Next on a mix carry a tag saying so, rather than a wire into it. So a wire
+/// only ever means "this output shows that". Wires run square, each in its own lane in the
+/// gap between the columns. Drag a source or a mix onto a destination (or click one, then
+/// the other) to change it right away; drop a source on a mix to put it live there.
 struct RoutingSchematic: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
@@ -58,13 +59,13 @@ struct RoutingSchematic: View {
 
     // MARK: Model
 
-    enum Group: String { case cameras = "Cameras", graphics = "Graphics", ndi = "NDI", spareIn = "Spare inputs", inside = "Media and color"
+    enum Group: String { case mixes = "Mixes", cameras = "Cameras", graphics = "Graphics", ndi = "NDI", spareIn = "Spare inputs", inside = "Media and color"
         case screens = "Screens", feeds = "Encoders and feeds", spareOut = "Spare outputs" }
 
     struct Head { let group: Group; let y: CGFloat; let count: Int; let foldable: Bool; let open: Bool }
     struct Src { let id: Int; let frame: CGRect; let pic: Bool }
     struct Dst { let screen: ScreenOutput; let frame: CGRect; let pic: Bool; let source: Int?; let mixed: Bool; let locked: Bool }
-    struct Mix { let me: Int; let frame: CGRect; let live: CGRect; let next: CGRect; let pic: Bool
+    struct Mix { let me: Int; let frame: CGRect; let live: CGRect; let next: CGRect; let pic: Bool; let nextPic: Bool
         var output: Int { 10010 + me * 10 } }
     /// One wire, as the corners it turns at, plus where branches leave it.
     struct Wire { let from: Int; let color: Color; var dashed = false; var runs: [[CGPoint]]; var dots: [CGPoint] = [] }
@@ -77,9 +78,9 @@ struct RoutingSchematic: View {
     struct Sizes { let side: CGFloat, mix: CGFloat, thumb: CGSize
         var picH: CGFloat { thumb.height + 8 } }
     private func sizes(_ w: CGFloat) -> Sizes {
-        let side = min(340, max(196, (w * 0.235).rounded()))
-        let tw = (side * 0.5).rounded()
-        return Sizes(side: side, mix: min(440, max(236, (w * 0.28).rounded())), thumb: CGSize(width: tw, height: (tw * 9 / 16).rounded()))
+        let side = min(520, max(230, (w * 0.34).rounded()))
+        let tw = min(190, (side * 0.42).rounded())
+        return Sizes(side: side, mix: side, thumb: CGSize(width: tw, height: (tw * 9 / 16).rounded()))
     }
     /// None is tally red or green, which only ever mean Live and Next.
     private static let palette: [Color] = [0x7CC2EE, 0xF2B84B, 0xB39DF5, 0xD9DE6A, 0xF58FB8, 0xFF9E6B, 0x9BB7C9, 0xC9C9C9].map(T.hex)
@@ -110,7 +111,7 @@ struct RoutingSchematic: View {
     private func layout(_ w: CGFloat) -> Layout {
         let s = atem.state
         var L = Layout()
-        let z = sizes(w), sw = z.side, dw = z.side, mw = z.mix, picH = z.picH
+        let z = sizes(w), sw = z.side, dw = z.side, picH = z.picH
 
         // Destinations: every aux, named or not.
         let named = store.config.screens
@@ -131,8 +132,21 @@ struct RoutingSchematic: View {
         var inUse = Set(shownDsts.compactMap { now($0).0 })
         for me in s.program.keys { if let v = s.program[me] { inUse.insert(v) }; if let v = s.preview[me] { inUse.insert(v) } }
 
-        // Sources.
+        // Left column: the mixes first.
         var y: CGFloat = 0
+        L.heads.append(Head(group: .mixes, y: y, count: s.program.count, foldable: false, open: true))
+        y += headH
+        let slotW = ((sw - 26) / 2).rounded(.down)
+        for me in s.program.keys.sorted() {
+            let pic = hasPicture(s.program[me]), nextPic = hasPicture(s.preview[me])
+            let slotH: CGFloat = pic || nextPic ? (slotW * 9 / 16).rounded() : 40
+            let live = CGRect(x: 10, y: y + 32, width: slotW, height: slotH)
+            let next = CGRect(x: 16 + slotW, y: y + 32, width: slotW, height: slotH)
+            let f = CGRect(x: 0, y: y, width: sw, height: 32 + slotH + 10)
+            L.mixes.append(Mix(me: me, frame: f, live: live, next: next, pic: pic, nextPic: nextPic))
+            y = f.maxY + gap + 2
+        }
+        y += 8
         let inputs = s.auxSources.filter { !isMix($0.id) && !(7000..<7100).contains($0.id) }
         let sOpen: [Group: Bool] = [.cameras: true, .graphics: true, .ndi: true, .spareIn: showSpareIn, .inside: showInternal]
         for g in [Group.cameras, .graphics, .ndi, .spareIn, .inside] {
@@ -168,65 +182,29 @@ struct RoutingSchematic: View {
         }
         let dBottom = y
 
-        // Mixes, with a clear channel above, between and below them for wires to cross in.
-        let mx = (w - mw) / 2, channel: CGFloat = 46
-        y = channel
-        for me in s.program.keys.sorted() {
-            let pic = hasPicture(s.program[me])
-            let liveH: CGFloat = pic ? (mw - 20) * 9 / 16 : 44
-            let live = CGRect(x: mx + 10, y: y + 34, width: mw - 20, height: liveH)
-            let next = CGRect(x: mx + 10, y: live.maxY + 6, width: mw - 20, height: 30)
-            let f = CGRect(x: mx, y: y, width: mw, height: next.maxY + 28 - y)
-            L.mixes.append(Mix(me: me, frame: f, live: live, next: next, pic: pic))
-            y = f.maxY + channel
-        }
-        L.height = max(sBottom, dBottom, y)
+        L.height = max(sBottom, dBottom)
 
-        // Wires. Each gets its own lane in the gutter it runs through.
-        let srcY = Dictionary(uniqueKeysWithValues: L.srcs.map { ($0.id, $0.frame.midY) })
-        let gutter = max(40, mx - sw)
-        var leftLane = 0, rightLane = 0
-        func lx() -> CGFloat { leftLane += 1; return sw + min(gutter - 12, 6 + CGFloat(leftLane) * 9) }
-        func rx() -> CGFloat { rightLane += 1; return mx + mw + min(gutter - 12, 6 + CGFloat(rightLane) * 9) }
-        var color = 0
+        // Wires: one per thing that feeds an output, each in its own lane in the gap. A
+        // trunk runs down the lane with a branch to every destination showing it.
+        let gutter = max(60, w - sw - dw)
+        var lane = 0, color = 0
         func nextColor() -> Color { color += 1; return Self.palette[(color - 1) % Self.palette.count] }
-
-        // Mix outputs: one trunk down the right gutter, a branch to each destination.
-        for m in L.mixes {
-            let c = nextColor(); L.colors[m.output] = c
-            let ys = L.dsts.filter { $0.source == m.output }.map(\.frame.midY)
+        var origins: [(id: Int, y: CGFloat)] = L.mixes.map { ($0.output, $0.frame.midY) }
+        for m in L.mixes { L.colors[m.output] = nextColor() }
+        origins += L.srcs.map { ($0.id, $0.frame.midY) }
+        for o in origins {
+            let ys = L.dsts.filter { $0.source == o.id }.map(\.frame.midY)
             guard !ys.isEmpty else { continue }
-            let x = rx(), py = m.frame.midY
-            var wire = Wire(from: m.output, color: c, runs: [[CGPoint(x: m.frame.maxX, y: py), CGPoint(x: x, y: py)],
-                                                             [CGPoint(x: x, y: min(py, ys.min()!)), CGPoint(x: x, y: max(py, ys.max()!))]])
-            for d in ys { wire.runs.append([CGPoint(x: x, y: d), CGPoint(x: w - dw, y: d)]); wire.dots.append(CGPoint(x: x, y: d)) }
-            if ys.count == 1, ys[0] == py { wire.dots = [] }
-            L.wires.append(wire)
-        }
-        // Into each mix: Live solid red, Next dashed green.
-        for m in L.mixes {
-            for (src, slot, tally, dashed) in [(s.program[m.me], m.live, T.program, false), (s.preview[m.me], m.next, T.preview, true)] {
-                guard let src, let sy = srcY[src] else { continue }
-                let x = lx()
-                L.wires.append(Wire(from: src, color: tally, dashed: dashed, runs: [[CGPoint(x: sw, y: sy), CGPoint(x: x, y: sy), CGPoint(x: x, y: slot.midY), CGPoint(x: mx, y: slot.midY)]]))
+            let c = L.colors[o.id] ?? nextColor()
+            L.colors[o.id] = c
+            lane += 1
+            let x = sw + min(gutter - 14, 6 + CGFloat(lane) * 11)
+            var wire = Wire(from: o.id, color: c, runs: [[CGPoint(x: sw, y: o.y), CGPoint(x: x, y: o.y)],
+                                                         [CGPoint(x: x, y: min(o.y, ys.min()!)), CGPoint(x: x, y: max(o.y, ys.max()!))]])
+            for d in ys {
+                wire.runs.append([CGPoint(x: x, y: d), CGPoint(x: w - dw, y: d)])
+                if ys.count > 1 { wire.dots.append(CGPoint(x: x, y: d)) }
             }
-        }
-        // Sources sent straight to a destination cross in the channel nearest them.
-        var channels: [CGFloat] = [channel / 2]
-        for m in L.mixes { channels.append(m.frame.maxY + channel / 2) }
-        var usedIn: [Int: Int] = [:]
-        for src in L.srcs {
-            let ys = L.dsts.filter { $0.source == src.id }.map(\.frame.midY)
-            guard !ys.isEmpty else { continue }
-            let c = nextColor(); L.colors[src.id] = c
-            let sy = src.frame.midY, mean = ys.reduce(0, +) / CGFloat(ys.count)
-            let k = channels.indices.min { abs(channels[$0] - sy) + abs(channels[$0] - mean) < abs(channels[$1] - sy) + abs(channels[$1] - mean) }!
-            let n = usedIn[k, default: 0]; usedIn[k] = n + 1
-            let cy = channels[k] + CGFloat((n + 1) / 2) * 8 * (n % 2 == 0 ? 1 : -1)
-            let a = lx(), b = rx()
-            var wire = Wire(from: src.id, color: c, runs: [[CGPoint(x: sw, y: sy), CGPoint(x: a, y: sy), CGPoint(x: a, y: cy), CGPoint(x: b, y: cy)],
-                                                           [CGPoint(x: b, y: min(cy, ys.min()!)), CGPoint(x: b, y: max(cy, ys.max()!))]])
-            for d in ys { wire.runs.append([CGPoint(x: b, y: d), CGPoint(x: w - dw, y: d)]); if ys.count > 1 { wire.dots.append(CGPoint(x: b, y: d)) } }
             L.wires.append(wire)
         }
         return L
@@ -239,8 +217,7 @@ struct RoutingSchematic: View {
         VStack(alignment: .leading, spacing: T.s3) {
             // The three columns, named: left to right is the way the signal flows.
             ZStack {
-                column("Sources", "Switcher inputs").frame(maxWidth: .infinity, alignment: .leading)
-                column("Mixes", "M/Es: blend sources, cut and fade").frame(maxWidth: .infinity, alignment: .center)
+                column("Sources", "Mixes and switcher inputs").frame(maxWidth: .infinity, alignment: .leading)
                 column("Destinations", "Switcher outputs").frame(maxWidth: .infinity, alignment: .trailing)
             }
             Rectangle().fill(T.line).frame(height: 1)
@@ -266,7 +243,7 @@ struct RoutingSchematic: View {
                     .allowsHitTesting(false)
                     ForEach(L.heads, id: \.group) { h in head(h, w) }
                     ForEach(L.srcs, id: \.id) { s in
-                        sourceRow(s, L.colors[s.id], on: focus == s.id, L, w).position(x: s.frame.midX, y: s.frame.midY)
+                        sourceRow(s, L.colors[s.id], on: focus == s.id || onMix(s.id, focus), L, w).position(x: s.frame.midX, y: s.frame.midY)
                     }
                     ForEach(L.mixes, id: \.me) { m in
                         mixCard(m, L.colors[m.output] ?? T.lineStrong, target: canDrop(on: m), L, w).position(x: m.frame.midX, y: m.frame.midY)
@@ -356,7 +333,15 @@ struct RoutingSchematic: View {
     private func sourceRow(_ s: Src, _ c: Color?, on: Bool, _ L: Layout, _ w: CGFloat) -> some View {
         HStack(spacing: T.s2) {
             if s.pic { thumb(s.id, w) }
-            Text(store.label(s.id, atem.state)).font(.sans(s.pic ? 14 : 13, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+            if s.pic {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(store.label(s.id, atem.state)).font(.sans(14, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                    ForEach(tallies(s.id, short: false), id: \.0) { t in Tag(text: t.0, color: t.1, ink: t.2) }
+                }
+            } else {
+                Text(store.label(s.id, atem.state)).font(.sans(13, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                ForEach(tallies(s.id, short: true), id: \.0) { t in Tag(text: t.0, color: t.1, ink: t.2) }
+            }
             Spacer(minLength: 0)
             if (1...999).contains(s.id) { port("IN \(s.id)") }
             if (1...999).contains(s.id), !ptz.cameras.contains(where: { $0.atemInput == s.id && $0.proto == .canonXC && !$0.host.isEmpty }) {
@@ -372,42 +357,65 @@ struct RoutingSchematic: View {
               + "Drag onto a destination or a mix, or click this and then click where it should go")
     }
 
+    /// Whether a source is Live or Next on the mix in focus.
+    private func onMix(_ id: Int, _ focus: Int?) -> Bool {
+        guard let focus, isMix(focus), focus % 10 == 0 else { return false }
+        let me = (focus - 10000) / 10 - 1
+        return atem.state.program[me] == id || atem.state.preview[me] == id
+    }
+
+    private func shortMix(_ me: Int) -> String {
+        let n = store.config.mixNames.indices.contains(me) ? store.config.mixNames[me] : ""
+        return n.isEmpty ? "M/E \(me + 1)" : n
+    }
+
+    /// Where a source is in use on the mixes: "Live · Live stream", "Next · Side screens".
+    private func tallies(_ id: Int, short: Bool) -> [(String, Color, Color)] {
+        let s = atem.state
+        var out: [(String, Color, Color)] = []
+        for me in s.program.keys.sorted() {
+            let name = short ? "M/E \(me + 1)" : shortMix(me)
+            if s.program[me] == id { out.append(("Live · \(name)", T.program, .white)) }
+            else if s.preview[me] == id { out.append(("Next · \(name)", T.preview, T.onAction)) }
+        }
+        return out
+    }
+
+    private func slot(_ tag: String, _ color: Color, _ ink: Color, _ input: Int?, pic: Bool, _ r: CGRect) -> some View {
+        ZStack(alignment: .topLeading) {
+            if pic { SourcePicture(input: input, named: false) } else { T.surfaceSunken }
+            HStack(spacing: 5) {
+                Tag(text: tag, color: color, ink: ink)
+                Text(store.label(input, atem.state)).font(.sans(12, .semibold)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.75)
+            }
+            .padding(.horizontal, 5).frame(height: 22)
+            .background(RoundedRectangle(cornerRadius: T.rSM).fill(Color.black.opacity(pic ? 0.6 : 0))).padding(4)
+        }
+        .frame(width: r.width, height: r.height)
+        .clipShape(RoundedRectangle(cornerRadius: T.rSM))
+        .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(color, lineWidth: tag == "Live" ? 2.5 : 1.5))
+    }
+
     private func mixCard(_ m: Mix, _ c: Color, target: Bool, _ L: Layout, _ w: CGFloat) -> some View {
         let s = atem.state, mine = m.me == booth.me
-        let name = store.config.mixNames.indices.contains(m.me) ? store.config.mixNames[m.me] : ""
         return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(name.isEmpty ? "M/E \(m.me + 1)" : name).font(.sans(14, .bold)).lineLimit(1)
-                Spacer()
+            HStack(spacing: 6) {
+                Text(shortMix(m.me)).font(.sans(14, .bold)).lineLimit(1)
                 Text("M/E \(m.me + 1)").font(.sans(11)).foregroundStyle(T.inkSubtle)
+                Spacer(minLength: 0)
+                Text(mine ? "Run from the Operator view" : "Drop a source to put it live")
+                    .font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1).minimumScaleFactor(0.8)
                 MixNameButton(me: m.me)
             }
-            .frame(height: 18)
-            ZStack(alignment: .topLeading) {
-                if m.pic { SourcePicture(input: s.program[m.me], named: false) } else { T.surfaceSunken }
-                HStack(spacing: 6) {
-                    Tag(text: "Live", color: T.program, ink: .white)
-                    Text(store.label(s.program[m.me], s)).font(.sans(13, .semibold)).foregroundStyle(.white).lineLimit(1)
-                }
-                .padding(.horizontal, 6).frame(height: 24)
-                .background(RoundedRectangle(cornerRadius: T.rSM).fill(Color.black.opacity(m.pic ? 0.6 : 0))).padding(m.pic ? 5 : 4)
-            }
-            .frame(width: m.live.width, height: m.live.height)
-            .clipShape(RoundedRectangle(cornerRadius: T.rSM))
-            .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(T.program, lineWidth: 2.5))
+            .frame(height: 20)
             HStack(spacing: 6) {
-                Tag(text: "Next", color: T.preview, ink: T.onAction)
-                Text(store.label(s.preview[m.me], s)).font(.sans(12, .semibold)).lineLimit(1)
-                Spacer(minLength: 0)
+                slot("Live", T.program, .white, s.program[m.me], pic: m.pic, m.live)
+                slot("Next", T.preview, T.onAction, s.preview[m.me], pic: m.nextPic, m.next)
             }
-            .padding(.horizontal, 6).frame(width: m.next.width, height: m.next.height)
-            .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceSunken))
-            .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(T.preview, lineWidth: 1.5))
-            Text(mine ? "Run from the Operator view" : "Drop a source here to put it live on this mix")
-                .font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1).minimumScaleFactor(0.8).frame(height: 14)
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .frame(width: m.frame.width, height: m.frame.height)
+        .padding(.horizontal, 10).padding(.top, 6)
+        .frame(width: m.frame.width, height: m.frame.height, alignment: .top)
         .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surfaceRaised.opacity(0.6)))
         .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(target ? T.accent : c, lineWidth: target ? 4 : 2.5))
         .onTapGesture {
