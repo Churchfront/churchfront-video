@@ -87,7 +87,7 @@ struct StageScanWindow: View {
             if !cast.names.isEmpty {
                 Card(title: "Can follow by name") {
                     Text(cast.names.joined(separator: ", ")).font(.sans(13, .semibold))
-                    Text("In the Operator view, under Track, choose Follow by name. This lasts until CueVideo quits or the next scan is saved.")
+                    Text("On Operate, under Track, choose Follow by name. This lasts until CueVideo quits or the next scan is saved.")
                         .font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
             }

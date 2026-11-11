@@ -169,8 +169,8 @@ struct CueVideoApp: App {
     }
 }
 
-/// The menu bar. View switches between Operator and Engineer; Switcher and Camera hold what
-/// the Operator view's buttons do, so the keys can be found; Engineer opens each of its pages.
+/// The menu bar. View opens each page; Switcher and Camera hold what the Operate page's
+/// buttons do, so the keys can be found.
 struct BoothCommands: Commands {
     @ObservedObject private var booth = Booth.shared
     @ObservedObject private var store = Booth.shared.store
@@ -181,8 +181,12 @@ struct BoothCommands: Commands {
             Button("Settings…") { booth.show(.setup) }.keyboardShortcut(",")
         }
         CommandGroup(before: .sidebar) {
-            Button("Operator") { booth.view = .operate }.keyboardShortcut("1")
-            Button("Engineer") { booth.view = .engineer }.keyboardShortcut("2")
+            Button("Operate") { booth.view = .operate }.keyboardShortcut("1")
+            Button("Stage Scan") { booth.show(.scan) }.keyboardShortcut("s", modifiers: [.command, .shift])
+            Button("Routing") { booth.show(.routing) }.keyboardShortcut("r", modifiers: [.command, .shift])
+            Button("Full Switcher") { booth.show(.switcher) }.keyboardShortcut("k", modifiers: [.command, .shift])
+            Button("Setup") { booth.show(.setup) }
+            Button("Status") { booth.show(.status) }
             Divider()
         }
         // Switching and camera commands act only from the Operator view, where the person
@@ -220,13 +224,6 @@ struct BoothCommands: Commands {
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
             .disabled(booth.view != .operate)
-        }
-        CommandMenu("Engineer") {
-            Button("Stage Scan") { booth.show(.scan) }.keyboardShortcut("s", modifiers: [.command, .shift])
-            Button("Routing") { booth.show(.routing) }.keyboardShortcut("r", modifiers: [.command, .shift])
-            Button("Full Switcher") { booth.show(.switcher) }.keyboardShortcut("k", modifiers: [.command, .shift])
-            Button("Setup") { booth.show(.setup) }
-            Button("Status") { booth.show(.status) }
         }
     }
 }

@@ -129,7 +129,7 @@ struct RoutingWindow: View {
         VStack(alignment: .leading, spacing: T.s3) {
             HStack(spacing: T.s2) {
                 Text("Operator routing buttons").panelLabel()
-                HelpButton(text: "Buttons in the bottom right of the Operator view. Each one sends one or more screens a picture, like a macro, and lights up while the screens match it. The easy way to make one: route the screens the way you want above, then save that as a button.")
+                HelpButton(text: "Buttons in the bottom right of Operate. Each one sends one or more screens a picture, like a macro, and lights up while the screens match it. The easy way to make one: route the screens the way you want above, then save that as a button.")
                 Spacer()
                 Button("Save the current routing as a button…") { newButton = true }
                     .buttonStyle(CueButton())
@@ -207,6 +207,10 @@ struct ScreenEditButton: View {
             }
             field("Wiring note") { TextField("Such as VCV 104 → TV 103", text: $note).textFieldStyle(CueFieldStyle()).onSubmit(save) }
             if named {
+                Toggle("Preview in the top bar", isOn: Binding(get: { store.pinnedScreens.contains { $0.id == screen.id } },
+                                                               set: { store.setPinned(screen.id, $0) }))
+                    .toggleStyle(.switch).controlSize(.small).font(.sans(12))
+                    .help("A small live picture of what this is showing, in the bar across the top. Up to four.")
                 Toggle("Show to operators", isOn: Binding(get: { screen.forVolunteers }, set: { v in update { $0.volunteer = v } }))
                     .toggleStyle(.switch).controlSize(.small).font(.sans(12))
                     .help("Off for encoders, recorders and patch bay feeds: they move to Encoders and feeds, and Claude needs to be told to change them.")
@@ -245,7 +249,7 @@ struct ScreenEditButton: View {
         let n = name.trimmingCharacters(in: .whitespaces)
         guard !n.isEmpty, !auxes.isEmpty else { return }
         store.update { c in
-            let new = ScreenOutput(name: n, aux: auxes, note: note.isEmpty ? nil : note, volunteer: screen.volunteer)
+            let new = ScreenOutput(name: n, aux: auxes, note: note.isEmpty ? nil : note, volunteer: screen.volunteer, pinned: screen.pinned)
             // An aux belongs to one screen: take these auxes away from any other.
             for i in c.screens.indices where c.screens[i] != screen { c.screens[i].aux.removeAll { auxes.contains($0) } }
             c.screens.removeAll { $0.aux.isEmpty }

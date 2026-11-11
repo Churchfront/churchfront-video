@@ -13,7 +13,7 @@ struct ContentView: View {
             if booth.view == .engineer {
                 // Reachable before the switcher is found too: Setup is where its address goes.
                 EngineerView()
-                    .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner() }.padding(.top, 44) }
+                    .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner() } }
             } else if booth.connectedOnce || atem.link == .online {
                 VolunteerView()
                     .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner() } }
@@ -25,7 +25,7 @@ struct ContentView: View {
         .foregroundStyle(T.ink)
         // Windows opened by Claude through the show_window tool.
         .onReceive(NotificationCenter.default.publisher(for: .cueVideoShowWindow)) { n in
-            // The names from before the Engineer view, when each of these was its own window.
+            // The names from when each of these was its own window.
             switch n.object as? String {
             case "setup": booth.show(.setup)
             case "switcher": booth.show(.switcher)
@@ -40,28 +40,32 @@ struct ContentView: View {
     }
 }
 
-/// Kept short for volunteers: are we connected, recording and streaming, and the way into Setup.
+/// The one bar across the top: the page tabs, whether we're connected, small live previews
+/// of what's on air and of the pinned screens, and recording and streaming.
 struct TopBar: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
 
     var body: some View {
-        HStack(spacing: T.s4) {
-            Text("CueVideo").font(.sans(16, .bold)).padding(.leading, 64)
-            ViewSwitch()
+        HStack(spacing: T.s3) {
+            Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 26, height: 26).padding(.leading, 68)
+                .help("CueVideo")
+            PageTabs()
             LinkPill()
             let down = ptz.cameras.filter { !$0.host.isEmpty && !ptz.online.contains($0.id) }
             let waiting = ptz.cameras.filter { ptz.online.contains($0.id) && !ptz.hasControl($0) }
-            if !ptz.cameras.isEmpty {
-                let problem = (down.isEmpty ? [] : ["\(down.map(\.name).joined(separator: ", ")) not answering"])
-                    + (waiting.isEmpty ? [] : ["\(waiting.map(\.name).joined(separator: ", ")) waiting for control"])
-                Text(problem.isEmpty ? "\(ptz.cameras.count) cameras" : problem.joined(separator: " · "))
-                    .font(.sans(12, problem.isEmpty ? .regular : .semibold))
-                    .foregroundStyle(problem.isEmpty ? T.inkMuted : T.warning)
+            let problem = (down.isEmpty ? [] : ["\(down.map(\.name).joined(separator: ", ")) not answering"])
+                + (waiting.isEmpty ? [] : ["\(waiting.map(\.name).joined(separator: ", ")) waiting for control"])
+            if !problem.isEmpty {
+                Text(problem.joined(separator: " · ")).font(.sans(12, .semibold)).foregroundStyle(T.warning).lineLimit(1)
                     .help("Canon cameras take commands from one controller at a time. A logged-in session, like the camera's own web page, outranks CueVideo.")
             }
-            Spacer()
+            if atem.state.ftbBlack[booth.me] ?? false {
+                Text("Faded to black").font(.sans(12, .bold)).foregroundStyle(T.warning).lineLimit(1)
+            }
+            Spacer(minLength: T.s2)
+            TopMonitors()
             if atem.state.hasRecording {
                 StatusButton(title: atem.state.recording ? "Recording" : "Record", on: atem.state.recording, color: T.program) {
                     atem.setRecording(!atem.state.recording)
@@ -71,12 +75,96 @@ struct TopBar: View {
                          on: atem.state.streaming || atem.state.streamConnecting, color: atem.state.streaming ? T.program : T.warning) {
                 atem.setStreaming(!(atem.state.streaming || atem.state.streamConnecting))
             } }
-            Button { booth.show(.setup) } label: { Image(systemName: "gearshape").font(.system(size: 15)) }
-                .buttonStyle(.plain).foregroundStyle(T.inkMuted).help("Setup and status (⌘,)")
         }
-        .padding(.horizontal, T.s4)
-        .frame(height: 48)
+        .padding(.horizontal, T.s3)
+        .frame(height: 68)
         .background(T.surface)
+    }
+}
+
+/// Operate, then the other pages. Space, Return and the number keys only cut and fade on Operate.
+struct PageTabs: View {
+    @EnvironmentObject var booth: Booth
+
+    var body: some View {
+        HStack(spacing: 2) {
+            tab("Operate", "slider.horizontal.3", "The booth screen: pick, frame, take (⌘1)", on: booth.view == .operate) { booth.view = .operate }
+            ForEach(EngineerSection.allCases) { s in
+                tab(s.title, s.icon, s.note + ". Space, Return and the number keys do nothing here, so they can't cut or fade.",
+                    on: booth.view == .engineer && booth.section == s) { booth.show(s) }
+            }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
+        .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
+        .fixedSize()
+    }
+
+    private func tab(_ title: String, _ icon: String, _ help: String, on: Bool, _ go: @escaping () -> Void) -> some View {
+        Button(action: go) {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 12))
+                Text(title).font(.sans(13, .semibold)).lineLimit(1)
+            }
+            .foregroundStyle(on ? T.onAction : T.inkMuted)
+            .padding(.horizontal, 10).frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: T.rSM).fill(on ? T.accent : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+/// Small live pictures in the top bar: Live and Next (on every page but Operate, which has
+/// them large), then the pinned screens, each showing what it's showing now.
+struct TopMonitors: View {
+    @EnvironmentObject var booth: Booth
+    @EnvironmentObject var atem: ATEMClient
+    @EnvironmentObject var ptz: PTZController
+    @EnvironmentObject var store: ConfigStore
+
+    var body: some View {
+        let s = atem.state
+        HStack(alignment: .top, spacing: T.s2) {
+            if booth.view != .operate {
+                monitor(s.program[booth.me], caption: store.label(s.program[booth.me], s), tag: ("Live", T.program, .white),
+                        help: "Live now. Click to go to Operate.") { booth.view = .operate }
+                monitor(s.preview[booth.me], caption: store.label(s.preview[booth.me], s), tag: ("Next", T.preview, T.onAction),
+                        help: "On Next. Click to go to Operate.") { booth.view = .operate }
+                if !store.pinnedScreens.isEmpty { Rectangle().fill(T.line).frame(width: 1, height: 52) }
+            }
+            ForEach(store.pinnedScreens) { sc in
+                let now = Set(sc.aux.map { s.aux[$0 - 1] })
+                let src: Int? = now.count == 1 ? (now.first ?? nil) : nil
+                monitor(src, caption: sc.name, tag: nil,
+                        help: "\(sc.name) is showing \(now.count > 1 ? "different pictures on its outputs" : store.routeLabel(src, s)). Click to open Routing.") { booth.show(.routing) }
+            }
+        }
+    }
+
+    private func monitor(_ input: Int?, caption: String, tag: (String, Color, Color)?, help: String, _ go: @escaping () -> Void) -> some View {
+        Button(action: go) {
+            VStack(spacing: 2) {
+                ZStack(alignment: .topLeading) {
+                    SourcePicture(input: input, named: false)
+                    if !sourceHasPicture(input, atem.state, ptz, store) {
+                        Text(input == nil ? "Mixed" : store.routeLabel(input, atem.state)).font(.sans(9, .semibold)).foregroundStyle(T.inkMuted)
+                            .lineLimit(tag == nil ? 2 : 1).multilineTextAlignment(.center).minimumScaleFactor(0.7).padding(3)
+                            .padding(.top, tag == nil ? 0 : 14)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    if let tag { Tag(text: tag.0, color: tag.1, ink: tag.2).padding(2) }
+                }
+                .frame(width: 71, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: T.rSM))
+                .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(tag?.1 ?? T.line, lineWidth: tag?.0 == "Live" ? 2 : 1))
+                Text(caption).font(.sans(10, .medium)).foregroundStyle(T.inkMuted).lineLimit(1).frame(width: 71)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 
