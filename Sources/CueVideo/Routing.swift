@@ -108,8 +108,6 @@ struct RoutingWindow: View {
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var store: ConfigStore
     @State private var newButton = false
-    @AppStorage("routingShowFeeds") private var showFeeds = false
-    @AppStorage("routingShowSpare") private var showSpare = false
     @AppStorage("routingShowNames") private var showNames = false
 
     private let columns = [GridItem(.adaptive(minimum: 250, maximum: 380), spacing: T.s3, alignment: .top)]
@@ -125,42 +123,20 @@ struct RoutingWindow: View {
         let screens = store.config.screens.filter(\.forVolunteers)
         let feeds = store.config.screens.filter { !$0.forVolunteers }
         Page {
-            PageHeader(title: "Routing", purpose: "Which picture goes to which screen. Drag a picture onto a screen to change it right away.",
+            PageHeader(title: "Routing", purpose: "What feeds what on the switcher. Drag a source or a mix onto a destination to change it right away.",
                        help: "Each switcher aux output feeds a screen or a piece of gear. Name the outputs, note how they're wired, and choose what each one shows. Outputs listed together (such as a pair of lobby TVs) switch together. Outputs that feed encoders, recorders or the patch bay can be hidden from operators so nobody changes the stream by accident.")
-            mixes
-            VStack(alignment: .leading, spacing: T.s3) {
-                HStack(spacing: T.s2) {
-                    Text("Screens").panelLabel()
-                    Text("\(screens.count)").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle)
-                }
-                if screens.isEmpty {
-                    Text("No screens named yet. Open \"Outputs not named yet\" below and name the ones that feed screens.")
-                        .font(.sans(13)).foregroundStyle(T.inkMuted)
-                }
-                if !screens.isEmpty { PatchView(screens: screens) }
+            if atem.state.aux.isEmpty {
+                Text("The switcher hasn't reported its outputs yet.").font(.sans(13)).foregroundStyle(T.inkMuted)
+            } else {
+                RoutingSchematic()
             }
-            if !screens.isEmpty {
-                // Names, which outputs feed each screen, and how they're wired.
-                Fold(title: "Screen names and wiring", count: screens.count, open: $showNames) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
-                        ForEach(screens) { ScreenCard(screen: $0) }
-                    }
-                }
-            }
-            if !feeds.isEmpty {
-                Fold(title: "Encoders and feeds", count: feeds.count, open: $showFeeds) {
-                    Text("Hidden from operators. One of these may carry the live stream, so change them with care.")
-                        .font(.sans(12)).foregroundStyle(T.inkMuted)
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
-                        ForEach(feeds) { ScreenCard(screen: $0) }
-                    }
-                }
-            }
-            if !spare.isEmpty {
-                Fold(title: "Outputs not named yet", count: spare.count, open: $showSpare) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
-                        ForEach(spare) { ScreenCard(screen: $0) }
-                    }
+            // Names, which outputs feed each screen, and how they're wired.
+            Fold(title: "Names and wiring", count: store.config.screens.count, open: $showNames) {
+                mixNames
+                LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
+                    ForEach(screens) { ScreenCard(screen: $0) }
+                    ForEach(feeds) { ScreenCard(screen: $0) }
+                    ForEach(spare) { ScreenCard(screen: $0) }
                 }
             }
             buttons
@@ -169,58 +145,26 @@ struct RoutingWindow: View {
 
     // MARK: Mixes
 
-    var mixes: some View {
-        let s = atem.state
-        return VStack(alignment: .leading, spacing: T.s3) {
-            HStack(spacing: T.s2) {
-                Text("Mixes").panelLabel()
-                HelpButton(text: "Each M/E is its own mix of the sources, such as one for the live stream and one for the side screens. Name what each is for. The Operator view runs one of them; the other can be switched here.")
-            }
-            HStack(alignment: .top, spacing: T.s3) {
-                ForEach(s.program.keys.sorted(), id: \.self) { me in mix(me, s) }
-            }
-        }
-    }
-
-    private func mix(_ me: Int, _ s: ATEMState) -> some View {
-        VStack(alignment: .leading, spacing: T.s2) {
-            HStack(spacing: T.s2) {
-                Text("M/E \(me + 1)").panelLabel()
-                if me == booth.me { Tag(text: "Operator's mix", color: T.accent, ink: T.onAction) }
-            }
-            TextField("What it's for, such as Live stream", text: Binding(
-                get: { store.config.mixNames.indices.contains(me) ? store.config.mixNames[me] : "" },
-                set: { v in store.update { c in
-                    while c.mixNames.count <= me { c.mixNames.append("") }
-                    c.mixNames[me] = v
-                } }))
-            .textFieldStyle(CueFieldStyle())
-            HStack(spacing: T.s3) {
-                HStack(spacing: 6) { Tag(text: "Live", color: T.program, ink: .white); Text(store.label(s.program[me], s)).font(.sans(13, .semibold)).lineLimit(1) }
-                HStack(spacing: 6) { Tag(text: "Next", color: T.preview, ink: T.onAction); Text(store.label(s.preview[me], s)).font(.sans(13, .semibold)).lineLimit(1) }
-            }
-            if me != booth.me {
-                // Quick switching for the mix the operator doesn't run (such as the side screens).
-                Text("Put on this mix now").font(.sans(11)).foregroundStyle(T.inkSubtle).padding(.top, 2)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], spacing: 6) {
-                    ForEach(store.volunteerSources(s)) { src in
-                        let on = s.program[me] == src.input
-                        Button { atem.setProgram(src.input, me: me) } label: {
-                            Text(store.label(src.input, s)).font(.sans(12, .semibold)).lineLimit(1)
-                                .foregroundStyle(on ? .white : T.ink)
-                                .frame(maxWidth: .infinity).frame(height: 30)
-                                .background(RoundedRectangle(cornerRadius: T.rSM).fill(on ? T.program : T.surfaceRaised))
-                        }
-                        .buttonStyle(PressStyle())
-                        .help("Put \(store.label(src.input, s)) on \(store.mixName(me)) now")
+    /// What each mix is for, such as "Live stream" and "Side screens".
+    var mixNames: some View {
+        HStack(alignment: .top, spacing: T.s3) {
+            ForEach(atem.state.program.keys.sorted(), id: \.self) { me in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: T.s2) {
+                        Text("M/E \(me + 1) is for").font(.sans(11, .semibold)).foregroundStyle(T.inkMuted)
+                        if me == booth.me { Tag(text: "Operator's mix", color: T.accent, ink: T.onAction) }
                     }
+                    TextField("Such as Live stream", text: Binding(
+                        get: { store.config.mixNames.indices.contains(me) ? store.config.mixNames[me] : "" },
+                        set: { v in store.update { c in
+                            while c.mixNames.count <= me { c.mixNames.append("") }
+                            c.mixNames[me] = v
+                        } }))
+                    .textFieldStyle(CueFieldStyle())
                 }
+                .frame(maxWidth: 320, alignment: .leading)
             }
         }
-        .padding(T.s3)
-        .frame(maxWidth: 440, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: T.rLG).fill(T.surface))
-        .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(T.line))
     }
 
     // MARK: Buttons

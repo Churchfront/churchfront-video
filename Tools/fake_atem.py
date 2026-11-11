@@ -35,7 +35,7 @@ class Switcher:
         self.keys = {0: False, 1: False}
         self.dsk = {0: [False, False, False], 1: [False, False, False]}  # on air, in transition, tie
         self.ftb, self.ftbtrans = False, False
-        self.aux = {0: 10010}
+        self.aux = {0: 4, 1: 3, 2: 3, 3: 10010, 4: 10010, 5: 10010, 6: 10010, 7: 10010, 8: 10010, 9: 1, 10: 2, 11: 10010}
         self.macros = {0: "Walk-in", 1: "Service Start", 3: "Pastor Wide"}
         self.macro = None
         self.stream, self.record = 1, 0
