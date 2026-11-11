@@ -99,6 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         NSApp.setActivationPolicy(.regular)
+        // The Dock keeps an old icon for a rebuilt app at the same path, so set it outright.
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"), let icon = NSImage(contentsOf: url) {
+            NSApp.applicationIconImage = icon
+        }
         NSApp.activate(ignoringOtherApps: true)
         let booth = Booth.shared
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { e in
