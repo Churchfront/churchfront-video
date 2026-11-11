@@ -12,7 +12,7 @@ struct Page<Content: View>: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: T.s5) { content }
-                .padding(T.s5)
+                .padding(wide ? T.s4 : T.s5)
                 .frame(maxWidth: wide ? .infinity : 1240, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
