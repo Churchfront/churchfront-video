@@ -11,12 +11,19 @@ CueTracks). Native macOS 14+, SwiftUI.
   Meant to be used by CueScreens (slide actions) and CueStack too.
 - `Sources/NDIBridge`: copied from CueScreens; loads the NDI runtime at run time.
 - `Sources/CueVideo`: the app.
-  - Main window, for volunteers: Next and Live monitors, the source row, then
-    exposure, saved shots, the joystick and Fade / Cut / Black / key buttons.
-    Camera controls always act on the camera on Next.
-  - Setup window (⌘,): switcher, source row, key buttons, cameras and their shots,
-    the camera admin login, and a Status tab with a log of every command sent.
-  - Full Switcher window (⇧⌘K): keys, DSKs, styles, T-bar, macros and aux.
+  - One window with two views, switched in the top bar or the View menu:
+    - **Operator** (⌘1, where it always opens), for the booth volunteer: Next and
+      Live monitors, the source row, then exposure, saved shots, the joystick and
+      Fade / Cut / Black / key buttons. Camera controls always act on the camera on Next.
+    - **Engineer** (⌘2), for whoever sets the system up, with a page each for Stage
+      scan (⇧⌘S), Routing (⇧⌘R), the Full switcher (⇧⌘K: keys, DSKs, styles, T-bar,
+      macros, aux), Setup (⌘,: switcher, source row, key buttons, cameras and their
+      shots, the camera admin login) and Status (a log of every command sent). A strip
+      across the top shows what's Live and Next. Space, Return, the number keys and
+      the arrows do nothing here.
+  - Menu bar: **View** (Operator, Engineer), **Switcher** (Cut, Fade, Fade to Black,
+    key buttons), **Camera** (Track ⌘T, Stop All Tracking ⌘., Follow by Name, Focus
+    ⇧⌘F) and **Engineer** (its pages). Switcher and Camera only act from the Operator view.
 - `Sources/CueVideoMCP`: the MCP server Claude uses (see below).
 
 Build: `./build.sh` (or `./build.sh debug`) makes `CueVideo.app`.
@@ -61,7 +68,7 @@ Camera tools refuse a camera that's on Live unless the call says `allow_live: tr
 
 ## Video routing
 
-**Window → Video Routing** (⇧⌘R) shows how pictures reach the screens:
+**Engineer → Routing** (⇧⌘R) shows how pictures reach the screens:
 
 - **Mixes:** what each M/E is for (M/E 1 the live stream, M/E 2 the side screens), what's on it, and quick buttons to switch the mix the volunteer doesn't run.
 - **Screens and outputs:** every aux output, as picture → aux → the screen it feeds and how it's wired. Pick a new picture from the menu and it changes right away. Linked auxes (such as a pair of lobby TVs) switch together. Outputs that feed encoders, recorders or the patch bay can be hidden from volunteers.
@@ -95,7 +102,7 @@ Tracking keeps to one person by what they look like (clothes, build and colourin
 
 ## Stage scan
 
-**Window → Stage Scan** (⇧⌘S), for before a service with everyone in place (rehearsal or soundcheck):
+**Engineer → Stage scan** (⇧⌘S), for before a service with everyone in place (rehearsal or soundcheck):
 
 1. Each Canon camera that isn't on Live, tracking or held by another controller goes to a wide shot, and comes back afterwards. The wide shot is that camera's shot named **Stage** or **Wide** if it has one (worth making: frame the stage as tightly as covers everyone, so people are bigger in the picture). Otherwise it's where the camera points now, zoomed all the way out.
 2. CueVideo finds the people in each wide shot and works out the shot that frames each one from that camera (waist up by default), from the camera's own angles and angle of view.

@@ -5,13 +5,16 @@ struct ContentView: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
-    @Environment(\.openWindow) var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
             TopBar()
             Rectangle().fill(T.line).frame(height: 1)
-            if booth.connectedOnce || atem.link == .online {
+            if booth.view == .engineer {
+                // Reachable before the switcher is found too: Setup is where its address goes.
+                EngineerView()
+                    .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner() }.padding(.top, 44) }
+            } else if booth.connectedOnce || atem.link == .online {
                 VolunteerView()
                     .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner() } }
             } else {
@@ -22,13 +25,17 @@ struct ContentView: View {
         .foregroundStyle(T.ink)
         // Windows opened by Claude through the show_window tool.
         .onReceive(NotificationCenter.default.publisher(for: .cueVideoShowWindow)) { n in
+            // The names from before the Engineer view, when each of these was its own window.
             switch n.object as? String {
-            case "setup": openWindow(id: "setup")
-            case "switcher": openWindow(id: "switcher")
-            case "routing": openWindow(id: "routing")
-            case "scan": openWindow(id: "scan")
-            default: NSApp.windows.first { $0.title == Booth.mainWindowTitle }?.makeKeyAndOrderFront(nil)
+            case "setup": booth.show(.setup)
+            case "switcher": booth.show(.switcher)
+            case "routing": booth.show(.routing)
+            case "scan": booth.show(.scan)
+            case "status": booth.show(.status)
+            case "engineer": booth.view = .engineer
+            default: booth.view = .operate
             }
+            NSApp.windows.first { $0.title == Booth.mainWindowTitle }?.makeKeyAndOrderFront(nil)
         }
     }
 }
@@ -38,11 +45,11 @@ struct TopBar: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
-    @Environment(\.openWindow) var openWindow
 
     var body: some View {
         HStack(spacing: T.s4) {
             Text("CueVideo").font(.sans(16, .bold)).padding(.leading, 64)
+            ViewSwitch()
             LinkPill()
             let down = ptz.cameras.filter { !$0.host.isEmpty && !ptz.online.contains($0.id) }
             let waiting = ptz.cameras.filter { ptz.online.contains($0.id) && !ptz.hasControl($0) }
@@ -64,7 +71,7 @@ struct TopBar: View {
                          on: atem.state.streaming || atem.state.streamConnecting, color: atem.state.streaming ? T.program : T.warning) {
                 atem.setStreaming(!(atem.state.streaming || atem.state.streamConnecting))
             } }
-            Button { openWindow(id: "setup") } label: { Image(systemName: "gearshape").font(.system(size: 15)) }
+            Button { booth.show(.setup) } label: { Image(systemName: "gearshape").font(.system(size: 15)) }
                 .buttonStyle(.plain).foregroundStyle(T.inkMuted).help("Setup and status (⌘,)")
         }
         .padding(.horizontal, T.s4)

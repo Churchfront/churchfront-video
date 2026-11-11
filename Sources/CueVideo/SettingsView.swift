@@ -71,7 +71,6 @@ struct SetupTab: View {
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
     @EnvironmentObject var store: ConfigStore
-    @Environment(\.openWindow) var openWindow
     @State private var host = ""
 
     var body: some View {
@@ -101,7 +100,7 @@ struct SetupTab: View {
                     Text("\(atem.state.product), protocol \(atem.state.version)").font(.sans(12)).foregroundStyle(T.inkMuted)
                 }
                 Spacer()
-                Button("Open Full Switcher") { openWindow(id: "switcher") }
+                Button("Open Full Switcher") { booth.show(.switcher) }
             }
             if atem.state.meCount > 1 {
                 HStack {
