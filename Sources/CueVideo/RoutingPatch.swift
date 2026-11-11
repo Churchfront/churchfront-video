@@ -1,6 +1,13 @@
 import SwiftUI
 import CueATEM
 
+/// Whether a source has a live picture to show (a mix shows what's live on it).
+func sourceHasPicture(_ input: Int?, _ state: ATEMState, _ ptz: PTZController, _ store: ConfigStore) -> Bool {
+    guard var id = input else { return false }
+    if (10000..<11000).contains(id), id % 10 == 0 { id = state.program[(id - 10000) / 10 - 1] ?? id }
+    return ptz.cameras.contains { $0.atemInput == id && $0.proto == .canonXC && !$0.host.isEmpty } || store.ndi(id) != nil
+}
+
 /// A source's live picture, for anywhere one is shown small: the camera's own preview, the
 /// NDI picture set for it, or its name. A mix output shows whatever is live on that mix.
 struct SourcePicture: View {
@@ -87,12 +94,7 @@ struct RoutingSchematic: View {
 
     private func isMix(_ id: Int) -> Bool { (10000..<11000).contains(id) }
 
-    /// Whether a source has a live picture to show (a mix shows what's live on it).
-    private func hasPicture(_ input: Int?) -> Bool {
-        guard var id = input else { return false }
-        if isMix(id), id % 10 == 0 { id = atem.state.program[(id - 10000) / 10 - 1] ?? id }
-        return ptz.cameras.contains { $0.atemInput == id && $0.proto == .canonXC && !$0.host.isEmpty } || store.ndi(id) != nil
-    }
+    private func hasPicture(_ input: Int?) -> Bool { sourceHasPicture(input, atem.state, ptz, store) }
 
     /// A port that only goes to a patch bay tie line, by its name.
     private func isSpare(_ name: String) -> Bool {
@@ -403,7 +405,7 @@ struct RoutingSchematic: View {
                 Text(shortMix(m.me)).font(.sans(14, .bold)).lineLimit(1)
                 Text("M/E \(m.me + 1)").font(.sans(11)).foregroundStyle(T.inkSubtle)
                 Spacer(minLength: 0)
-                Text(mine ? "Run from the Operator view" : "Drop a source to put it live")
+                Text(mine ? "Run from Operate" : "Drop a source to put it live")
                     .font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1).minimumScaleFactor(0.8)
                 MixNameButton(me: m.me)
             }
@@ -422,7 +424,7 @@ struct RoutingSchematic: View {
             if let sel = selected, !isMix(sel), !mine { putLive(sel, m.me) } else { selected = selected == m.output ? nil : m.output }
         }
         .draggable(m.output, self, L, w)
-        .help(mine ? "\(store.mixName(m.me)): what the Operator view cuts and fades. Drag it onto a destination to send it there."
+        .help(mine ? "\(store.mixName(m.me)): what Operate cuts and fades. Drag it onto a destination to send it there."
                    : "\(store.mixName(m.me)): drop a source here to put it live, or drag this onto a destination")
     }
 

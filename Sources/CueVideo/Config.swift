@@ -61,6 +61,9 @@ struct ScreenOutput: Codable, Hashable, Identifiable {
     var note: String?
     /// Shown in the volunteer's screen summary. Off for encoders, recorders and patch bay feeds.
     var volunteer: Bool?
+    /// Shown as a small live preview in the top bar. Until any screen says either way, the
+    /// first three volunteer screens are.
+    var pinned: Bool?
     var id: String { name + aux.map(String.init).joined(separator: ",") }
     var forVolunteers: Bool { volunteer ?? true }
 }
@@ -282,6 +285,22 @@ final class ConfigStore: ObservableObject {
     }
 
     /// The screen an aux (from 1) feeds, if named.
+    /// The screens previewed in the top bar, four at most so the bar stays one row.
+    var pinnedScreens: [ScreenOutput] {
+        let all = config.screens
+        if all.contains(where: { $0.pinned != nil }) { return Array(all.filter { $0.pinned == true }.prefix(4)) }
+        return Array(all.filter(\.forVolunteers).prefix(3))
+    }
+
+    /// Pins or unpins a screen, first writing down which ones were pinned by default so
+    /// the others don't change.
+    func setPinned(_ id: String, _ on: Bool) {
+        let now = Set(pinnedScreens.map(\.id))
+        update { c in
+            for i in c.screens.indices { c.screens[i].pinned = c.screens[i].id == id ? on : now.contains(c.screens[i].id) }
+        }
+    }
+
     func screen(aux: Int) -> ScreenOutput? { config.screens.first { $0.aux.contains(aux) } }
 
     func label(_ input: Int?, _ state: ATEMState) -> String {
