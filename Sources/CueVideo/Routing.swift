@@ -110,6 +110,7 @@ struct RoutingWindow: View {
     @State private var newButton = false
     @AppStorage("routingShowFeeds") private var showFeeds = false
     @AppStorage("routingShowSpare") private var showSpare = false
+    @AppStorage("routingShowNames") private var showNames = false
 
     private let columns = [GridItem(.adaptive(minimum: 250, maximum: 380), spacing: T.s3, alignment: .top)]
 
@@ -124,7 +125,7 @@ struct RoutingWindow: View {
         let screens = store.config.screens.filter(\.forVolunteers)
         let feeds = store.config.screens.filter { !$0.forVolunteers }
         Page {
-            PageHeader(title: "Routing", purpose: "Which picture goes to which screen. A change here happens right away.",
+            PageHeader(title: "Routing", purpose: "Which picture goes to which screen. Drag a picture onto a screen to change it right away.",
                        help: "Each switcher aux output feeds a screen or a piece of gear. Name the outputs, note how they're wired, and choose what each one shows. Outputs listed together (such as a pair of lobby TVs) switch together. Outputs that feed encoders, recorders or the patch bay can be hidden from operators so nobody changes the stream by accident.")
             mixes
             VStack(alignment: .leading, spacing: T.s3) {
@@ -136,8 +137,14 @@ struct RoutingWindow: View {
                     Text("No screens named yet. Open \"Outputs not named yet\" below and name the ones that feed screens.")
                         .font(.sans(13)).foregroundStyle(T.inkMuted)
                 }
-                LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
-                    ForEach(screens) { ScreenCard(screen: $0) }
+                if !screens.isEmpty { PatchView(screens: screens) }
+            }
+            if !screens.isEmpty {
+                // Names, which outputs feed each screen, and how they're wired.
+                Fold(title: "Screen names and wiring", count: screens.count, open: $showNames) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: T.s3) {
+                        ForEach(screens) { ScreenCard(screen: $0) }
+                    }
                 }
             }
             if !feeds.isEmpty {
