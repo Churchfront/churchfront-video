@@ -46,8 +46,8 @@ struct SourcePicture: View {
 /// The mixes (M/Es) lead the left column, because to an output a mix is a source like any
 /// other. Each is drawn as a small switcher showing its Live and Next; the sources that
 /// are Live or Next on a mix carry a tag saying so, rather than a wire into it. So a wire
-/// only ever means "this output shows that". Wires run square, each in its own lane in the
-/// gap between the columns. Drag a source or a mix onto a destination (or click one, then
+/// only ever means "this output shows that". Each wire is a curve across the gap between
+/// the columns, and all of a source's wires leave it from one point. Drag a source or a mix onto a destination (or click one, then
 /// the other) to change it right away; drop a source on a mix to put it live there.
 struct RoutingSchematic: View {
     @EnvironmentObject var booth: Booth
@@ -74,8 +74,8 @@ struct RoutingSchematic: View {
     struct Dst { let screen: ScreenOutput; let frame: CGRect; let pic: Bool; let source: Int?; let mixed: Bool; let locked: Bool }
     struct Mix { let me: Int; let frame: CGRect; let live: CGRect; let next: CGRect; let pic: Bool; let nextPic: Bool
         var output: Int { 10010 + me * 10 } }
-    /// One wire, as the corners it turns at, plus where branches leave it.
-    struct Wire { let from: Int; let color: Color; var dashed = false; var runs: [[CGPoint]]; var dots: [CGPoint] = [] }
+    /// The wires from one source: where they all leave it, and where each one arrives.
+    struct Wire { let from: Int; let color: Color; let start: CGPoint; var ends: [CGPoint] }
     struct Layout { var heads: [Head] = [], srcs: [Src] = [], dsts: [Dst] = [], mixes: [Mix] = [], wires: [Wire] = []
         var colors: [Int: Color] = [:]; var height: CGFloat = 0 }
 
@@ -186,10 +186,9 @@ struct RoutingSchematic: View {
 
         L.height = max(sBottom, dBottom)
 
-        // Wires: one per thing that feeds an output, each in its own lane in the gap. A
-        // trunk runs down the lane with a branch to every destination showing it.
-        let gutter = max(60, w - sw - dw)
-        var lane = 0, color = 0
+        // Wires: a curve from each destination back to what feeds it. All of a source's
+        // curves leave from one point, so a mix feeding five outputs reads as one fan.
+        var color = 0
         func nextColor() -> Color { color += 1; return Self.palette[(color - 1) % Self.palette.count] }
         var origins: [(id: Int, y: CGFloat)] = L.mixes.map { ($0.output, $0.frame.midY) }
         for m in L.mixes { L.colors[m.output] = nextColor() }
@@ -199,15 +198,7 @@ struct RoutingSchematic: View {
             guard !ys.isEmpty else { continue }
             let c = L.colors[o.id] ?? nextColor()
             L.colors[o.id] = c
-            lane += 1
-            let x = sw + min(gutter - 14, 6 + CGFloat(lane) * 11)
-            var wire = Wire(from: o.id, color: c, runs: [[CGPoint(x: sw, y: o.y), CGPoint(x: x, y: o.y)],
-                                                         [CGPoint(x: x, y: min(o.y, ys.min()!)), CGPoint(x: x, y: max(o.y, ys.max()!))]])
-            for d in ys {
-                wire.runs.append([CGPoint(x: x, y: d), CGPoint(x: w - dw, y: d)])
-                if ys.count > 1 { wire.dots.append(CGPoint(x: x, y: d)) }
-            }
-            L.wires.append(wire)
+            L.wires.append(Wire(from: o.id, color: c, start: CGPoint(x: sw, y: o.y), ends: ys.map { CGPoint(x: w - dw, y: $0) }))
         }
         return L
     }
@@ -229,14 +220,18 @@ struct RoutingSchematic: View {
                 ZStack(alignment: .topLeading) {
                     Canvas { ctx, _ in
                         for wire in L.wires {
-                            let dim = focus != nil && focus != wire.from && !(isMix(focus!) && wire.from == focus)
+                            let dim = focus != nil && focus != wire.from
+                            let c = wire.color.opacity(dim ? 0.15 : 1)
+                            // Leaves flat, bends through the gap, arrives flat.
                             var p = Path()
-                            for run in wire.runs { p.addLines(run) }
-                            ctx.stroke(p, with: .color(wire.color.opacity(dim ? 0.15 : 1)),
-                                       style: StrokeStyle(lineWidth: wire.dashed ? 2 : 3, lineCap: .round, lineJoin: .round, dash: wire.dashed ? [6, 6] : []))
-                            for d in wire.dots {
-                                ctx.fill(Path(ellipseIn: CGRect(x: d.x - 4, y: d.y - 4, width: 8, height: 8)), with: .color(wire.color.opacity(dim ? 0.15 : 1)))
+                            for e in wire.ends {
+                                let reach = (e.x - wire.start.x) * 0.5
+                                p.move(to: wire.start)
+                                p.addCurve(to: e, control1: CGPoint(x: wire.start.x + reach, y: wire.start.y), control2: CGPoint(x: e.x - reach, y: e.y))
                             }
+                            ctx.stroke(p, with: .color(c), style: StrokeStyle(lineWidth: focus == wire.from ? 4 : 3, lineCap: .round))
+                            ctx.fill(Path(ellipseIn: CGRect(x: wire.start.x - 5, y: wire.start.y - 5, width: 10, height: 10)), with: .color(c))
+                            for e in wire.ends { ctx.fill(Path(ellipseIn: CGRect(x: e.x - 4, y: e.y - 4, width: 8, height: 8)), with: .color(c)) }
                         }
                         if let drag {
                             ctx.stroke(Path(ellipseIn: CGRect(x: drag.at.x - 7, y: drag.at.y - 7, width: 14, height: 14)), with: .color(T.accent), lineWidth: 2)
