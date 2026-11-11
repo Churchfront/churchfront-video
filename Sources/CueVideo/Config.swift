@@ -150,6 +150,9 @@ struct CueConfig: Codable, Equatable {
     var trackZoom = true
     /// What each M/E is for, counted from 1: ["Live stream", "Side screens"].
     var mixNames: [String] = []
+    /// NDI pictures for switcher inputs that aren't in the volunteer's source row, by input
+    /// number: { "4": "CG-MAC (CueScreens Stage)" }. Shown wherever that input's picture is.
+    var pictures: [String: String] = [:]
     /// The screens and other destinations the aux outputs feed.
     var screens: [ScreenOutput] = []
     /// Volunteer routing buttons, bottom right of the main window.
@@ -160,7 +163,7 @@ struct CueConfig: Codable, Equatable {
 
     init() {}
 
-    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, screens, routes, framing, trackTuning }
+    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -174,6 +177,7 @@ struct CueConfig: Codable, Equatable {
         trackTilt = try c.decodeIfPresent(Bool.self, forKey: .trackTilt) ?? true
         trackZoom = try c.decodeIfPresent(Bool.self, forKey: .trackZoom) ?? true
         mixNames = try c.decodeIfPresent([String].self, forKey: .mixNames) ?? []
+        pictures = try c.decodeIfPresent([String: String].self, forKey: .pictures) ?? [:]
         screens = try c.decodeIfPresent([ScreenOutput].self, forKey: .screens) ?? []
         routes = try c.decodeIfPresent([RouteButton].self, forKey: .routes) ?? []
         framing = try c.decodeIfPresent([String: FramingRule].self, forKey: .framing) ?? [:]
@@ -247,8 +251,18 @@ final class ConfigStore: ObservableObject {
 
     /// The NDI picture set for a source, if any.
     func ndi(_ input: Int?) -> String? {
-        guard let input, let n = config.sources.first(where: { $0.input == input })?.ndi, !n.isEmpty else { return nil }
-        return n
+        guard let input else { return nil }
+        if let n = config.sources.first(where: { $0.input == input })?.ndi, !n.isEmpty { return n }
+        if let n = config.pictures["\(input)"], !n.isEmpty { return n }
+        return nil
+    }
+
+    /// Sets or clears an input's NDI picture: on its source row entry if it has one, else in `pictures`.
+    func setPicture(_ input: Int, _ ndi: String?) {
+        update { c in
+            if let i = c.sources.firstIndex(where: { $0.input == input }) { c.sources[i].ndi = ndi }
+            else { c.pictures["\(input)"] = (ndi ?? "").isEmpty ? nil : ndi }
+        }
     }
 
     /// What an M/E is for: "Live stream (M/E 1)", or just "M/E 2".

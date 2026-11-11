@@ -360,8 +360,11 @@ struct RoutingSchematic: View {
             Text(store.label(s.id, atem.state)).font(.sans(s.pic ? 14 : 13, .semibold)).lineLimit(2).minimumScaleFactor(0.8)
             Spacer(minLength: 0)
             if (1...999).contains(s.id) { port("IN \(s.id)") }
+            if (1...999).contains(s.id), !ptz.cameras.contains(where: { $0.atemInput == s.id && $0.proto == .canonXC && !$0.host.isEmpty }) {
+                SourcePictureButton(input: s.id)
+            }
         }
-        .padding(.leading, s.pic ? 4 : 10).padding(.trailing, 8)
+        .padding(.leading, s.pic ? 4 : 10).padding(.trailing, 4)
         .frame(width: s.frame.width, height: s.frame.height)
         .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
         .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(on ? T.accent : (c ?? T.line), lineWidth: on ? 3 : (c == nil ? 1 : 2)))
@@ -542,6 +545,28 @@ struct MixNameButton: View {
                     HStack { Spacer(); Button("Done") { editing = false }.buttonStyle(CueButton(kind: .primary)) }
                 }
                 .padding(T.s4).foregroundStyle(T.ink)
+            }
+    }
+}
+
+/// The pencil on a source: the NDI picture that shows what this switcher input carries.
+struct SourcePictureButton: View {
+    let input: Int
+    @EnvironmentObject var atem: ATEMClient
+    @EnvironmentObject var store: ConfigStore
+    @State private var editing = false
+
+    var body: some View {
+        IconButton(icon: "pencil", help: "Choose a live picture for this source") { editing = true }
+            .popover(isPresented: $editing, arrowEdge: .trailing) {
+                VStack(alignment: .leading, spacing: T.s2) {
+                    Text("Picture for \(store.label(input, atem.state))").font(.sans(14, .bold))
+                    Text("An NDI source showing what switcher input \(input) carries. It's only for looking at here; it changes nothing on the switcher.")
+                        .font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
+                    NDIPicker(selection: store.ndi(input), none: "No picture, just the name") { store.setPicture(input, $0) }
+                    HStack { Spacer(); Button("Done") { editing = false }.buttonStyle(CueButton(kind: .primary)) }
+                }
+                .padding(T.s4).frame(width: 340).foregroundStyle(T.ink)
             }
     }
 }

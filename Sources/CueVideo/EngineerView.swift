@@ -8,7 +8,7 @@ enum AppView: String {
     case operate, engineer
 }
 
-/// The pages of the Engineer view, down its side.
+/// The pages of the Engineer view, as tabs across its top.
 enum EngineerSection: String, CaseIterable, Identifiable {
     case scan, routing, switcher, setup, status
     var id: String { rawValue }
@@ -69,8 +69,9 @@ struct ViewSwitch: View {
     }
 }
 
-/// The Engineer view: what's on air across the top (so nobody loses track of the service
-/// while they're in here), the pages down the side, and the chosen page.
+/// The Engineer view: one strip across the top with what's on air (so nobody loses track
+/// of the service while they're in here) and the page tabs, then the chosen page using
+/// the whole window.
 struct EngineerView: View {
     @EnvironmentObject var booth: Booth
 
@@ -78,17 +79,7 @@ struct EngineerView: View {
         VStack(spacing: 0) {
             OnAirStrip()
             Rectangle().fill(T.line).frame(height: 1)
-            HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(EngineerSection.allCases) { s in row(s) }
-                    Spacer()
-                }
-                .padding(T.s2)
-                .frame(width: 210)
-                .background(T.surface)
-                Rectangle().fill(T.line).frame(width: 1)
-                page.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            page.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .background(T.bg)
     }
@@ -101,25 +92,6 @@ struct EngineerView: View {
         case .setup: SetupTab()
         case .status: StatusTab()
         }
-    }
-
-    private func row(_ s: EngineerSection) -> some View {
-        let on = booth.section == s
-        return Button { booth.section = s } label: {
-            HStack(spacing: T.s2) {
-                Image(systemName: s.icon).font(.system(size: 13)).frame(width: 20)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(s.title).font(.sans(13, .semibold))
-                    Text(s.note).font(.sans(11)).opacity(0.75).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(on ? T.onAction : T.ink)
-            .padding(.horizontal, T.s2).frame(height: 44)
-            .background(RoundedRectangle(cornerRadius: T.rMD).fill(on ? T.accent : Color.clear))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -138,9 +110,30 @@ struct OnAirStrip: View {
             if s.ftbBlack[booth.me] ?? false {
                 Text("Faded to black").font(.sans(12, .bold)).foregroundStyle(T.warning)
             }
-            Spacer()
-            Text("Space, Return and the number keys do nothing in this view.")
-                .font(.sans(12)).foregroundStyle(T.inkSubtle)
+            Spacer(minLength: T.s3)
+            // The pages. In the middle of the strip, so each page gets the full width below.
+            HStack(spacing: 2) {
+                ForEach(EngineerSection.allCases) { sec in
+                    let on = booth.section == sec
+                    Button { booth.section = sec } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: sec.icon).font(.system(size: 12))
+                            Text(sec.title).font(.sans(13, .semibold)).lineLimit(1)
+                        }
+                        .foregroundStyle(on ? T.onAction : T.inkMuted)
+                        .padding(.horizontal, T.s3).frame(height: 28)
+                        .background(RoundedRectangle(cornerRadius: T.rSM).fill(on ? T.accent : Color.clear))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(sec.note)
+                }
+            }
+            .padding(2)
+            .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
+            .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
+            .fixedSize()
+            Spacer(minLength: T.s3)
             Button { booth.view = .operate } label: {
                 Text("Back to Operator").font(.sans(12, .semibold)).foregroundStyle(T.ink)
                     .padding(.horizontal, T.s3).frame(height: 26)
@@ -148,6 +141,7 @@ struct OnAirStrip: View {
                     .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
             }
             .buttonStyle(.plain)
+            .help("Space, Return and the number keys do nothing in the Engineer view, so they can't cut or fade from here.")
         }
         .padding(.horizontal, T.s4).frame(height: 44)
         .background(T.surface)
