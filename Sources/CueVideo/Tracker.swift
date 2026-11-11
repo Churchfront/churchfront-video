@@ -79,6 +79,8 @@ struct TrackedPerson {
     var anklesInShot = false
     /// -1 facing left in the picture, 1 facing right, 0 toward the camera or unclear.
     var facing = 0
+    /// What they look like, for telling people apart. Nil when they're too small to tell.
+    var appearance: Appearance?
 
     var size: ShotSize? { ShotSize.classify(scale: scale, anklesInShot: anklesInShot, hipsInShot: hipsInShot) }
 }
@@ -144,6 +146,20 @@ final class AutoTracker: ObservableObject {
         var holdLearnUntil = Date.distantPast
         /// Walking: the direction they've been clearly moving, and since when.
         var walkX = 0, walkXSince = Date(), walkY = 0, walkYSince = Date()
+
+        // Who it's following. A few pictures of what they look like (the first `anchors` are
+        // kept for good: the ones from the stage scan, or the first sight of them; the rest
+        // are the most recent), so the camera stays with them when people cross and waits
+        // for them, not the nearest person, after losing sight.
+        /// Their name from the stage scan, when following someone by name.
+        var person: String?
+        var gallery: [Appearance] = []
+        var anchors = 1
+        var galleryAt = Date.distantPast
+        /// How much their own look varies, and how different the people near them look.
+        var ownLook: Double?, otherLook: Double?
+        /// Since when they've been the only person around (then it's safe to learn their look).
+        var aloneSince: Date?
     }
 
     @Published private(set) var sessions: [UUID: Session] = [:]
@@ -174,13 +190,25 @@ final class AutoTracker: ObservableObject {
     /// nearest it; without one, the person nearest the middle. `size` frames them as that
     /// shot; without one, as whichever shot the camera is closest to now. `done` gets nil
     /// once someone is found, or the reason no one was.
-    func start(_ camera: PTZCamera, at point: CGPoint? = nil, size: ShotSize? = nil, done: ((String?) -> Void)? = nil) {
+    /// `person` follows someone labelled in the last stage scan, by name, wherever they are in the shot.
+    func start(_ camera: PTZCamera, at point: CGPoint? = nil, size: ShotSize? = nil, person: String? = nil, done: ((String?) -> Void)? = nil) {
         stop(camera.id)
         guard camera.proto == .canonXC, !camera.host.isEmpty else {
             done?("Auto tracking needs the camera's preview picture, which only Canon cameras give CueVideo.")
             return
         }
         var s = Session(camera: camera.id)
+        if let person {
+            guard let cast = StageCast.shared.look(person) else {
+                let names = StageCast.shared.names
+                done?(names.isEmpty ? "No one has been labelled yet. Run a stage scan first."
+                                    : "No one called \(person) in the last stage scan. It has: \(names.joined(separator: ", ")).")
+                return
+            }
+            s.person = cast.name
+            s.gallery = Array(cast.looks.prefix(4))
+            s.anchors = s.gallery.count
+        }
         s.pick = point
         s.asked = size
         if let a = s.asked { s.size = a }
@@ -301,6 +329,9 @@ final class AutoTracker: ObservableObject {
             if found.contains(where: { $0.box.intersects(box) && box.contains($0.eye) }) { continue }
             found.append(TrackedPerson(box: box, eye: CGPoint(x: box.midX, y: box.minY + box.height * 0.12)))
         }
+        // What each person looks like (the biggest few in the shot), to tell them apart.
+        let biggest = found.indices.sorted { found[$0].box.width * found[$0].box.height > found[$1].box.width * found[$1].box.height }
+        for i in biggest.prefix(6) { found[i].appearance = Appearance.of(img, box: found[i].box) }
         return found
     }
 
@@ -311,9 +342,15 @@ final class AutoTracker: ObservableObject {
         s.lastFrame = now
 
         if s.target == nil {
-            // First sight: take the person under the click, or nearest it (the middle by default).
-            let p = s.pick ?? CGPoint(x: 0.5, y: 0.5)
-            let pick = people.first { $0.box.contains(p) } ?? people.min { dist($0.box.center, p) < dist($1.box.center, p) }
+            let pick: TrackedPerson?
+            if s.person != nil {
+                // Someone named in the stage scan: whoever looks like them, wherever they stand.
+                pick = IdentityMatch.find(people.map { $0.appearance?.distance(to: s.gallery) }).map { people[$0] }
+            } else {
+                // First sight: take the person under the click, or nearest it (the middle by default).
+                let p = s.pick ?? CGPoint(x: 0.5, y: 0.5)
+                pick = people.first { $0.box.contains(p) } ?? people.min { dist($0.box.center, p) < dist($1.box.center, p) }
+            }
             if let pick {
                 s.target = pick
                 s.eye = pick.eye
@@ -326,21 +363,28 @@ final class AutoTracker: ObservableObject {
                 s.holdLearnUntil = now.addingTimeInterval(1.5)
                 s.lastSeen = now
                 s.phase = .following
+                if s.gallery.isEmpty, let look = pick.appearance { s.gallery = [look]; s.anchors = 1; s.galleryAt = now }
                 sessions[id] = s
                 finish(id, nil)
                 return
             }
             sessions[id] = s
-            if now.timeIntervalSince(s.started) > 4 { finish(id, "No one is in the picture.") }
+            if now.timeIntervalSince(s.started) > 4 { finish(id, notFound(s)) }
             return
         }
 
-        // Keep hold of the same person: the nearest one to where they were, if close enough.
+        // Keep hold of the same person: by where they were and by what they look like.
         let last = s.target!
         let gone = now.timeIntervalSince(s.lastSeen)
         let reach = min(0.5, 0.2 + max(last.box.width, last.box.height) * 0.6 + gone * 0.15)
-        let next = people.min { dist($0.box.center, last.box.center) < dist($1.box.center, last.box.center) }
-        if let next, dist(next.box.center, last.box.center) < reach {
+        let candidates = people.map { p in
+            IdentityMatch.Candidate(position: dist(p.box.center, last.box.center),
+                                    appearance: s.gallery.isEmpty ? nil : p.appearance?.distance(to: s.gallery))
+        }
+        let choice = IdentityMatch.choose(candidates, reach: reach, gone: gone, model: .init(own: s.ownLook, others: s.otherLook))
+        if case let .take(i, sure) = choice {
+            let next = people[i]
+            learn(&s, next, candidates, i, sure: sure, reach: reach, gone: gone, now: now)
             s.target = next
             s.lastSeen = now
             s.phase = .following
@@ -354,6 +398,31 @@ final class AutoTracker: ObservableObject {
             s.phase = gone > 5 ? .lost : .searching
         }
         sessions[id] = s
+    }
+
+    /// Learns what the followed person looks like, only from frames where it's certain who
+    /// they are: their look confirmed it, or they've been the only person around for a second.
+    /// Two people crossing never teaches it the wrong one.
+    private func learn(_ s: inout Session, _ next: TrackedPerson, _ candidates: [IdentityMatch.Candidate], _ i: Int,
+                       sure: Bool, reach: Double, gone: Double, now: Date) {
+        let alone = candidates.filter { $0.position < reach * 1.5 }.count == 1
+        if !alone { s.aloneSince = nil } else if s.aloneSince == nil { s.aloneSince = now }
+        let settled = gone < 0.7 && (s.aloneSince.map { now.timeIntervalSince($0) > 1 } ?? false)
+        guard sure || settled, let look = next.appearance else { return }
+        if let d = candidates[i].appearance { s.ownLook = s.ownLook.map { $0 + (d - $0) * 0.2 } ?? d }
+        if sure {
+            for (j, c) in candidates.enumerated() where j != i && c.position < reach * 1.5 {
+                if let d = c.appearance { s.otherLook = s.otherLook.map { $0 + (d - $0) * 0.2 } ?? d }
+            }
+        }
+        guard now.timeIntervalSince(s.galleryAt) > 0.7 else { return }
+        s.galleryAt = now
+        if s.gallery.count >= 6, s.gallery.count > s.anchors { s.gallery.remove(at: s.anchors) }
+        if s.gallery.count < 6 { s.gallery.append(look) }
+    }
+
+    private func notFound(_ s: Session) -> String {
+        s.person.map { "Can't see \($0) in the picture." } ?? "No one is in the picture."
     }
 
     /// Pan, tilt and zoom toward the framing for this shot size.
@@ -536,7 +605,7 @@ final class AutoTracker: ObservableObject {
             sessions[id] = s
         }
         for (id, s) in sessions where s.target == nil && now.timeIntervalSince(s.started) > 4 {
-            finish(id, "No one is in the picture, or the picture isn't coming in.")
+            finish(id, s.person.map { "Can't see \($0) in the picture, or the picture isn't coming in." } ?? "No one is in the picture, or the picture isn't coming in.")
         }
     }
 

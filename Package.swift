@@ -23,5 +23,6 @@ let package = Package(
         ),
         // Runs the camera code against pretend cameras on this Mac: swift test
         .testTarget(name: "CueATEMTests", dependencies: ["CueATEM"], path: "Tests/CueATEMTests"),
+        .testTarget(name: "CueVideoTests", dependencies: ["CueVideo", "CueATEM"], path: "Tests/CueVideoTests"),
     ]
 )

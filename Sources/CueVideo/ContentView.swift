@@ -26,6 +26,7 @@ struct ContentView: View {
             case "setup": openWindow(id: "setup")
             case "switcher": openWindow(id: "switcher")
             case "routing": openWindow(id: "routing")
+            case "scan": openWindow(id: "scan")
             default: NSApp.windows.first { $0.title == Booth.mainWindowTitle }?.makeKeyAndOrderFront(nil)
             }
         }

@@ -89,6 +89,21 @@ The Close / Waist / Full buttons under Track reframe the shot. Zooming by hand k
 
 The preview runs slightly behind real time, so tracking suits someone walking the stage, not running. Follow speed (0.5 to 2), tilt on/off and zoom-to-hold-size are in Setup and the config file (`trackSpeed`, `trackTilt`, `trackZoom`). The framing numbers live in `ShotSize` in `Tracker.swift`. Claude can use `start_tracking`, `set_tracking_shot` and `stop_tracking`.
 
+### Telling people apart
+
+Tracking keeps to one person by what they look like (clothes, build and colouring, worked out on this Mac with Apple's Vision framework), as well as by where they were. When two people cross it stays with the one it was following. After losing sight it waits for that person and does not pick up whoever is nearest; the badge says "Lost them, looking" until they're back, and clicking a person on the picture follows them instead. It is not face recognition and stores nothing between runs. People dressed alike are harder to tell apart: then it carries on by position while they're in sight.
+
+## Stage scan
+
+**Window → Stage Scan** (⇧⌘S), for before a service with everyone in place (rehearsal or soundcheck):
+
+1. Each Canon camera that isn't on Live, tracking or held by another controller goes to a wide shot, and comes back afterwards. The wide shot is that camera's shot named **Stage** or **Wide** if it has one (worth making: frame the stage as tightly as covers everyone, so people are bigger in the picture). Otherwise it's where the camera points now, zoomed all the way out.
+2. CueVideo finds the people in each wide shot and works out the shot that frames each one from that camera (waist up by default), from the camera's own angles and angle of view.
+3. It shows a small picture of each person per camera. A letter marks its guess at the same person on another camera. Type a name or role under one and the others with that letter fill in; fix any it got wrong.
+4. **Save shots and names** adds a shot per labelled person to each camera's row in the shot grid (replacing the last scan's; shots made by hand are kept, and marked `"auto": true` in the config file), and remembers each person's look. Under Track, **Follow by name** then follows that person wherever they are in the shot. Names last until CueVideo quits.
+
+The shots are for where people stood during the scan. Claude can use `scan_stage`, `label_stage_scan` and `start_tracking` with `person`.
+
 ## Canon cameras take one controller at a time
 
 Only one session controls a Canon camera at a time. If another controller (another
