@@ -88,9 +88,40 @@ struct BusMonitor: View {
     @EnvironmentObject var store: ConfigStore
     @ObservedObject var tracker = AutoTracker.shared
 
-    var camera: PTZCamera? {
+    /// Held over Live for a moment after a fade ends, if the switcher reports the fade
+    /// finished before it reports the new Live source, so the old shot can't flash back.
+    @State private var tail: Int?
+
+    var camera: PTZCamera? { camera(on: input) }
+
+    func camera(on input: Int?) -> PTZCamera? {
         guard let input else { return nil }
         return ptz.cameras.first { $0.atemInput == input && $0.proto == .canonXC && !$0.host.isEmpty }
+    }
+
+    /// The shot coming in while a fade runs, and how far in it is (0 to 1).
+    struct Incoming: Equatable { var input: Int?; var amount: Double; var dip: Bool }
+
+    /// Live shows the fade the way the switcher's output does: Next comes in over Live as
+    /// the transition runs. Only when the transition takes the background (not just a key).
+    var incoming: Incoming? {
+        guard title == "Live" else { return nil }
+        let s = atem.state, me = booth.me
+        guard s.inTransition[me] == true, (s.nextSelection[me] ?? 1) & 1 != 0 else { return nil }
+        return Incoming(input: s.preview[me], amount: min(1, max(0, s.position[me] ?? 0)), dip: s.style[me] == 1)
+    }
+
+    /// A source's picture: the camera's own preview, its NDI picture, or its name.
+    @ViewBuilder func picture(_ input: Int?, pick: Bool) -> some View {
+        if let camera = camera(on: input) {
+            CameraVideo(camera: camera, onPick: pick ? self.pick(camera) : nil).id(camera.id)
+        } else if let n = store.ndi(input) {
+            NDIVideo(source: n).id(n)
+        } else {
+            Text(store.label(input, atem.state))
+                .font(.sans(34, .bold)).foregroundStyle(T.inkMuted)
+                .lineLimit(2).minimumScaleFactor(0.4).multilineTextAlignment(.center).padding(T.s6)
+        }
     }
 
     var keyOverlays: [String] {
@@ -114,14 +145,20 @@ struct BusMonitor: View {
     var body: some View {
         ZStack {
             Color.black
-            if let camera {
-                CameraVideo(camera: camera, onPick: pick(camera)).id(camera.id)
-            } else if let n = store.ndi(input) {
-                NDIVideo(source: n).id(n)
-            } else {
-                Text(store.label(input, atem.state))
-                    .font(.sans(34, .bold)).foregroundStyle(T.inkMuted)
-                    .lineLimit(2).minimumScaleFactor(0.4).multilineTextAlignment(.center).padding(T.s6)
+            picture(input, pick: true)
+            if let f = incoming {
+                // A mix is Next laid over Live, more solid as it goes. A dip goes down to
+                // black by halfway, then up to Next.
+                let showNext = f.dip ? f.amount >= 0.5 : true
+                ZStack {
+                    Color.black
+                    if showNext { picture(f.input, pick: false) }
+                }
+                .opacity(f.dip ? (f.amount < 0.5 ? f.amount * 2 : 1) : f.amount)
+                .allowsHitTesting(false)
+                if f.dip, f.amount >= 0.5 { Color.black.opacity((1 - f.amount) * 2).allowsHitTesting(false) }
+            } else if let tail, tail != input {
+                ZStack { Color.black; picture(tail, pick: false) }.allowsHitTesting(false)
             }
             // Lower thirds and other keys with an NDI picture, laid over the shot when the
             // key is on it: on Live when it's on air, on Next when it will be after the take.
@@ -151,6 +188,12 @@ struct BusMonitor: View {
         }
         .aspectRatio(16 / 9, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: incoming) { old, new in
+            guard new == nil, let old, old.amount > 0.5, let to = old.input, to != input else { return }
+            tail = to
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { if tail == to { tail = nil } }
+        }
+        .onChange(of: input) { _, _ in tail = nil }
     }
 }
 
@@ -687,35 +730,59 @@ struct TakePanel: View {
 
     var body: some View {
         let me = booth.me
-        let fading = atem.state.inTransition[me] ?? false
-        let black = atem.state.ftbBlack[me] ?? false
+        let s = atem.state
+        let fading = s.inTransition[me] ?? false
+        let black = s.ftbBlack[me] ?? false
         VStack(alignment: .leading, spacing: T.s3) {
             StepLabel(n: 3, text: "Take it live")
-            Button { atem.auto(me: me) } label: {
-                Text(fading ? "FADING" : "FADE").font(.sans(24, .bold)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).frame(height: 84)
-                    .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.program.opacity(fading ? 0.6 : 1)))
+            // The two ways to take Next live, side by side and the same size.
+            HStack(spacing: T.s2) {
+                Button { atem.auto(me: me) } label: {
+                    VStack(spacing: 2) {
+                        Text(fading ? "FADING" : "FADE").font(.sans(24, .bold))
+                        Text(fading ? "\(store.label(s.program[me], s)) to \(store.label(s.preview[me], s))"
+                                    : "\(String(format: "%.1f", Double(s.mixRate[me] ?? 30) / 30)) s · Return")
+                            .font(.sans(11, .medium)).opacity(0.85).lineLimit(1).minimumScaleFactor(0.7)
+                    }
+                    .foregroundStyle(.white).padding(.horizontal, 4)
+                    .frame(width: 121, height: 92)
+                    .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.program.opacity(fading ? 0.55 : 1)))
+                    // How far the fade has run, along the bottom edge.
+                    .overlay(alignment: .bottomLeading) {
+                        if fading { Rectangle().fill(Color.white).frame(width: 121 * min(1, max(0, s.position[me] ?? 0)), height: 5) }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: T.rMD))
                     .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(Color.white.opacity(0.25)))
                     .contentShape(Rectangle())
-            }
-            .buttonStyle(PressStyle())
-            .help("Fade from Live to Next (Return)")
-            HStack(spacing: T.s2) {
-                PanelButton(title: "CUT", width: 121, height: 52, titleSize: 16) { atem.cut(me: me) }
-                    .help("Switch to Next instantly (Space)")
-                PanelButton(title: "BLACK", lit: black || (atem.state.ftbInTransition[me] ?? false) ? T.program : nil,
-                            width: 121, height: 52, titleSize: 16, blink: black) { atem.fadeToBlack(me: me) }
-                    .help(black ? "Fade back up from black" : "Fade everything to black")
-            }
-            // Keys such as lower thirds: lit while on air, press to turn on or off.
-            if !store.config.keys.isEmpty {
-                HStack(spacing: T.s2) {
-                    ForEach(store.config.keys) { k in
-                        let on = k.isOn(atem.state)
-                        PanelButton(title: k.label.uppercased(), subtitle: on ? "ON AIR" : "OFF", lit: on ? T.program : nil,
-                                    width: store.config.keys.count == 1 ? 250 : 121, height: 44, titleSize: 13) { k.toggle(atem) }
-                            .help(on ? "Take \(k.label) off (\(k.target))" : "Put \(k.label) on (\(k.target))")
+                }
+                .buttonStyle(PressStyle())
+                .help("Fade from Live to Next (Return)")
+                Button { atem.cut(me: me) } label: {
+                    VStack(spacing: 2) {
+                        Text("CUT").font(.sans(24, .bold))
+                        Text("Space").font(.sans(11, .medium)).opacity(0.85)
                     }
+                    .foregroundStyle(T.ink)
+                    .frame(width: 121, height: 92)
+                    .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceRaised))
+                    .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.lineStrong))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle())
+                .help("Switch to Next instantly (Space)")
+            }
+            // Under them, the things that are on or off: black, then keys such as lower
+            // thirds. Lit while on air, press to turn on or off.
+            LazyVGrid(columns: [GridItem(.fixed(121), spacing: T.s2), GridItem(.fixed(121))], alignment: .leading, spacing: T.s2) {
+                let ftb = s.ftbInTransition[me] ?? false
+                PanelButton(title: "BLACK", subtitle: black ? "IN BLACK" : (ftb ? "FADING" : "OFF"), lit: black || ftb ? T.program : nil,
+                            width: 121, height: 48, titleSize: 14, blink: black) { atem.fadeToBlack(me: me) }
+                    .help(black ? "Fade back up from black" : "Fade everything to black")
+                ForEach(store.config.keys) { k in
+                    let on = k.isOn(s)
+                    PanelButton(title: k.label.uppercased(), subtitle: on ? "ON AIR" : "OFF", lit: on ? T.program : nil,
+                                width: 121, height: 48, titleSize: 13) { k.toggle(atem) }
+                        .help(on ? "Take \(k.label) off (\(k.target))" : "Put \(k.label) on (\(k.target))")
                 }
             }
         }

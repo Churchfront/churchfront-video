@@ -234,6 +234,9 @@ enum SelfTest {
             ("preview 3", 0.5, { atem.setPreview(3) }),
             ("cut", 0.5, { atem.cut() }),
             ("preview 4", 0.5, { atem.setPreview(4) }),
+            // Caught mid-fade, so the snapshot shows Next coming in over Live. The next
+            // step's auto is ignored while this one runs, and then waits for it to finish.
+            ("fade halfway", 0.5, { atem.auto() }),
             ("auto", 1.6, { atem.auto() }),
             ("style dip", 0.4, { atem.setStyle(1) }),
             ("next bkgd+key1", 0.4, { atem.setNextSelection(3) }),
@@ -281,6 +284,7 @@ enum SelfTest {
             action()
             DispatchQueue.main.asyncAfter(deadline: .now() + max(0.3, delay)) {
                 log("\(name): \(summary())")
+                if name == "fade halfway" { snap("fade-halfway") }
                 step(i + 1)
             }
         }
