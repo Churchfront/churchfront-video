@@ -38,9 +38,9 @@ enum ShotSize: String, CaseIterable, Identifiable {
     /// while CueVideo runs (Setup, the config file, or Claude's set_framing).
     var standard: FramingRule {
         switch self {
-        case .shoulders: return FramingRule(eyeLine: 0.29, scale: 0.36, leadRoom: 0.09, deadX: 0.08, deadY: 0.07)
-        case .waist: return FramingRule(eyeLine: 0.29, scale: 0.21, leadRoom: 0.11, deadX: 0.07, deadY: 0.08)
-        case .full: return FramingRule(eyeLine: 0.15, scale: 0.095, leadRoom: 0.13, deadX: 0.06, deadY: 0.10)
+        case .shoulders: return FramingRule(eyeLine: 0.29, scale: 0.36, leadRoom: 0.09, deadX: 0.08, deadY: 0.05)
+        case .waist: return FramingRule(eyeLine: 0.29, scale: 0.21, leadRoom: 0.11, deadX: 0.07, deadY: 0.05)
+        case .full: return FramingRule(eyeLine: 0.12, scale: 0.097, leadRoom: 0.13, deadX: 0.06, deadY: 0.04)
         }
     }
     /// The rule in use now: the standard with any changes from the setup file.
@@ -302,11 +302,23 @@ final class AutoTracker: ObservableObject {
             let shoulders = mid(ls, rs) ?? at(.neck)
             let all = pts.values.filter { $0.confidence >= 0.3 }.map { CGPoint(x: $0.location.x, y: 1 - $0.location.y) }
             guard let minX = all.map(\.x).min(), let maxX = all.map(\.x).max(), let maxY = all.map(\.y).max() else { continue }
-            let scale = shoulders.map { $0.y - eye.y }.flatMap { $0 > 0.01 ? $0 : nil }
+            // Shot size in one unit (the eyes-to-shoulders drop), measured from the longest span in
+            // view, since a small span is only a few pixels on a wide shot: eyes to ankles (about
+            // 7.8 times eyes to shoulders on a standing adult), eyes to hips (about 3.7 times;
+            // both measured on the stage cameras with Vision's own joints),
+            // else eyes to shoulders. Taking the larger of the long spans keeps someone sitting
+            // down (whose eyes-to-ankles is shorter) from looking far away.
+            let hip = mid(at(.leftHip), at(.rightHip)) ?? at(.root)
+            let ankle = mid(at(.leftAnkle), at(.rightAnkle))
+            var long: [Double] = []
+            if let a = ankle, a.y - eye.y > 0.05 { long.append(Double(a.y - eye.y) / 7.8) }
+            if let h = hip, h.y - eye.y > 0.03 { long.append(Double(h.y - eye.y) / 3.7) }
+            let short = shoulders.map { Double($0.y - eye.y) }.flatMap { $0 > 0.01 ? $0 : nil }
+            let scale: Double? = long.max() ?? short
             // Top of the head is about half the eyes-to-shoulders drop above the eyes.
-            let top = eye.y - (scale ?? 0.05) * 0.6
+            let top = eye.y - CGFloat(scale ?? 0.05) * 0.6
             var p = TrackedPerson(box: CGRect(x: minX, y: top, width: max(0.02, maxX - minX), height: max(0.02, maxY - top)),
-                                  eye: eye, scale: scale.map { Double($0) })
+                                  eye: eye, scale: scale)
             p.hipsInShot = at(.root) != nil || at(.leftHip) != nil || at(.rightHip) != nil
             p.anklesInShot = at(.leftAnkle) != nil || at(.rightAnkle) != nil
             // Facing: the nose sits off the line between the shoulders on the side they face.
@@ -567,7 +579,7 @@ final class AutoTracker: ObservableObject {
                 s.zoomWrongSince = nil
             }
             if s.zooming {
-                let v = min(0.18, max(0.04, abs(r) * 0.3))
+                let v = min(0.45, max(0.04, abs(r) * 0.3))  // faster when far off, gentle near the size
                 zoom = ((r > 0 ? v : -v) * 50).rounded() / 50
             }
         } else if s.zooming {
