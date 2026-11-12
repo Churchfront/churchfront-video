@@ -395,13 +395,127 @@ struct ExposurePanel: View {
         VStack(alignment: .leading, spacing: T.s3) {
             Text("Exposure").panelLabel().frame(height: 20)
             if let t = target, ptz.canSaveShots(t) {
-                ExposureControls(camera: t)
+                HStack(alignment: .top, spacing: T.s3) {
+                    ExposureControls(camera: t)
+                    ExposureShots(camera: t)
+                }
             } else {
                 Text(target == nil ? "Put a camera on Next" : "Not available for this camera")
                     .font(.sans(12)).foregroundStyle(T.inkSubtle).frame(width: 200, alignment: .leading)
             }
         }
-        .frame(width: 200, alignment: .leading)
+        .frame(alignment: .leading)
+    }
+}
+
+/// Exposure shots for the camera on Next, beside its exposure controls: the ones saved in
+/// CueVideo and the exposure presets stored on the camera. Tap to apply, Save exposure to
+/// keep the camera's exposure now (gain, shutter, iris, white balance), right-click to
+/// update, rename or delete.
+struct ExposureShots: View {
+    let camera: PTZCamera
+    @EnvironmentObject var ptz: PTZController
+    @State private var saving = false
+    @State private var newName = ""
+    @State private var renaming: PTZShot?
+    @State private var deleting: PTZShot?
+    @State private var problem: String?
+    @State private var lastUsed: String?
+
+    var body: some View {
+        let shots = camera.shots.filter { $0.kind == .exposure }
+        let presets = (ptz.exposurePresets[camera.id] ?? []).sorted()
+        VStack(alignment: .leading, spacing: 4) {
+            Button { newName = ""; saving = true } label: {
+                Label("Save exposure", systemImage: "plus").font(.sans(11, .bold)).foregroundStyle(T.accentStrong)
+            }
+            .buttonStyle(.plain)
+            .help("Save \(camera.name)'s exposure now (gain, shutter, iris and white balance) as a shot")
+            .popover(isPresented: $saving, arrowEdge: .top) { savePopover }
+            ScrollView {
+                VStack(spacing: 4) {
+                    ForEach(shots) { s in
+                        item(s.name, nil, used: lastUsed == "shot:\(s.id)") { ptz.go(to: s, camera: camera.id); lastUsed = "shot:\(s.id)" }
+                            .contextMenu {
+                                Button("Update to the camera's exposure now") {
+                                    ptz.saveShot("", camera: camera.id, kind: .exposure, replacing: s.id) { if !$0 { problem = PresetGrid.noReading } }
+                                }
+                                Button("Rename…") { newName = s.name; renaming = s }
+                                Divider()
+                                Button("Delete…") { deleting = s }
+                            }
+                    }
+                    ForEach(presets, id: \.self) { n in
+                        item(ptz.presetNames(camera)[n] ?? "Preset \(n)", "ON CAMERA", used: lastUsed == "preset:\(n)") {
+                            ptz.recall(n, camera: camera.id); lastUsed = "preset:\(n)"
+                        }
+                    }
+                    if shots.isEmpty && presets.isEmpty {
+                        Text("No exposure shots yet.").font(.sans(11)).foregroundStyle(T.inkSubtle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .frame(width: 140)
+        .onChange(of: camera.id) { _, _ in lastUsed = nil }
+        .alert("Rename exposure shot", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Bright stage", text: $newName)
+            Button("Save") {
+                let name = newName.trimmingCharacters(in: .whitespaces)
+                if let r = renaming, !name.isEmpty, let i = ptz.cameras.firstIndex(where: { $0.id == camera.id }),
+                   let j = ptz.cameras[i].shots.firstIndex(where: { $0.id == r.id }) { ptz.cameras[i].shots[j].name = name }
+                renaming = nil
+            }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
+        .confirmationDialog("Delete \(deleting?.name ?? "this shot")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Delete", role: .destructive) {
+                if let d = deleting, let i = ptz.cameras.firstIndex(where: { $0.id == camera.id }) {
+                    ptz.cameras[i].shots.removeAll { $0.id == d.id }
+                }
+                deleting = nil
+            }
+        }
+        .alert(problem ?? "", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
+            Button("OK", role: .cancel) {}
+        }
+    }
+
+    func item(_ title: String, _ subtitle: String?, used: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 0) {
+                Text(title).font(.sans(12, .semibold)).lineLimit(1).minimumScaleFactor(0.75)
+                if let subtitle { Text(subtitle).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
+            }
+            .foregroundStyle(used ? T.onAction : T.ink)
+            .frame(maxWidth: .infinity).frame(height: 30)
+            .background(RoundedRectangle(cornerRadius: T.rSM).fill(used ? T.accent : T.surfaceRaised))
+            .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(used ? T.accent : T.line))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle())
+    }
+
+    var savePopover: some View {
+        VStack(alignment: .leading, spacing: T.s3) {
+            Text("Save \(camera.name)'s exposure").font(.sans(14, .bold))
+            Text("Gain, shutter, iris and white balance, as the camera has them now.").font(.sans(12)).foregroundStyle(T.inkMuted)
+            TextField("Bright stage", text: $newName).textFieldStyle(.roundedBorder).onSubmit(save)
+            HStack {
+                Spacer()
+                Button("Cancel") { saving = false }.keyboardShortcut(.cancelAction)
+                Button("Save", action: save).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(T.s4)
+        .frame(width: 300)
+    }
+
+    func save() {
+        let name = newName.trimmingCharacters(in: .whitespaces)
+        ptz.saveShot(name, camera: camera.id, kind: .exposure) { if !$0 { problem = PresetGrid.noReading } }
+        saving = false
     }
 }
 
@@ -506,9 +620,9 @@ struct ExposureControls: View {
     }
 }
 
-/// Every camera's shots in one grid: a row per camera, its shots and presets across. Tap a
-/// shot to send that camera there. The camera's name puts it on Next. The + at the end of a
-/// row saves where that camera is now (position, or exposure). Right-click a shot to update,
+/// Every camera's positions in one grid: a row per camera, its position shots and presets
+/// across (exposure shots stay out of it). Tap one to send that camera there. The camera's
+/// name puts it on Next. The + at the end of a row saves where that camera is now. Right-click a shot to update,
 /// rename or delete it. A camera on Live asks before it moves.
 struct PresetGrid: View {
     @EnvironmentObject var booth: Booth
@@ -517,7 +631,6 @@ struct PresetGrid: View {
     @EnvironmentObject var store: ConfigStore
 
     @State private var savingFor: UUID?
-    @State private var saveKind: ShotKind = .position
     @State private var newName = ""
     @State private var renaming: (camera: UUID, shot: PTZShot)?
     @State private var deleting: (camera: UUID, shot: PTZShot)?
@@ -600,12 +713,12 @@ struct PresetGrid: View {
             .help("Put \(c.name) on Next")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(c.shots) { s in
-                        cell(s.name, s.kind == .exposure ? "EXPOSURE" : nil, used: lastUsed[c.id] == "shot:\(s.id)", live: live) {
+                    ForEach(c.shots.filter { $0.kind == .position }) { s in
+                        cell(s.name, nil, used: lastUsed[c.id] == "shot:\(s.id)", live: live) {
                             go(c) { ptz.go(to: s, camera: c.id); lastUsed[c.id] = "shot:\(s.id)" }
                         }
                         .contextMenu {
-                            Button(s.kind == .exposure ? "Update to the camera's exposure now" : "Update to where the camera is now") {
+                            Button("Update to where the camera is now") {
                                 ptz.saveShot("", camera: c.id, kind: s.kind, replacing: s.id) { if !$0 { problem = Self.noReading } }
                             }
                             Button("Rename…") { newName = s.name; renaming = (c.id, s) }
@@ -613,9 +726,8 @@ struct PresetGrid: View {
                             Button("Delete…") { deleting = (c.id, s) }
                         }
                     }
-                    ForEach(cameraPresets(c), id: \.self) { n in
-                        let exp = ptz.exposurePresets[c.id]?.contains(n) ?? false
-                        cell(ptz.presetNames(c)[n] ?? "Preset \(n)", exp ? "CAMERA · EXP" : "ON CAMERA",
+                    ForEach(cameraPresets(c).filter { !(ptz.exposurePresets[c.id]?.contains($0) ?? false) }, id: \.self) { n in
+                        cell(ptz.presetNames(c)[n] ?? "Preset \(n)", "ON CAMERA",
                              used: lastUsed[c.id] == "preset:\(n)", live: live) {
                             go(c) { ptz.recall(n, camera: c.id); lastUsed[c.id] = "preset:\(n)" }
                         }
@@ -624,7 +736,7 @@ struct PresetGrid: View {
                         }
                     }
                     if ptz.canSaveShots(c) {
-                        Button { newName = ""; saveKind = .position; savingFor = c.id } label: {
+                        Button { newName = ""; savingFor = c.id } label: {
                             Image(systemName: "plus").font(.system(size: 13, weight: .bold)).foregroundStyle(T.accentStrong)
                                 .frame(width: 40, height: 40)
                                 .background(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
@@ -678,15 +790,9 @@ struct PresetGrid: View {
     func savePopover(_ t: PTZCamera) -> some View {
         VStack(alignment: .leading, spacing: T.s3) {
             Text("Save a shot on \(t.name)").font(.sans(14, .bold))
-            Picker("", selection: $saveKind) {
-                Text("Position").tag(ShotKind.position)
-                Text("Exposure").tag(ShotKind.exposure)
-            }
-            .pickerStyle(.segmented).labelsHidden()
-            Text(saveKind == .position ? "Pan, tilt and zoom, where the camera is pointing now."
-                                       : "Gain, shutter, iris and white balance, the camera's exposure now.")
+            Text("Pan, tilt and zoom, where the camera is pointing now.")
                 .font(.sans(12)).foregroundStyle(T.inkMuted)
-            TextField(saveKind == .position ? "Pulpit" : "Bright stage", text: $newName)
+            TextField("Pulpit", text: $newName)
                 .textFieldStyle(.roundedBorder).onSubmit { save(t) }
             HStack {
                 Spacer()
@@ -700,9 +806,8 @@ struct PresetGrid: View {
 
     func save(_ t: PTZCamera) {
         let name = newName.trimmingCharacters(in: .whitespaces)
-        ptz.saveShot(name, camera: t.id, kind: saveKind) { if !$0 { problem = Self.noReading } }
+        ptz.saveShot(name, camera: t.id, kind: .position) { if !$0 { problem = Self.noReading } }
         savingFor = nil
-        saveKind = .position  // always back to position for next time
     }
 
     func rename() {
