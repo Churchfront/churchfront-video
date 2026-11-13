@@ -87,7 +87,7 @@ struct TrackedPerson {
 
 /// Auto tracking: a camera follows one person around the stage.
 ///
-/// It watches the same preview picture the volunteer sees (CanonFeed), finds people and their
+/// It watches the same preview picture the volunteer sees (CameraPicture), finds people and their
 /// body landmarks in each frame with Apple's Vision framework, keeps hold of the one it was
 /// told to follow, works out whether the shot is shoulders up, waist up or full length, and
 /// pans, tilts and (gently) zooms to frame them the way a broadcast operator would (see
@@ -166,6 +166,7 @@ final class AutoTracker: ObservableObject {
 
     private var feeds: [UUID: AnyCancellable] = [:]
     private var cameras: [UUID: PTZCamera] = [:]
+    private var pictures: [UUID: CameraPicture] = [:]
     private var busy: Set<UUID> = []
     private var waiters: [UUID: [(String?) -> Void]] = [:]
     private var timer: Timer?
@@ -193,8 +194,8 @@ final class AutoTracker: ObservableObject {
     /// `person` follows someone labelled in the last stage scan, by name, wherever they are in the shot.
     func start(_ camera: PTZCamera, at point: CGPoint? = nil, size: ShotSize? = nil, person: String? = nil, done: ((String?) -> Void)? = nil) {
         stop(camera.id)
-        guard camera.proto == .canonXC, !camera.host.isEmpty else {
-            done?("Auto tracking needs the camera's preview picture, which only Canon cameras give CueVideo.")
+        guard let picture = CameraPicture.of(camera) else {
+            done?("Auto tracking needs the camera's picture: a Canon camera, or an NDI picture set for its switcher input in Setup.")
             return
         }
         var s = Session(camera: camera.id)
@@ -215,9 +216,9 @@ final class AutoTracker: ObservableObject {
         sessions[camera.id] = s
         cameras[camera.id] = camera
         if let done { waiters[camera.id, default: []].append(done) }
-        CanonFeedHub.shared.retain(camera)
-        let feed = CanonFeedHub.shared.feed(for: camera)
-        feeds[camera.id] = feed.$image.compactMap { $0 }.sink { [weak self] img in self?.frame(img, camera.id) }
+        pictures[camera.id] = picture
+        picture.retain()
+        feeds[camera.id] = picture.frames.sink { [weak self] img in self?.frame(img, camera.id) }
         if timer == nil {
             timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.tick() }
         }
@@ -242,7 +243,8 @@ final class AutoTracker: ObservableObject {
         sessions[id] = nil
         feeds[id] = nil
         busy.remove(id)
-        if let c = cameras.removeValue(forKey: id) { CanonFeedHub.shared.release(c) }
+        cameras[id] = nil
+        pictures.removeValue(forKey: id)?.release()
         if s.sentPan != 0 || s.sentTilt != 0 { ptz.trackDrive(pan: 0, tilt: 0, camera: id) }
         if s.sentZoom != 0 { ptz.trackZoom(0, camera: id) }
         finish(id, "Tracking was stopped.")

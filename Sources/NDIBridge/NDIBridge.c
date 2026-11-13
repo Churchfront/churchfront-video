@@ -84,6 +84,10 @@ int ndi_sources(char *names, int max, int timeout_ms) {
     pthread_mutex_unlock(&lock);
     if (!finder) return 0;
     if (timeout_ms > 0) f_find_wait(finder, (uint32_t)timeout_ms);
+    // The list belongs to the finder until the next call, and several threads ask (the
+    // source picker, and every preview working out which sender to open).
+    static pthread_mutex_t list_lock = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&list_lock);
     uint32_t n = 0;
     const source_t *list = f_find_sources(finder, &n);
     int count = 0;
@@ -93,6 +97,7 @@ int ndi_sources(char *names, int max, int timeout_ms) {
         names[count * 256 + 255] = 0;
         count++;
     }
+    pthread_mutex_unlock(&list_lock);
     return count;
 }
 
@@ -123,6 +128,10 @@ bool ndi_recv_frame_alpha(void *recv, int timeout_ms, const uint8_t **data, int 
     *data = v->p_data; *width = v->xres; *height = v->yres; *stride = v->line_stride_in_bytes; *frame = v;
     *alpha = v->FourCC == FOURCC('B', 'G', 'R', 'A') || v->FourCC == FOURCC('R', 'G', 'B', 'A');
     return true;
+}
+
+float ndi_frame_aspect(void *frame) {
+    return frame ? ((video_frame_v2_t *)frame)->picture_aspect_ratio : 0;
 }
 
 void ndi_recv_release(void *recv, void *frame) {

@@ -7,9 +7,9 @@ struct SmallButton: View {
     init(_ title: String, action: @escaping () -> Void) { self.title = title; self.action = action }
     var body: some View {
         Button(action: action) {
-            Text(title).font(.sans(12, .semibold)).frame(maxWidth: .infinity).frame(height: 30)
-                .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceRaised))
-                .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
+            LabelText(title, size: 11).frame(maxWidth: .infinity).frame(height: 30)
+                .contentShape(Rectangle())
+                .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(T.lineStrong))
         }
         .buttonStyle(PressStyle())
     }
