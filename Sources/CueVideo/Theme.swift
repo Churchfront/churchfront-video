@@ -1,54 +1,126 @@
 import SwiftUI
 import AppKit
-import CoreText
+import CueDesign
 
-/// Churchfront Signal tokens, dark (Midnight) theme, as in the other Cue apps.
+/// Churchfront Signal tokens, from CueKit's CueDesign so CueVideo matches the other Cue apps
+/// and picks up changes to the design system with them. `T` is the short name the views use.
 enum T {
-    static func hex(_ v: UInt32) -> Color {
-        Color(.sRGB, red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255, opacity: 1)
-    }
-    static let bg = hex(0x121212)
-    static let surface = hex(0x1C1C1C)
-    static let surfaceRaised = hex(0x2E2E2E)
-    static let surfaceSunken = hex(0x0A0A0A)
-    static let line = hex(0x333333)
-    static let lineStrong = hex(0x6B6B6B)
-    static let ink = hex(0xE6E7E8)
-    static let inkMuted = hex(0xABABAB)
-    static let inkSubtle = hex(0x8A8A8A)
-    static let accent = hex(0xCAE7F9)
-    static let accentStrong = hex(0x7CC2EE)
-    static let onAction = hex(0x121212)
-    static let success = hex(0x4FD8C4)
-    static let warning = hex(0xF2B84B)
-    static let danger = hex(0xFF6B5E)
+    static func hex(_ v: UInt32) -> Color { SignalColor.solid(v) }
+    static let bg = SignalColor.bg
+    static let surface = SignalColor.surface
+    static let toolbar = SignalColor.toolbar
+    static let header = SignalColor.header
+    static let surfaceRaised = SignalColor.surfaceRaised
+    static let surfaceSunken = SignalColor.surfaceSunken
+    static let line = SignalColor.line
+    static let lineStrong = SignalColor.lineStrong
+    static let ink = SignalColor.ink
+    static let inkMuted = SignalColor.inkMuted
+    static let inkSubtle = SignalColor.inkSubtle
+    static let accent = SignalColor.accent
+    static let accentStrong = SignalColor.accentStrong
+    static let accentSoft = SignalColor.accentSoft
+    static let onAction = SignalColor.onAction
+    static let success = SignalColor.success
+    static let successSoft = SignalColor.successSoft
+    static let warning = SignalColor.warning
+    static let warningSoft = SignalColor.warningSoft
+    static let danger = SignalColor.danger
+    static let dangerSoft = SignalColor.dangerSoft
     /// Tally: program red, preview green, as on every switcher panel.
-    static let program = hex(0xEF4136)
-    static let preview = hex(0x6CCB6A)
+    static let program = SignalColor.tallyProgram
+    static let preview = SignalColor.tallyPreview
 
-    static let s1: CGFloat = 4, s2: CGFloat = 8, s3: CGFloat = 12, s4: CGFloat = 16, s5: CGFloat = 20, s6: CGFloat = 24
-    static let rSM: CGFloat = 4, rMD: CGFloat = 6, rLG: CGFloat = 10
+    static let s1 = SignalSpace.s1, s2 = SignalSpace.s2, s3 = SignalSpace.s3, s4 = SignalSpace.s4, s5 = SignalSpace.s5, s6 = SignalSpace.s6
+    static let rSM = SignalSpace.rSM, rMD = SignalSpace.rMD, rLG = SignalSpace.rLG
 }
 
 enum Fonts {
-    static var figtreeLoaded = false
-    static func register() {
-        guard let url = Bundle.main.url(forResource: "Figtree-VariableFont_wght", withExtension: "ttf") else { return }
-        var err: Unmanaged<CFError>?
-        figtreeLoaded = CTFontManagerRegisterFontsForURL(url as CFURL, .process, &err) || NSFont(name: "Figtree", size: 12) != nil
-    }
+    static func register() { SignalFont.register() }
 }
 
 extension Font {
-    static func sans(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        Fonts.figtreeLoaded ? .custom("Figtree", size: size).weight(weight) : .system(size: size, weight: weight)
-    }
+    static func sans(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .signalSans(size, weight) }
 }
 
 extension View {
     /// ALL CAPS panel label, tracked out.
-    func panelLabel(_ color: Color = T.inkSubtle) -> some View {
-        self.font(.sans(11, .bold)).tracking(1.4).textCase(.uppercase).foregroundStyle(color).lineLimit(1).fixedSize()
+    func panelLabel(_ color: Color = T.inkSubtle) -> some View { signalPanelLabel(color) }
+}
+
+// The pieces below follow CueScreens (its UI/Style.swift), so the Cue apps read as one family
+// in colour and shape: ALL CAPS labels, bordered pill buttons, status words on a wash.
+
+/// Label: bold, ALL CAPS, tracked 0.09em. Buttons and tabs.
+struct LabelText: View {
+    var text: String
+    var size: CGFloat = 12
+    init(_ text: String, size: CGFloat = 12) { self.text = text; self.size = size }
+    var body: some View {
+        Text(text.uppercased()).font(.sans(size, .bold)).tracking(size * 0.09).lineLimit(1)
+    }
+}
+
+struct Hairline: View {
+    var vertical = false
+    var body: some View {
+        Rectangle().fill(T.line).frame(width: vertical ? 1 : nil, height: vertical ? nil : 1)
+    }
+}
+
+/// The secondary button: a caps label in a bordered pill. `active` marks a choice that is
+/// on with the accent wash.
+struct PillButton: View {
+    var title: String
+    var icon: String? = nil
+    var active = false
+    var height: CGFloat = 28
+    var fill = false
+    var action: () -> Void
+    @State private var hovering = false
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let icon { Image(systemName: icon).font(.system(size: 11, weight: .semibold)) }
+                LabelText(title, size: 11)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: height)
+            .frame(maxWidth: fill ? .infinity : nil)
+            .contentShape(Rectangle())
+            .foregroundStyle(active ? T.accent : T.ink)
+            .background(RoundedRectangle(cornerRadius: T.rSM).fill(active ? T.accentSoft : (hovering ? T.surfaceRaised : .clear)))
+            .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(active ? .clear : (hovering ? T.inkSubtle : T.lineStrong), lineWidth: 1))
+        }
+        .buttonStyle(PressStyle())
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+}
+
+/// A short status word on its own wash.
+struct Badge: View {
+    enum Tone { case neutral, success, warning, danger }
+    var text: String
+    var tone: Tone = .neutral
+    var dot = false
+    var body: some View {
+        let (fg, bg): (Color, Color) = {
+            switch tone {
+            case .neutral: (T.inkMuted, T.surfaceRaised)
+            case .success: (T.success, T.successSoft)
+            case .warning: (T.warning, T.warningSoft)
+            case .danger: (T.danger, T.dangerSoft)
+            }
+        }()
+        HStack(spacing: 5) {
+            if dot { Circle().fill(fg).frame(width: 6, height: 6) }
+            Text(text.uppercased()).font(.sans(10, .bold)).tracking(10 * 0.09)
+        }
+        .foregroundStyle(fg)
+        .padding(.horizontal, 7).frame(height: 20)
+        .background(RoundedRectangle(cornerRadius: T.rSM).fill(bg))
+        .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(tone == .neutral ? T.line : .clear))
     }
 }
 
@@ -87,8 +159,4 @@ struct PanelButton: View {
     }
 }
 
-struct PressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.scaleEffect(configuration.isPressed ? 0.96 : 1).brightness(configuration.isPressed ? 0.08 : 0)
-    }
-}
+typealias PressStyle = SignalPressStyle

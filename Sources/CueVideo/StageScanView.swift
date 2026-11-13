@@ -125,8 +125,8 @@ private struct PersonCard: View {
                     .frame(width: 22, height: 22).background(Circle().fill(T.accent)).padding(6)
             }
             .frame(height: 170)
-            .clipShape(RoundedRectangle(cornerRadius: T.rMD))
-            .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
+            .clipShape(Rectangle())
+            .overlay(Rectangle().stroke(T.line))
             TextField("Name or role", text: Binding(get: { person.label }, set: { scan.label(person.id, $0) }))
                 .textFieldStyle(CueFieldStyle())
             HStack(spacing: 6) {

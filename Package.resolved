@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "cuekit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Churchfront/CueKit.git",
+      "state" : {
+        "revision" : "dbe03aecce8e24ef91177ba3e60320afd6c46b0c",
+        "version" : "0.2.1"
+      }
+    }
+  ],
+  "version" : 2
+}

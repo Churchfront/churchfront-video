@@ -33,15 +33,8 @@ struct VolunteerView: View {
                         Spacer()
                         // Exposure for the camera on Next, shown when wanted, so the shot grid
                         // gets the room the rest of the time.
-                        Button { showExposure.toggle() } label: {
-                            Label("Exposure", systemImage: "camera.aperture").font(.sans(12, .semibold))
-                                .foregroundStyle(showExposure ? T.onAction : T.ink)
-                                .padding(.horizontal, 10).frame(height: 28)
-                                .background(RoundedRectangle(cornerRadius: T.rMD).fill(showExposure ? T.accent : T.surfaceRaised))
-                                .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(showExposure ? T.accent : T.line))
-                        }
-                        .buttonStyle(PressStyle())
-                        .help(showExposure ? "Hide exposure" : "Show gain, shutter, iris and white balance for the camera on Next")
+                        PillButton(title: "Exposure", icon: "camera.aperture", active: showExposure) { showExposure.toggle() }
+                            .help(showExposure ? "Hide exposure" : "Show gain, shutter, iris and white balance for the camera on Next")
                     }
                     HStack(alignment: .top, spacing: T.s4) {
                         if showExposure { ExposurePanel() }
@@ -94,10 +87,7 @@ struct BusMonitor: View {
 
     var camera: PTZCamera? { camera(on: input) }
 
-    func camera(on input: Int?) -> PTZCamera? {
-        guard let input else { return nil }
-        return ptz.cameras.first { $0.atemInput == input && $0.proto == .canonXC && !$0.host.isEmpty }
-    }
+    func camera(on input: Int?) -> PTZCamera? { ptz.pictured(on: input, store) }
 
     /// The shot coming in while a fade runs, and how far in it is (0 to 1).
     struct Incoming: Equatable { var input: Int?; var amount: Double; var dip: Bool }
@@ -164,8 +154,9 @@ struct BusMonitor: View {
             // key is on it: on Live when it's on air, on Next when it will be after the take.
             ForEach(keyOverlays, id: \.self) { n in NDIVideo(source: n, overlay: true).id("key-" + n) }
         }
-        .clipShape(RoundedRectangle(cornerRadius: T.rLG))
-        .overlay(RoundedRectangle(cornerRadius: T.rLG).stroke(color, lineWidth: 3))
+        // Video is shown square-cornered, the shape of the picture itself.
+        .clipShape(Rectangle())
+        .overlay(Rectangle().stroke(color, lineWidth: 3))
         .overlay(alignment: .topLeading) {
             Text(title.uppercased()).font(.sans(13, .bold)).tracking(1.2)
                 .foregroundStyle(title == "Next" ? T.onAction : .white)
@@ -197,7 +188,7 @@ struct BusMonitor: View {
     }
 }
 
-/// Step 1: the sources a volunteer needs, as big tiles. Tap one to put it on Next.
+/// The sources a volunteer needs, as big tiles. Tap one to put it on Next.
 struct SourceRow: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
@@ -208,7 +199,6 @@ struct SourceRow: View {
         let sources = store.volunteerSources(atem.state)
         // Centered, so the camera control below sits right under the tiles.
         VStack(alignment: .center, spacing: T.s2) {
-            StepLabel(n: 1, text: "Pick what's next")
             if sources.isEmpty {
                 Text("No sources set up yet. Add them in Setup (⌘,).").font(.sans(13)).foregroundStyle(T.inkMuted)
                     .frame(height: 96)
@@ -231,9 +221,7 @@ struct SourceTile: View {
     @EnvironmentObject var ptz: PTZController
     @EnvironmentObject var store: ConfigStore
 
-    var camera: PTZCamera? {
-        ptz.cameras.first { $0.atemInput == source.input && $0.proto == .canonXC && !$0.host.isEmpty }
-    }
+    var camera: PTZCamera? { ptz.pictured(on: source.input, store) }
     var isLive: Bool { atem.state.program[booth.me] == source.input }
     var isNext: Bool { atem.state.preview[booth.me] == source.input }
 
@@ -261,8 +249,8 @@ struct SourceTile: View {
             }
             .frame(maxWidth: 220, maxHeight: .infinity)
             .aspectRatio(16 / 9, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: T.rMD))
-            .overlay(RoundedRectangle(cornerRadius: T.rMD)
+            .clipShape(Rectangle())
+            .overlay(Rectangle()
                 .stroke(isLive ? T.program : (isNext ? T.preview : T.line), lineWidth: isLive || isNext ? 3 : 1))
             .contentShape(Rectangle())
         }
@@ -292,7 +280,6 @@ struct FramePanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: T.s3) {
-            StepLabel(n: 2, text: target.map { "Frame \($0.name)" } ?? "Frame the shot")
             HStack(alignment: .center, spacing: T.s4) {
                 Joystick { x, y in ptz.drive(x: x, y: y) } onEnd: { ptz.stopDrive() }
                     .frame(width: 170, height: 170)
@@ -528,13 +515,27 @@ struct ExposureControls: View {
     var body: some View {
         let e = ptz.exposure[camera.id] ?? CameraExposure()
         VStack(spacing: 6) {
-            row("Gain", CameraExposure.gainText(e.value.gain), auto: e.gainAuto, list: e.gainList, value: e.value.gain,
+            row("Gain", e.gainLabel(e.value.gain), auto: e.gainAuto, list: e.gainList, value: e.value.gain,
                 brighterIsUp: true) { ptz.setExposure(PTZExposure(gain: $0), camera: camera.id) }
             row("Shutter", CameraExposure.shutterText(e.value.shutter), auto: e.shutterAuto, list: e.shutterList, value: e.value.shutter,
                 brighterIsUp: false) { ptz.setExposure(PTZExposure(shutter: $0), camera: camera.id) }
             row("Iris", CameraExposure.irisText(e.value.iris), auto: e.irisAuto, list: e.irisList, value: e.value.iris,
                 brighterIsUp: false) { ptz.setExposure(PTZExposure(iris: $0), camera: camera.id) }
             whiteBalance(e)
+            if e.hasAutoMode {
+                // One mode for all three on this camera: touching any of them takes it to
+                // manual, and this hands them back.
+                Button { ptz.autoExposure(camera: camera.id) } label: {
+                    Text(e.allAuto ? "Auto exposure on" : "Auto exposure").font(.sans(12, .semibold))
+                        .foregroundStyle(e.allAuto ? T.onAction : T.ink)
+                        .frame(maxWidth: .infinity).frame(height: 28)
+                        .background(RoundedRectangle(cornerRadius: T.rSM).fill(e.allAuto ? T.accent : T.surfaceRaised))
+                        .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(e.allAuto ? T.accent : T.line))
+                }
+                .buttonStyle(PressStyle())
+                .disabled(e.allAuto)
+                .help("Let the camera set gain, shutter and iris itself")
+            }
         }
         .frame(width: 200)
         .onAppear { ptz.refreshExposure(camera: camera.id) }
@@ -819,15 +820,12 @@ struct PresetGrid: View {
         renaming = nil
     }
 
-    /// Presets stored on the camera. For VISCA cameras, which can't report names, the first eight numbers.
-    func cameraPresets(_ t: PTZCamera) -> [Int] {
-        let names = ptz.presetNames(t)
-        if ptz.canSaveShots(t) { return names.keys.sorted() }
-        return names.isEmpty ? Array(1...8) : names.keys.sorted()
-    }
+    /// Presets stored on the camera: the ones it reports, plus any named in Setup. A VISCA
+    /// camera can't say which presets it holds, so it shows only the ones given a name.
+    func cameraPresets(_ t: PTZCamera) -> [Int] { ptz.presetNames(t).keys.sorted() }
 }
 
-/// Step 3: take it live.
+/// Take it live.
 struct TakePanel: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
@@ -839,7 +837,6 @@ struct TakePanel: View {
         let fading = s.inTransition[me] ?? false
         let black = s.ftbBlack[me] ?? false
         VStack(alignment: .leading, spacing: T.s3) {
-            StepLabel(n: 3, text: "Take it live")
             // The two ways to take Next live, side by side and the same size.
             HStack(spacing: T.s2) {
                 Button { atem.auto(me: me) } label: {
@@ -910,15 +907,16 @@ struct TrackButton: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "figure.walk").font(.system(size: 12, weight: .bold))
-                    Text(s == nil ? "Track" : "Tracking").font(.sans(12, .semibold))
+                    LabelText(s == nil ? "Track" : "Tracking", size: 11)
                 }
                 .foregroundStyle(s == nil ? T.ink : T.onAction)
                 .frame(maxWidth: .infinity).frame(height: 30)
-                .background(RoundedRectangle(cornerRadius: T.rMD).fill(s == nil ? T.surfaceRaised : T.accent))
-                .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(s == nil ? T.line : T.accent))
+                .contentShape(Rectangle())
+                .background(RoundedRectangle(cornerRadius: T.rSM).fill(s == nil ? Color.clear : T.accent))
+                .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(s == nil ? T.lineStrong : T.accent))
             }
             .buttonStyle(PressStyle())
-            .disabled(camera.proto != .canonXC)
+            .disabled(CameraPicture.of(camera, store) == nil)
             .help(s == nil ? "Follow the person in the middle of the shot. Or click someone on the Next picture. Moving the joystick stops tracking."
                            : "Stop following. Moving the joystick or recalling a shot also stops it.")
             if let s {
@@ -959,7 +957,7 @@ struct TrackButton: View {
                         Text("Follow by name").font(.sans(11, .semibold))
                     }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .disabled(camera.proto != .canonXC)
+                    .disabled(CameraPicture.of(camera, store) == nil)
                     .help("Follow someone labelled in the stage scan")
                 }
             }
