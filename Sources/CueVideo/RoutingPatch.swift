@@ -324,7 +324,7 @@ struct RoutingSchematic: View {
 
     private func thumb(_ input: Int?, _ w: CGFloat) -> some View {
         let t = sizes(w).thumb
-        return SourcePicture(input: input, named: false).frame(width: t.width, height: t.height).clipShape(RoundedRectangle(cornerRadius: T.rSM))
+        return SourcePicture(input: input, named: false).frame(width: t.width, height: t.height).clipShape(Rectangle())
     }
 
     private func sourceRow(_ s: Src, _ c: Color?, on: Bool, _ L: Layout, _ w: CGFloat) -> some View {
@@ -389,8 +389,8 @@ struct RoutingSchematic: View {
             .background(RoundedRectangle(cornerRadius: T.rSM).fill(Color.black.opacity(pic ? 0.6 : 0))).padding(4)
         }
         .frame(width: r.width, height: r.height)
-        .clipShape(RoundedRectangle(cornerRadius: T.rSM))
-        .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(color, lineWidth: tag == "Live" ? 2.5 : 1.5))
+        .clipShape(Rectangle())
+        .overlay(Rectangle().stroke(color, lineWidth: tag == "Live" ? 2.5 : 1.5))
     }
 
     private func mixCard(_ m: Mix, _ c: Color, target: Bool, _ L: Layout, _ w: CGFloat) -> some View {

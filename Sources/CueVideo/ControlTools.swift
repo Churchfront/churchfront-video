@@ -71,7 +71,7 @@ enum ControlTools {
               "allow_hidden": bool("Required as true to change a screen hidden from volunteers.")], required: ["screen", "source"]),
         tool("run_route_button", "Press one of the volunteer routing buttons, by label.", ["button": str("The button's label.")], required: ["button"]),
         tool("list_ndi_sources", "The NDI sources on the network now, by their exact names, for the ndi field of a volunteer source (a picture for its tile and the Next and Live monitors, such as CueScreens' graphics) or of a key button (a picture with alpha laid over Next and Live when that key is on them, such as CueScreens' lower thirds). Set them with update_config."),
-        tool("start_tracking", "Auto tracking: make a Canon camera follow a person, by watching its preview picture. It frames them as a broadcast follow shot: shoulders up, waist up or full length (the shot the camera is closest to unless shot is given), eyes near the upper third, lead room on the side they face or walk toward, eased pan and tilt, and slow zooms to hold the size. Picks the person nearest the middle, or nearest x/y if given (0 to 1 across and down the picture), or with person, someone labelled in the last stage scan, by name, wherever they are in the shot. It keeps to that person by what they look like, so it stays with them when people cross and waits for them after losing sight. Waits up to 4 seconds for someone to be found. Any manual pan, tilt, shot or preset stops tracking; a manual zoom keeps it and holds the new size.",
+        tool("start_tracking", "Auto tracking: make a camera follow a person, by watching its preview picture (a Canon's own, or for other cameras the NDI picture set for their switcher input). It frames them as a broadcast follow shot: shoulders up, waist up or full length (the shot the camera is closest to unless shot is given), eyes near the upper third, lead room on the side they face or walk toward, eased pan and tilt, and slow zooms to hold the size. Picks the person nearest the middle, or nearest x/y if given (0 to 1 across and down the picture), or with person, someone labelled in the last stage scan, by name, wherever they are in the shot. It keeps to that person by what they look like, so it stays with them when people cross and waits for them after losing sight. Waits up to 4 seconds for someone to be found. Any manual pan, tilt, shot or preset stops tracking; a manual zoom keeps it and holds the new size.",
              ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "x": num("0 (left) to 1 (right) across the picture."), "y": num("0 (top) to 1 (bottom) down the picture."), "person": str("A name given in the last stage scan (get_status lists them)."), "allow_live": allowLive]),
         tool("scan_stage", "Stage scan, for before a service with everyone in place: each Canon camera that isn't on Live, tracking or out of CueVideo's control goes to a wide shot (its shot named Stage or Wide, else where it points now zoomed all the way out), CueVideo finds the people in it and works out the shot that frames each one from that camera, and the camera goes back. Returns every person each camera saw, with a number, a small picture, the proposed shot, and a letter: the same letter is a guess (by their look) at the same person on another camera. Nothing is saved until label_stage_scan. This moves cameras, so confirm with the person first.",
              ["cameras": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to scan. Leave out for all."],
@@ -91,10 +91,11 @@ enum ControlTools {
              ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "allow_live": allowLive], required: ["shot"]),
         tool("stop_tracking", "Stop auto tracking on a camera, or on every camera with all: true.", ["camera": camera, "all": bool("Stop every camera.")]),
         tool("camera_home", "Send a camera to its home position (pan and tilt 0).", ["camera": camera, "allow_live": allowLive]),
-        tool("set_exposure", "Set a camera's gain, shutter, iris and/or white balance. Gain, shutter and iris each switch that setting to manual. Canon units: gain in tenths of a dB (65 = 6.5 dB), shutter as 1/x (60 = 1/60), iris as f-number times 100 (450 = f/4.5). White balance: auto, daylight, tungsten, or a color temperature in kelvin (4300); higher kelvin looks warmer. Values snap to the nearest the camera accepts; get_status lists them.",
+        tool("set_exposure", "Set a camera's gain, shutter, iris and/or white balance. Gain, shutter and iris each switch that setting to manual. Units: gain in tenths of a dB on a Canon (65 = 6.5 dB) or a plain level on a VISCA camera (get_status gives gain_unit), shutter as 1/x (60 = 1/60), iris as f-number times 100 (450 = f/4.5). On a VISCA camera, setting any of the three puts all three in manual, holding the other two where they were. auto: true hands gain, shutter and iris back to the camera (VISCA cameras only for now). White balance: auto, daylight, tungsten, or a color temperature in kelvin (4300); higher kelvin looks warmer. Values snap to the nearest the camera accepts; get_status lists them.",
              ["camera": camera, "gain": int("Tenths of a dB."), "shutter": int("Shutter speed denominator."), "iris": int("f-number times 100."),
-              "white_balance": any("auto, daylight, tungsten, or kelvin as a number such as 4300."), "allow_live": allowLive]),
-        tool("camera_snapshots", "A still picture from each Canon camera (or the ones named), with color measurements, to compare and match them: average red, green and blue, the color cast (red÷green and blue÷green; balanced is about 1), brightness (0 to 255), and the share of the picture clipped to white or crushed to black. Point the cameras at the same scene to compare fairly. Fix differences with set_exposure or match_exposure.",
+              "white_balance": any("auto, daylight, tungsten, or kelvin as a number such as 4300."),
+              "auto": bool("Auto exposure: the camera sets gain, shutter and iris itself. Not with gain, shutter or iris."), "allow_live": allowLive]),
+        tool("camera_snapshots", "A still picture from each camera CueVideo has a picture for (or the ones named): Canon cameras, and others with an NDI picture set for their switcher input (that one is NDI's small preview, about 640 wide). With color measurements, to compare and match them: average red, green and blue, the color cast (red÷green and blue÷green; balanced is about 1), brightness (0 to 255), and the share of the picture clipped to white or crushed to black. Point the cameras at the same scene to compare fairly. Fix differences with set_exposure or match_exposure.",
              ["cameras": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to look at. Leave out for all."],
               "pictures": bool("Include the pictures themselves (default true). False gives only the measurements.")]),
         tool("match_exposure", "Make cameras match one camera's exposure: copies gain, shutter, iris and white balance (or only the settings named) from one camera to the others, each value snapped to the nearest the other camera accepts (models differ). Leave out to for every other camera. Cameras on Live are skipped unless allow_live is true.",
@@ -357,12 +358,18 @@ enum ControlTools {
                 else if let m = (w as? String)?.lowercased(), ["auto", "daylight", "tungsten"].contains(m) { e.wb = m }
                 else { throw fail("white_balance is auto, daylight, tungsten, or a kelvin number such as 4300.") }
             }
-            guard e.hasExposure || e.hasWhiteBalance else { throw fail("Give gain, shutter, iris and/or white_balance.") }
-            ptz.setExposure(e, camera: c.id)
-            done(ok("Exposure set on \(c.name)", ["sent": expo(e)]))
+            let auto = a["auto"] as? Bool == true
+            if auto {
+                guard !e.hasExposure else { throw fail("Give auto, or gain, shutter and iris, not both.") }
+                guard x.hasAutoMode else { throw fail("\(c.name) has no single auto exposure mode CueVideo can set. That works on VISCA cameras.") }
+                ptz.autoExposure(camera: c.id)
+            }
+            guard auto || e.hasExposure || e.hasWhiteBalance else { throw fail("Give gain, shutter, iris, white_balance and/or auto.") }
+            if e.hasExposure || e.hasWhiteBalance { ptz.setExposure(e, camera: c.id) }
+            done(ok("Exposure set on \(c.name)", ["sent": expo(e, level: x.gainIsLevel).merging(auto ? ["exposure": "auto"] : [:]) { a, _ in a }]))
         case "camera_snapshots":
             let cams: [PTZCamera] = try (a["cameras"] as? [Any]).map { list in try list.map { try cam(["camera": $0], changing: false) } }
-                ?? ptz.cameras.filter { $0.proto == .canonXC && !$0.host.isEmpty }
+                ?? ptz.cameras.filter { CameraPicture.of($0, store) != nil }
             let pictures = a["pictures"] as? Bool ?? true
             Snapshots.take(cams, pictures: pictures) { results in
                 var out: [String: Any] = ["cameras": results.map(\.info)]
@@ -380,7 +387,8 @@ enum ControlTools {
                 if let i = t.atemInput, (atem.state.tally[i] ?? 0) & 1 != 0, a["allow_live"] as? Bool != true { skipped.append("\(t.name) (on Live)"); continue }
                 let tx = ptz.exposure[t.id] ?? CameraExposure()
                 var e = PTZExposure()
-                if want.contains("gain"), let g = x.gain { e.gain = snap(g, tx.gainList) }
+                // Gain only carries between cameras that count it the same way (dB or levels).
+                if want.contains("gain"), let g = x.gain, tx.gainIsLevel == (ptz.exposure[src.id]?.gainIsLevel ?? false) { e.gain = snap(g, tx.gainList) }
                 if want.contains("shutter"), let v = x.shutter { e.shutter = snap(v, tx.shutterList) }
                 if want.contains("iris"), let v = x.iris { e.iris = snap(v, tx.irisList) }
                 if want.contains("white_balance") {
@@ -389,7 +397,7 @@ enum ControlTools {
                 }
                 guard e.hasExposure || e.hasWhiteBalance else { continue }
                 ptz.setExposure(e, camera: t.id)
-                changed[t.name] = expo(e)
+                changed[t.name] = expo(e, level: tx.gainIsLevel)
             }
             done(ok("Matched \(changed.count) camera\(changed.count == 1 ? "" : "s") to \(src.name)",
                     ["source": expo(x), "changed": changed, "skipped": skipped]))
@@ -576,9 +584,10 @@ enum ControlTools {
 
     // MARK: Status
 
-    private static func expo(_ e: PTZExposure) -> [String: Any] {
+    /// `level`: this camera's gain is a plain level, not tenths of a dB.
+    private static func expo(_ e: PTZExposure, level: Bool = false) -> [String: Any] {
         var d: [String: Any] = [:]
-        if let g = e.gain { d["gain"] = g; d["gain_text"] = CameraExposure.gainText(g) }
+        if let g = e.gain { d["gain"] = g; d["gain_text"] = level ? "Level \(g)" : CameraExposure.gainText(g) }
         if let s = e.shutter { d["shutter"] = s; d["shutter_text"] = CameraExposure.shutterText(s) }
         if let i = e.iris { d["iris"] = i; d["iris_text"] = CameraExposure.irisText(i) }
         if e.hasWhiteBalance { d["white_balance"] = CameraExposure.wbText(e.wb, e.kelvin) }
@@ -687,7 +696,8 @@ enum ControlTools {
                 } ?? false,
             ]
             if let x {
-                d["exposure"] = expo(x.value).merging([
+                d["exposure"] = expo(x.value, level: x.gainIsLevel).merging([
+                    "gain_unit": x.gainIsLevel ? "level" : "tenths of a dB", "can_auto": x.hasAutoMode,
                     "gain_auto": x.gainAuto, "shutter_auto": x.shutterAuto, "iris_auto": x.irisAuto,
                     "gain_values": x.gainList, "shutter_values": x.shutterList, "iris_values": x.irisList,
                     "white_balance_mode": x.value.wb ?? "", "kelvin_values": x.kelvinList,
@@ -713,7 +723,7 @@ enum ControlTools {
             "ndi_previews": (store.config.sources.compactMap { src -> [String: Any]? in
                 guard let n = src.ndi else { return nil }
                 return ["for": store.label(src.input, s), "source": n, "receiving": NDIFeedHub.shared.isLive(n).map { $0 as Any } ?? "not shown now",
-                        "alpha": NDIFeedHub.shared.feed(n).hasAlpha]
+                        "alpha": NDIFeedHub.shared.feed(n).hasAlpha, "picture": NDIFeedHub.shared.shape(n) as Any? ?? NSNull()]
             } + store.config.keys.compactMap { k -> [String: Any]? in
                 guard let n = k.ndi else { return nil }
                 return ["for": k.label, "source": n, "receiving": NDIFeedHub.shared.isLive(n).map { $0 as Any } ?? "not shown now",

@@ -98,7 +98,16 @@ public struct CameraExposure: Hashable {
     public var gainAuto = false, shutterAuto = false, irisAuto = false
     public var gainList: [Int] = [], shutterList: [Int] = [], irisList: [Int] = []
     public var kelvinList: [Int] = []
+    /// Gain is a plain level (0, 1, 2…) as the camera's own menu shows it, not tenths of a dB.
+    public var gainIsLevel = false
+    /// The camera has one auto exposure mode that takes gain, shutter and iris back together.
+    public var hasAutoMode = false
+    public var allAuto: Bool { gainAuto && shutterAuto && irisAuto }
     public init() {}
+
+    public func gainLabel(_ v: Int?) -> String {
+        gainIsLevel ? (v.map { "Level \($0)" } ?? "?") : Self.gainText(v)
+    }
 
     /// "Auto", "Daylight", "Tungsten" or "4300 K".
     public static func wbText(_ mode: String?, _ kelvin: Int?) -> String {
@@ -192,6 +201,8 @@ protocol PTZLink: AnyObject {
     func store(_ n: Int)
     /// Where the camera is now, or nil if it can't say.
     func readPosition(_ done: @escaping (PTZPosition?) -> Void)
+    /// Where the camera is now, in whatever form goTo takes back exactly, for saving a shot.
+    func readShotPosition(_ done: @escaping (PTZPosition?) -> Void)
     /// Move straight to a saved position.
     func goTo(_ p: PTZPosition)
     /// Delete a preset stored on the camera itself. Calls back with nil when it worked, or why not.
@@ -200,9 +211,66 @@ protocol PTZLink: AnyObject {
     func readExposure()
     /// Set any of gain, shutter and iris, switching just those to manual.
     func setExposure(_ e: PTZExposure)
+    /// Hand gain, shutter and iris back to the camera, where it has one mode for that.
+    func autoExposure()
+}
+
+extension PTZLink {
+    func readShotPosition(_ done: @escaping (PTZPosition?) -> Void) { readPosition(done) }
 }
 
 // MARK: - VISCA
+
+/// How one make of VISCA camera counts. VISCA fixes the commands but not the units, so each
+/// make needs its own numbers; this is the start of a per-camera library (exposure tables
+/// and speed steps would live here too).
+public struct VISCAUnits {
+    /// Pan and tilt position counts in one degree.
+    public var countsPerDegree: Double
+    /// Zoom position when zoomed all the way in.
+    public var zoomMax: Double
+    /// Horizontal angle of view zoomed all the way out, in degrees, and the lens's zoom ratio.
+    public var wideFOV: Double
+    public var zoomRatio: Double
+    /// Exposure. The camera counts in positions; these say what each one is: shutter position
+    /// to the speed's denominator (60 is 1/60), iris position to the f-number times 100.
+    /// Gain stays a level, 0 to gainMax, as the camera's own menu shows it.
+    public var shutter: [Int: Int] = [:]
+    public var iris: [Int: Int] = [:]
+    public var gainMax = 0
+    /// Color temperature: position 0 is kelvinBase, each step kelvinStep more, up to kelvinTop.
+    public var kelvinBase = 2500, kelvinStep = 100, kelvinTop = 8000
+
+    public func position(of value: Int, in table: [Int: Int]) -> Int? { table.first { $0.value == value }?.key }
+
+    /// PTZOptics (and the other cameras built on the same VISCA firmware): 0x0990 counts is
+    /// 170 degrees, zoom runs 0 to 0x4000. The angle of view is an estimate for a 20x lens,
+    /// assuming it narrows evenly along the zoom range; it errs narrow on a 12x, which makes
+    /// auto tracking gentler, not jumpy.
+    ///
+    /// Exposure: the color temperature range is from PTZOptics' VISCA document. The shutter
+    /// and iris tables are the ones PTZOptics has published for its earlier cameras; their
+    /// current document gives the commands but no tables, so check these against the
+    /// camera's own menu.
+    public static let ptzOptics = VISCAUnits(
+        countsPerDegree: 14.4, zoomMax: 16384, wideFOV: 58, zoomRatio: 20,
+        shutter: [1: 30, 2: 60, 3: 90, 4: 100, 5: 125, 6: 180, 7: 250, 8: 350, 9: 500, 10: 725, 11: 1000,
+                  12: 1500, 13: 2000, 14: 3000, 15: 4000, 16: 6000, 17: 10000],
+        iris: [1: 1100, 2: 960, 3: 800, 4: 680, 5: 560, 6: 480, 7: 400, 8: 340, 9: 280, 10: 240, 11: 200, 12: 180],
+        gainMax: 14)
+
+    public func fov(zoom: Int) -> Double {
+        wideFOV * pow(1 / zoomRatio, min(1, max(0, Double(zoom) / zoomMax)))
+    }
+
+    /// As a Canon reports it: pan and tilt in hundredths of a degree (right and up positive),
+    /// zoom as the horizontal angle of view in hundredths of a degree.
+    public func position(pan: Int, tilt: Int, zoom: Int) -> PTZPosition {
+        PTZPosition(pan: Int((Double(pan) / countsPerDegree * 100).rounded()),
+                    tilt: Int((Double(tilt) / countsPerDegree * 100).rounded()),
+                    zoom: Int((fov(zoom: zoom) * 100).rounded()))
+    }
+}
 
 final class VISCALink: PTZLink {
     let camera: PTZCamera
@@ -216,6 +284,25 @@ final class VISCALink: PTZLink {
     var onExposure: ((CameraExposure) -> Void)?
     var onControl: ((Bool) -> Void)?
     private var online = false { didSet { if online != oldValue { onState?(online) } } }
+    // Reading the position. Only touched on `queue`.
+    private var rx: [UInt8] = []
+    /// Who is waiting for the position, and whether they want the camera's own counts (to save
+    /// a shot that goTo can return to exactly) or degrees (for auto tracking).
+    private var posWaiters: [(counts: Bool, done: (PTZPosition?) -> Void)] = []
+    private var posPanTilt: (Int, Int)?
+    private var posZoom: Int?
+    private var posAsk = 0
+    /// Inquiries sent and not yet answered, oldest first. A reply doesn't say what it answers;
+    /// see `received` for how it's matched.
+    private enum Inq { case panTilt, zoom, aeMode, shutter, iris, gain, wbMode, colorTemp
+        var length: Int { switch self { case .panTilt: return 11; case .zoom, .shutter, .iris, .gain: return 7; default: return 4 } }
+    }
+    private var pending: [(kind: Inq, at: Date)] = []
+    private let units = VISCAUnits.ptzOptics
+    // The exposure being read, and the last one read.
+    private var reading = CameraExposure()
+    private var aeMode = -1
+    private var lastExposure: CameraExposure?
 
     init(_ camera: PTZCamera, queue: DispatchQueue) {
         self.camera = camera
@@ -223,13 +310,27 @@ final class VISCALink: PTZLink {
     }
 
     func start() {
+        rx.removeAll(); pending.removeAll()
         guard !camera.host.isEmpty, let port = NWEndpoint.Port(rawValue: camera.port) else { return }
-        let c = NWConnection(host: NWEndpoint.Host(camera.host), port: port, using: camera.proto == .sonyUDP ? .udp : .tcp)
+        let params: NWParameters
+        if camera.proto == .sonyUDP {
+            params = .udp
+        } else {
+            // Keepalive notices a camera that lost power or was unplugged, which never closes the stream.
+            let tcp = NWProtocolTCP.Options()
+            tcp.enableKeepalive = true
+            tcp.keepaliveIdle = 5
+            tcp.keepaliveInterval = 2
+            tcp.keepaliveCount = 3
+            tcp.connectionTimeout = 5
+            params = NWParameters(tls: nil, tcp: tcp)
+        }
+        let c = NWConnection(host: NWEndpoint.Host(camera.host), port: port, using: params)
         c.stateUpdateHandler = { [weak self, weak c] st in
             guard let self, let c, c === self.conn else { return }
             switch st {
             case .ready:
-                if self.camera.proto == .rawTCP { self.online = true }
+                if self.camera.proto == .rawTCP { self.online = true; self.readExposure() }
             case .failed, .waiting:
                 self.online = false
                 c.cancel()
@@ -254,19 +355,39 @@ final class VISCALink: PTZLink {
     func stop() { conn?.cancel(); conn = nil; online = false }
 
     private func receive(_ c: NWConnection) {
-        let handler: (Data?, NWConnection.ContentContext?, Bool, NWError?) -> Void = { [weak self] data, _, _, err in
+        let handler: (Data?, NWConnection.ContentContext?, Bool, NWError?) -> Void = { [weak self] data, _, done, err in
             guard let self, c === self.conn else { return }
-            if let data, !data.isEmpty { self.online = true }
+            if let data, !data.isEmpty { self.online = true; self.received(data) }
+            // A TCP camera that reboots closes the stream (or errors) without the connection
+            // ever leaving .ready, so reconnect here or every later command goes nowhere.
+            if self.camera.proto == .rawTCP, err != nil || (done && (data?.isEmpty ?? true)) {
+                self.reconnect(c)
+                return
+            }
             if err == nil { self.receive(c) }
         }
         if camera.proto == .sonyUDP { c.receiveMessage(completion: handler) }
         else { c.receive(minimumIncompleteLength: 1, maximumLength: 4096, completion: handler) }
     }
 
+    /// Drops a dead connection and dials again in 3 seconds.
+    private func reconnect(_ c: NWConnection) {
+        guard c === conn else { return }
+        online = false
+        c.cancel()
+        queue.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self, c === self.conn else { return }
+            self.start()
+        }
+    }
+
     func send(_ visca: [UInt8], inquiry: Bool = false) {
         guard let conn else { return }
         if camera.proto == .rawTCP {
-            conn.send(content: Data(visca), completion: .contentProcessed { _ in })
+            conn.send(content: Data(visca), completion: .contentProcessed { [weak self, weak conn] err in
+                guard let self, let conn, err != nil else { return }
+                self.queue.async { self.reconnect(conn) }
+            })
             return
         }
         seq &+= 1
@@ -301,13 +422,150 @@ final class VISCALink: PTZLink {
     func recall(_ n: Int) { send([0x81, 0x01, 0x04, 0x3F, 0x02, UInt8(clamping: n - 1 + camera.firstPreset), 0xFF]) }
     func store(_ n: Int) { send([0x81, 0x01, 0x04, 0x3F, 0x01, UInt8(clamping: n - 1 + camera.firstPreset), 0xFF]) }
     // VISCA cameras keep shots in their own presets (store/recall above) for now.
-    func readPosition(_ done: @escaping (PTZPosition?) -> Void) { done(nil) }
-    func goTo(_ p: PTZPosition) {}
-    // VISCA has no delete; a preset is replaced by saving over it.
-    func deletePreset(_ n: Int, _ done: @escaping (String?) -> Void) { done("VISCA cameras can't delete presets; save over one instead.") }
-    // Exposure over VISCA isn't wired up yet.
-    func readExposure() {}
-    func setExposure(_ e: PTZExposure) {}
+
+    /// Where the camera is, in the same units a Canon reports (see VISCAUnits): asks for pan
+    /// and tilt and for zoom, and answers when both come back, or nil after half a second.
+    func readPosition(_ done: @escaping (PTZPosition?) -> Void) { readPosition(counts: false, done) }
+
+    /// A shot keeps the camera's own counts, so recalling it doesn't depend on how well
+    /// CueVideo knows this make's degrees and angle of view.
+    func readShotPosition(_ done: @escaping (PTZPosition?) -> Void) { readPosition(counts: true, done) }
+
+    private func readPosition(counts: Bool, _ done: @escaping (PTZPosition?) -> Void) {
+        posWaiters.append((counts, done))
+        guard posWaiters.count == 1 else { return }   // already asking: this one gets the same answer
+        posPanTilt = nil; posZoom = nil
+        posAsk &+= 1
+        let n = posAsk
+        ask(.panTilt, [0x81, 0x09, 0x06, 0x12, 0xFF])
+        ask(.zoom, [0x81, 0x09, 0x04, 0x47, 0xFF])
+        queue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.posAsk == n, !self.posWaiters.isEmpty else { return }
+            self.answerPosition(nil)
+        }
+    }
+
+    private func answerPosition(_ counts: PTZPosition?) {
+        let w = posWaiters
+        posWaiters = []
+        let degrees = counts.map { units.position(pan: $0.pan, tilt: $0.tilt, zoom: $0.zoom) }
+        for f in w { f.done(f.counts ? counts : degrees) }
+    }
+
+    private func ask(_ kind: Inq, _ bytes: [UInt8]) {
+        let now = Date()
+        // Answers come within a few hundredths of a second. Anything still waiting after 1.5 s
+        // was lost, and would put every later answer against the wrong question.
+        if let first = pending.first, now.timeIntervalSince(first.at) > 1.5 { pending.removeAll() }
+        pending.append((kind, now))
+        send(bytes, inquiry: true)
+    }
+
+    /// Replies end in FF. y0 50 … answers the oldest inquiry; y0 60 … refuses it. Everything
+    /// else (acknowledgements and completions of commands) is skipped.
+    private func received(_ data: Data) {
+        // VISCA over IP puts an 8-byte header in front of each message.
+        rx.append(contentsOf: camera.proto == .sonyUDP ? data.dropFirst(8) : data[...])
+        while let end = rx.firstIndex(of: 0xFF) {
+            let m = Array(rx[...end])
+            rx.removeSubrange(...end)
+            guard m.count >= 3, m[1] == 0x50 || m[1] == 0x60, !pending.isEmpty else { continue }
+            // A refusal: of the oldest inquiry, as far as anyone can tell.
+            guard m[1] == 0x50 else { pending.removeFirst(); continue }
+            // The camera answers its lens and picture questions in the order asked, but pan
+            // and tilt are a separate part of it and can answer before or after them. So an
+            // answer goes to the oldest inquiry it has the right shape for.
+            guard let at = pending.firstIndex(where: { $0.kind.length == m.count }) else { continue }
+            let kind = pending.remove(at: at).kind
+            func word(_ at: Int) -> Int {
+                let v = m[at..<at + 4].reduce(0) { ($0 << 4) | Int($1 & 0x0F) }
+                return v >= 0x8000 ? v - 0x10000 : v
+            }
+            let low = m.count == 7 ? (Int(m[4] & 0x0F) << 4) | Int(m[5] & 0x0F) : Int(m[2])
+            switch kind {
+            case .panTilt, .zoom:
+                if kind == .panTilt { posPanTilt = (word(2), word(6)) } else { posZoom = word(2) }
+                if let pt = posPanTilt, let z = posZoom, !posWaiters.isEmpty {
+                    answerPosition(PTZPosition(pan: pt.0, tilt: pt.1, zoom: z))
+                }
+            case .aeMode:
+                // 0 full auto, 3 manual, 0A shutter priority, 0B iris priority, 0D bright.
+                aeMode = low
+                reading = CameraExposure()
+                reading.shutterAuto = !(low == 0x03 || low == 0x0A)
+                reading.irisAuto = !(low == 0x03 || low == 0x0B)
+                reading.gainAuto = low != 0x03
+            case .shutter: reading.value.shutter = units.shutter[low]
+            case .iris: reading.value.iris = units.iris[low]
+            case .gain: reading.value.gain = low
+            case .wbMode:
+                reading.value.wb = [0x00: "auto", 0x01: "tungsten", 0x02: "daylight", 0x20: "kelvin"][low] ?? "custom"
+            case .colorTemp:
+                reading.value.kelvin = min(units.kelvinTop, units.kelvinBase + low * units.kelvinStep)
+                reading.gainIsLevel = true
+                reading.hasAutoMode = true
+                reading.gainList = Array(0...units.gainMax)
+                reading.shutterList = units.shutter.values.sorted()
+                reading.irisList = units.iris.values.sorted()
+                reading.kelvinList = Array(stride(from: units.kelvinBase, through: units.kelvinTop, by: units.kelvinStep))
+                lastExposure = reading
+                onExposure?(reading)
+            }
+        }
+        if rx.count > 256 { rx.removeAll() }
+    }
+
+    /// Gain, shutter, iris and white balance as they are now, reported through onExposure.
+    func readExposure() {
+        ask(.aeMode, [0x81, 0x09, 0x04, 0x39, 0xFF])
+        ask(.shutter, [0x81, 0x09, 0x04, 0x4A, 0xFF])
+        ask(.iris, [0x81, 0x09, 0x04, 0x4B, 0xFF])
+        ask(.gain, [0x81, 0x09, 0x04, 0x4C, 0xFF])
+        ask(.wbMode, [0x81, 0x09, 0x04, 0x35, 0xFF])
+        ask(.colorTemp, [0x81, 0x09, 0x04, 0x20, 0xFF])
+    }
+
+    func autoExposure() {
+        send([0x81, 0x01, 0x04, 0x39, 0x00, 0xFF])
+        queue.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.readExposure() }
+    }
+
+    /// These cameras have one exposure mode for all three, not one each as a Canon has:
+    /// setting any of gain, shutter or iris puts the camera in manual exposure. So the
+    /// picture doesn't jump, the other two are set to what the camera had them at.
+    func setExposure(_ e: PTZExposure) {
+        func direct(_ op: UInt8, _ v: Int) { send([0x81, 0x01, 0x04, op, 0x00, 0x00, UInt8((v >> 4) & 0x0F), UInt8(v & 0x0F), 0xFF]) }
+        if e.hasExposure {
+            let had = aeMode == 0x03 ? nil : lastExposure?.value
+            send([0x81, 0x01, 0x04, 0x39, 0x03, 0xFF])
+            if let v = e.shutter ?? had?.shutter, let p = units.position(of: v, in: units.shutter) { direct(0x4A, p) }
+            if let v = e.iris ?? had?.iris, let p = units.position(of: v, in: units.iris) { direct(0x4B, p) }
+            if let v = e.gain ?? had?.gain { direct(0x0C, max(0, min(units.gainMax, v))) }
+        }
+        // White balance: a kelvin value sets color temperature mode; a mode alone sets just that.
+        if let k = e.kelvin, e.wb == nil || e.wb == "kelvin" {
+            let p = max(0, min((units.kelvinTop - units.kelvinBase) / units.kelvinStep, (k - units.kelvinBase) / units.kelvinStep))
+            send([0x81, 0x01, 0x04, 0x35, 0x20, 0xFF])
+            send([0x81, 0x01, 0x04, 0x20, UInt8((p >> 4) & 0x0F), UInt8(p & 0x0F), 0xFF])
+        } else if let m = e.wb, let code: UInt8 = ["auto": 0x00, "tungsten": 0x01, "daylight": 0x02][m] {
+            send([0x81, 0x01, 0x04, 0x35, code, 0xFF])
+        }
+        // Read back what the camera actually took, once the commands have gone.
+        queue.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.readExposure() }
+    }
+
+    /// Straight to a saved shot (in the camera's own counts, from readShotPosition): pan and
+    /// tilt together at a brisk speed, and zoom.
+    func goTo(_ p: PTZPosition) {
+        func nibbles(_ v: Int) -> [UInt8] { (0..<4).map { UInt8((v >> (12 - 4 * $0)) & 0x0F) } }
+        send([0x81, 0x01, 0x06, 0x02, 0x14, 0x12] + nibbles(p.pan) + nibbles(p.tilt) + [0xFF])
+        send([0x81, 0x01, 0x04, 0x47] + nibbles(max(0, p.zoom)) + [0xFF])
+    }
+    /// Clears a preset slot on the camera. The camera can't say whether the slot held anything.
+    func deletePreset(_ n: Int, _ done: @escaping (String?) -> Void) {
+        send([0x81, 0x01, 0x04, 0x3F, 0x00, UInt8(clamping: n - 1 + camera.firstPreset), 0xFF])
+        done(nil)
+    }
 }
 
 // MARK: - Canon (HTTP)
@@ -488,6 +746,9 @@ final class CanonLink: PTZLink {
             self.onExposure?(Self.exposure(Self.parse(text)))
         }
     }
+
+    // A Canon sets gain, shutter and iris to auto one at a time; CueVideo doesn't yet.
+    func autoExposure() {}
 
     /// Exposure goes through the same control channel as pan and tilt, as on the camera's own
     /// web page. Each value set also switches that one setting (and the camera) to manual.
@@ -875,6 +1136,15 @@ public final class PTZController: ObservableObject {
         with(camera) { $0.setExposure(e) }
     }
 
+    /// Hands gain, shutter and iris back to the camera (cameras with one auto exposure mode).
+    public func autoExposure(camera: UUID? = nil) {
+        if let id = camera ?? selected, var x = exposure[id], x.hasAutoMode {
+            x.gainAuto = true; x.shutterAuto = true; x.irisAuto = true
+            exposure[id] = x
+        }
+        with(camera) { $0.autoExposure() }
+    }
+
     /// Re-read a camera's exposure, for when someone may have changed it elsewhere.
     public func refreshExposure(camera: UUID? = nil) { with(camera) { $0.readExposure() } }
 
@@ -901,7 +1171,7 @@ public final class PTZController: ObservableObject {
         }
         queue.async {
             guard let l = self.links[id] else { DispatchQueue.main.async { done?(false) }; return }
-            l.readPosition { p in
+            l.readShotPosition { p in
                 DispatchQueue.main.async {
                     guard let p, let i = self.cameras.firstIndex(where: { $0.id == id }) else { done?(false); return }
                     if let r = replacing, let j = self.cameras[i].shots.firstIndex(where: { $0.id == r }) {
@@ -934,6 +1204,7 @@ public final class PTZController: ObservableObject {
         c.proto == .canonXC ? controlled.contains(c.id) : online.contains(c.id)
     }
 
-    /// Whether this camera can save shots in CueVideo (Canon's HTTP control reports its position).
-    public func canSaveShots(_ c: PTZCamera) -> Bool { c.proto == .canonXC }
+    /// Whether this camera can save shots in CueVideo: it has to report where it is. Canon
+    /// does over HTTP, VISCA cameras by inquiry.
+    public func canSaveShots(_ c: PTZCamera) -> Bool { !c.host.isEmpty }
 }
