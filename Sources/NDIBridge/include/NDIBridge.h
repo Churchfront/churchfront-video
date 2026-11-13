@@ -21,6 +21,9 @@ bool ndi_recv_frame_alpha(void *recv, int timeout_ms, const uint8_t **data, int 
 /// Waits up to timeout_ms for a video frame. On success fills in BGRA data,
 /// size and stride, and a handle to release with ndi_recv_release.
 bool ndi_recv_frame(void *recv, int timeout_ms, const uint8_t **data, int *width, int *height, int *stride, void **frame);
+/// The shape the picture should be shown at (width ÷ height) for a frame from ndi_recv_frame,
+/// which differs from its pixel size when the pixels aren't square. 0 if the sender didn't say.
+float ndi_frame_aspect(void *frame);
 void ndi_recv_release(void *recv, void *frame);
 void ndi_recv_close(void *recv);
 

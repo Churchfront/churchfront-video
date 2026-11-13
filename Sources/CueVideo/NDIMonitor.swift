@@ -59,7 +59,7 @@ final class NDIMonitor: ObservableObject, @unchecked Sendable {
     private func current(_ gen: Int) -> Bool { lock.lock(); defer { lock.unlock() }; return generation == gen }
 
     private func receive(_ name: String, _ gen: Int) {
-        guard let recv = name.withCString({ ndi_recv_open($0) }) else {
+        guard let recv = NDIFeed.resolve(name, wait: 800).withCString({ ndi_recv_open($0) }) else {
             DispatchQueue.main.async { self.hasRuntime = false }
             return
         }

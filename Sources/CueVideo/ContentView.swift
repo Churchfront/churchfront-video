@@ -23,6 +23,7 @@ struct ContentView: View {
         }
         .background(T.bg)
         .foregroundStyle(T.ink)
+        .tint(T.accent)
         // Windows opened by Claude through the show_window tool.
         .onReceive(NotificationCenter.default.publisher(for: .cueVideoShowWindow)) { n in
             // The names from when each of these was its own window.
@@ -43,6 +44,7 @@ struct ContentView: View {
 /// The one bar across the top: the page tabs, whether we're connected, small live previews
 /// of what's on air and of the pinned screens, and recording and streaming.
 struct TopBar: View {
+    static let height: CGFloat = 68
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
     @EnvironmentObject var ptz: PTZController
@@ -77,8 +79,8 @@ struct TopBar: View {
             } }
         }
         .padding(.horizontal, T.s3)
-        .frame(height: 68)
-        .background(T.surface)
+        .frame(height: TopBar.height)
+        .background(T.toolbar)
     }
 }
 
@@ -87,28 +89,26 @@ struct PageTabs: View {
     @EnvironmentObject var booth: Booth
 
     var body: some View {
-        HStack(spacing: 2) {
+        // Tabs in the CueScreens manner: caps labels, the one you're on in accent with a line under it.
+        HStack(spacing: T.s4) {
             tab("Operate", "slider.horizontal.3", "The booth screen: pick, frame, take (⌘1)", on: booth.view == .operate) { booth.view = .operate }
             ForEach(EngineerSection.allCases) { s in
                 tab(s.title, s.icon, s.note + ". Space, Return and the number keys do nothing here, so they can't cut or fade.",
                     on: booth.view == .engineer && booth.section == s) { booth.show(s) }
             }
         }
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
-        .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
         .fixedSize()
     }
 
     private func tab(_ title: String, _ icon: String, _ help: String, on: Bool, _ go: @escaping () -> Void) -> some View {
         Button(action: go) {
             HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 12))
-                Text(title).font(.sans(13, .semibold)).lineLimit(1)
+                Image(systemName: icon).font(.system(size: 11, weight: .semibold))
+                LabelText(title, size: 11)
             }
-            .foregroundStyle(on ? T.onAction : T.inkMuted)
-            .padding(.horizontal, 10).frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: T.rSM).fill(on ? T.accent : Color.clear))
+            .foregroundStyle(on ? T.accent : T.inkMuted)
+            .frame(height: TopBar.height)
+            .overlay(alignment: .bottom) { Rectangle().fill(on ? T.accent : .clear).frame(height: 2) }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -157,8 +157,8 @@ struct TopMonitors: View {
                     if let tag { Tag(text: tag.0, color: tag.1, ink: tag.2).padding(2) }
                 }
                 .frame(width: 71, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: T.rSM))
-                .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(tag?.1 ?? T.line, lineWidth: tag?.0 == "Live" ? 2 : 1))
+                .clipShape(Rectangle())
+                .overlay(Rectangle().stroke(tag?.1 ?? T.line, lineWidth: tag?.0 == "Live" ? 2 : 1))
                 Text(caption).font(.sans(10, .medium)).foregroundStyle(T.inkMuted).lineLimit(1).frame(width: 71)
             }
             .contentShape(Rectangle())
@@ -177,11 +177,11 @@ struct StatusButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Circle().fill(on ? color : T.lineStrong).frame(width: 8, height: 8)
-                Text(title).font(.sans(12, .semibold))
+                LabelText(title, size: 11)
             }
             .padding(.horizontal, 10).frame(height: 28)
-            .background(Capsule().fill(on ? color.opacity(0.18) : T.surfaceRaised))
-            .overlay(Capsule().stroke(on ? color.opacity(0.6) : T.line))
+            .background(RoundedRectangle(cornerRadius: T.rSM).fill(on ? color.opacity(0.18) : Color.clear))
+            .overlay(RoundedRectangle(cornerRadius: T.rSM).stroke(on ? color.opacity(0.6) : T.lineStrong))
         }
         .buttonStyle(.plain)
     }
@@ -198,10 +198,7 @@ struct LinkPill: View {
             case .idle: return ("Not set up", T.inkSubtle)
             }
         }()
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text(text).font(.sans(12, .semibold)).foregroundStyle(color)
-        }
+        Badge(text: text, tone: color == T.success ? .success : (color == T.warning ? .warning : (color == T.danger ? .danger : .neutral)), dot: true)
     }
 }
 

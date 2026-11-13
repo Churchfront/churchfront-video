@@ -4,7 +4,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import CueATEM
 
-/// Still pictures from the Canon cameras, measured for color, so Claude can compare them.
+/// Still pictures from the cameras, measured for color, so Claude can compare them.
 enum Snapshots {
     struct Result {
         var info: [String: Any]
@@ -16,16 +16,9 @@ enum Snapshots {
         let group = DispatchGroup()
         for (i, c) in cams.enumerated() {
             group.enter()
-            let port = c.port == 80 ? "" : ":\(c.port)"
-            guard let url = URL(string: "http://\(c.host)\(port)/-wvhttp-01-/image.cgi") else { group.leave(); continue }
-            var r = URLRequest(url: url, timeoutInterval: 5)
-            r.cachePolicy = .reloadIgnoringLocalCacheData
-            URLSession.shared.dataTask(with: r) { data, _, _ in
+            func finish(_ img: CGImage?) {
                 defer { group.leave() }
-                guard let data, let src = CGImageSourceCreateWithData(data as CFData, nil),
-                      let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
-                    results[i] = Result(info: ["camera": c.name, "error": "No picture from \(c.name)."]); return
-                }
+                guard let img else { results[i] = Result(info: ["camera": c.name, "error": "No picture from \(c.name)."]); return }
                 var info = measure(img)
                 info["camera"] = c.name
                 var image: [String: Any]?
@@ -33,6 +26,33 @@ enum Snapshots {
                     image = ["label": c.name, "mimeType": "image/jpeg", "data": small.base64EncodedString()]
                 }
                 results[i] = Result(info: info, image: image)
+            }
+            // A camera seen over NDI: take the next frame of its picture (waiting up to 4 s for
+            // the stream to start if nothing is showing it now).
+            if c.proto != .canonXC {
+                DispatchQueue.main.async {
+                    guard let picture = CameraPicture.of(c) else {
+                        results[i] = Result(info: ["camera": c.name, "error": "\(c.name) has no picture in CueVideo. Set an NDI picture for its switcher input in Setup."])
+                        group.leave(); return
+                    }
+                    picture.retain()
+                    var tries = 0
+                    func look() {
+                        if let img = picture.liveImage { picture.release(); finish(img); return }
+                        tries += 1
+                        if tries > 40 { picture.release(); finish(nil); return }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { look() }
+                    }
+                    look()
+                }
+                continue
+            }
+            let port = c.port == 80 ? "" : ":\(c.port)"
+            guard let url = URL(string: "http://\(c.host)\(port)/-wvhttp-01-/image.cgi") else { group.leave(); continue }
+            var r = URLRequest(url: url, timeoutInterval: 5)
+            r.cachePolicy = .reloadIgnoringLocalCacheData
+            URLSession.shared.dataTask(with: r) { data, _, _ in
+                finish(data.flatMap { CGImageSourceCreateWithData($0 as CFData, nil) }.flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) })
             }.resume()
         }
         group.notify(queue: .main) { done(results.compactMap { $0 }) }
