@@ -48,6 +48,14 @@ calls to the running app over 127.0.0.1:9911, using the key in
 `~/Library/Application Support/CueVideo/control-token`. Calling a tool opens
 Churchfront Video if it isn't running; listing the tools (which every Claude session does
 when it starts) does not. `.mcp.json` registers it for Claude Code sessions in this folder.
+
+**Connecting Claude on a church's Mac:** Setup > AI assistant > **Connect Claude** adds a
+`churchfront-video` entry to the Claude desktop app's `claude_desktop_config.json` (everything
+else in that file is kept, and a copy of it is saved first). After Claude restarts, asking it
+to "help me set up Churchfront Video" works: `find_devices` finds the ATEM (UDP 9910 hello to
+the local /24), Canon cameras (their HTTP page) and anything on Bonjour (NDI sources,
+Blackmagic devices, web pages), and `update_config` saves what the person confirms.
+ChatGPT's desktop app can't use local MCP servers, so this is Claude only for now.
 Camera tools refuse a camera that's on Live unless the call says `allow_live: true`.
 
 ## Safeguards
