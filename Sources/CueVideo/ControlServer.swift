@@ -36,7 +36,7 @@ final class ControlServer {
             l.start(queue: queue)
             listener = l
         } catch {
-            print("CueVideo control server didn't start: \(error)")
+            print("Churchfront Video control server didn't start: \(error)")
         }
     }
 

@@ -32,7 +32,7 @@ enum Snapshots {
             if c.proto != .canonXC {
                 DispatchQueue.main.async {
                     guard let picture = CameraPicture.of(c) else {
-                        results[i] = Result(info: ["camera": c.name, "error": "\(c.name) has no picture in CueVideo. Set an NDI picture for its switcher input in Setup."])
+                        results[i] = Result(info: ["camera": c.name, "error": "\(c.name) has no picture in Churchfront Video. Set an NDI picture for its switcher input in Setup."])
                         group.leave(); return
                     }
                     picture.retain()

@@ -60,7 +60,7 @@ func ensureApp() -> Bool {
     return false
 }
 
-let notRunning = "CueVideo isn't running or isn't answering on 127.0.0.1:\(port). Open CueVideo on this Mac and try again."
+let notRunning = "Churchfront Video isn't running or isn't answering on 127.0.0.1:\(port). Open Churchfront Video on this Mac and try again."
 
 func send(_ obj: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.withoutEscapingSlashes]) else { return }
@@ -85,7 +85,7 @@ while let line = readLine(strippingNewline: true) {
             "protocolVersion": supported.contains(asked) ? asked : supported[0],
             "capabilities": ["tools": [:] as [String: Any]],
             "serverInfo": ["name": "cuevideo", "version": "0.1.0"],
-            "instructions": "Controls CueVideo, the church booth app for the ATEM switcher and PTZ cameras. Call get_status first to see what's Live and Next, the sources, cameras, shots and key buttons. Cuts, fades and Live changes go out to the congregation and the stream immediately, so confirm with the person before changing what's live during a service. Camera tools act on the camera on Next unless one is named, and refuse a camera that's on Live unless allow_live is true.",
+            "instructions": "Controls Churchfront Video, the church booth app for the ATEM switcher and PTZ cameras. Call get_status first to see what's Live and Next, the sources, cameras, shots and key buttons. Cuts, fades and Live changes go out to the congregation and the stream immediately, so confirm with the person before changing what's live during a service. Camera tools act on the camera on Next unless one is named, and refuse a camera that's on Live unless allow_live is true.",
         ])
     case "ping":
         result(id, [:])
@@ -100,7 +100,7 @@ while let line = readLine(strippingNewline: true) {
         } else if let data = try? Data(contentsOf: toolsCache), let tools = try? JSONSerialization.jsonObject(with: data) {
             result(id, ["tools": tools])
         } else {
-            result(id, ["tools": [["name": "get_status", "description": "Status of CueVideo. (CueVideo isn't running right now.)",
+            result(id, ["tools": [["name": "get_status", "description": "Status of Churchfront Video. (Churchfront Video isn't running right now.)",
                                    "inputSchema": ["type": "object", "properties": [:] as [String: Any]]]]])
         }
     case "tools/call":

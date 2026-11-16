@@ -16,7 +16,7 @@ struct StageScanWindow: View {
     var body: some View {
         Page {
             PageHeader(title: "Stage scan", purpose: "With everyone in place, find each person, name them, and save a shot of them on every camera.",
-                       help: "Each camera that isn't on Live goes to a wide shot, finds the people in it, and comes back. Label each person, and CueVideo saves a shot of them on every camera that saw them and can follow them by name for the rest of the day.\n\nThe wide shot is a camera's shot named Stage or Wide if it has one. Otherwise it's where the camera points now, zoomed all the way out. A tighter Stage shot makes people bigger in the picture and easier to find.\n\nThe shots are for where people stood during the scan, so run it at rehearsal or soundcheck.")
+                       help: "Each camera that isn't on Live goes to a wide shot, finds the people in it, and comes back. Label each person, and Churchfront Video saves a shot of them on every camera that saw them and can follow them by name for the rest of the day.\n\nThe wide shot is a camera's shot named Stage or Wide if it has one. Otherwise it's where the camera points now, zoomed all the way out. A tighter Stage shot makes people bigger in the picture and easier to find.\n\nThe shots are for where people stood during the scan, so run it at rehearsal or soundcheck.")
             HStack(alignment: .top, spacing: T.s4) {
                 step(1, "Cameras") {
                     if cameras.isEmpty {
@@ -64,7 +64,7 @@ struct StageScanWindow: View {
                                                : "The last scan found no one. Check the notes above, then scan again.")
                         .font(.sans(13)).foregroundStyle(T.inkMuted)
                 } else {
-                    Text("Type a name or a role under each person. The letter is CueVideo's guess at the same person on another camera: naming one fills in the others with that letter. Fix any it got wrong, and leave a person blank to skip them.")
+                    Text("Type a name or a role under each person. The letter is Churchfront Video's guess at the same person on another camera: naming one fills in the others with that letter. Fix any it got wrong, and leave a person blank to skip them.")
                         .font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
                     ForEach(cameras.filter { c in scan.people.contains { $0.camera == c.id } }) { c in
                         VStack(alignment: .leading, spacing: T.s2) {
@@ -87,7 +87,7 @@ struct StageScanWindow: View {
             if !cast.names.isEmpty {
                 Card(title: "Can follow by name") {
                     Text(cast.names.joined(separator: ", ")).font(.sans(13, .semibold))
-                    Text("On Operate, under Track, choose Follow by name. This lasts until CueVideo quits or the next scan is saved.")
+                    Text("On Operate, under Track, choose Follow by name. This lasts until Churchfront Video quits or the next scan is saved.")
                         .font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
             }
