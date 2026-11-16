@@ -46,7 +46,6 @@ Status of CueVideo when it moved from Jake's MacBook Pro to the church booth.
 - Live NDI video in the monitor (no multiview NDI source on the network yet).
 - Macros (this switcher has none recorded).
 
-
 ## First steps at the booth
 1. `./build.sh debug`
 2. Read-only first: open the app, connect to the ATEM IP, confirm names, tally

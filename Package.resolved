@@ -1,9 +1,9 @@
 {
   "pins" : [
     {
-      "identity" : "cuekit",
+      "identity" : "churchfront-kit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Churchfront/CueKit.git",
+      "location" : "https://github.com/Churchfront/churchfront-kit.git",
       "state" : {
         "revision" : "dbe03aecce8e24ef91177ba3e60320afd6c46b0c",
         "version" : "0.2.1"
