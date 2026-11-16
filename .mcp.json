@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "cuevideo": {
-      "command": "./CueVideo.app/Contents/MacOS/cuevideo-mcp",
+      "command": "./Churchfront Video.app/Contents/MacOS/cuevideo-mcp",
       "args": []
     }
   }

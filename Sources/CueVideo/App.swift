@@ -37,7 +37,7 @@ final class Booth: ObservableObject {
     }
     private var heldArrows: Set<UInt16> = []
     /// The title of the volunteer's window (the WindowGroup in CueVideoApp).
-    static let mainWindowTitle = "CueVideo"
+    static let mainWindowTitle = "Churchfront Video"
 
     /// Lets go of any arrow keys being held and stops that camera. Used when the key release
     /// may never reach CueVideo: another window or another app came to the front.

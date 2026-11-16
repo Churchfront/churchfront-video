@@ -1,15 +1,15 @@
-# CueVideo
+# Churchfront Video
 
 A simple ATEM control surface for church booths, with PTZ camera control and live
-camera previews. Part of the Cue family (CueStack, CueScreens, CueLights,
-CueTracks). Native macOS 14+, SwiftUI.
+camera previews. Part of the Churchfront App Suite (Churchfront Cues, Churchfront Screens,
+Churchfront Lights, Churchfront Tracks). Native macOS 14+, SwiftUI.
 
 - `Sources/CueATEM`: the shared engine. `ATEM.swift` speaks the ATEM network
   protocol (UDP 9910) with two-way state; `PTZ.swift` drives Canon cameras over
   Canon's HTTP control and VISCA cameras (VISCA over IP UDP 52381, or VISCA over
   TCP 5678); `CameraLogin.swift` keeps the cameras' admin login in the Keychain.
-  Meant to be used by CueScreens (slide actions) and CueStack too.
-- `Sources/NDIBridge`: copied from CueScreens; loads the NDI runtime at run time.
+  Meant to be used by Churchfront Screens (slide actions) and Churchfront Cues too.
+- `Sources/NDIBridge`: copied from Churchfront Screens; loads the NDI runtime at run time.
 - `Sources/CueVideo`: the app.
   - One window with two views, switched in the top bar or the View menu:
     - **Operator** (⌘1, where it always opens), for the booth volunteer: Next and
@@ -26,7 +26,10 @@ CueTracks). Native macOS 14+, SwiftUI.
     ⇧⌘F) and **Engineer** (its pages). Switcher and Camera only act from the Operator view.
 - `Sources/CueVideoMCP`: the MCP server Claude uses (see below).
 
-Build: `./build.sh` (or `./build.sh debug`) makes `CueVideo.app`.
+Build: `./build.sh` (or `./build.sh debug`) makes `Churchfront Video.app`. Inside it, the
+executable is still `CueVideo` and the bundle ID is still `com.churchfront.cuevideo`, and
+the Swift package, targets and folders keep their CueVideo names, so existing setups,
+permissions and scripts keep working.
 
 ## Setup file
 
@@ -34,24 +37,24 @@ Everything set up in the app is saved as plain JSON in
 `~/Library/Application Support/CueVideo/config.json`: the switcher address, the
 M/E volunteers run, the source row, key buttons, cameras and each camera's saved
 shots. The app picks up edits to the file within a second, so a person or Claude
-can set CueVideo up by editing it. The camera admin login is never in this file.
+can set Churchfront Video up by editing it. The camera admin login is never in this file.
 
 ## Claude (MCP)
 
-`CueVideo.app/Contents/MacOS/cuevideo-mcp` is an MCP server with a tool for every
+`Churchfront Video.app/Contents/MacOS/cuevideo-mcp` is an MCP server with a tool for every
 action in the app (status, Next/Live/Cut/Fade/Black, keys, record and stream,
 camera moves, exposure, shots and presets, the full switcher, setup). It passes
 calls to the running app over 127.0.0.1:9911, using the key in
 `~/Library/Application Support/CueVideo/control-token`. Calling a tool opens
-CueVideo if it isn't running; listing the tools (which every Claude session does
+Churchfront Video if it isn't running; listing the tools (which every Claude session does
 when it starts) does not. `.mcp.json` registers it for Claude Code sessions in this folder.
 Camera tools refuse a camera that's on Live unless the call says `allow_live: true`.
 
 ## Safeguards
 
-- **A camera is never left moving.** If Next is cut to Live while the joystick or an arrow key is held, the camera that was moving is stopped. Quitting CueVideo stops every camera it is moving, tracking included. Arrow keys let go when another window or app comes to the front. A stop that is waiting for a Canon camera is kept and re-sent if the request before it fails.
+- **A camera is never left moving.** If Next is cut to Live while the joystick or an arrow key is held, the camera that was moving is stopped. Quitting Churchfront Video stops every camera it is moving, tracking included. Arrow keys let go when another window or app comes to the front. A stop that is waiting for a Canon camera is kept and re-sent if the request before it fails.
 - **Keys only work in the main window.** Space, Return, the number keys and the arrows do nothing in Setup, Video Routing, the Full Switcher, or while a dialog or popover is open.
-- **The setup file is protected.** Every setup that loads or saves cleanly is copied to `config.last-good.json`. If `config.json` has a mistake when CueVideo opens, it runs on that copy and says so on the main screen. Before CueVideo saves over a file it couldn't read, it keeps that file as `config.unreadable-<date>.json`.
+- **The setup file is protected.** Every setup that loads or saves cleanly is copied to `config.last-good.json`. If `config.json` has a mistake when Churchfront Video opens, it runs on that copy and says so on the main screen. Before Churchfront Video saves over a file it couldn't read, it keeps that file as `config.unreadable-<date>.json`.
 - **Claude's tools don't guess.** `set_recording` and `set_streaming` need a clear `on: true` or `on: false`. A part of a name is accepted only when it fits exactly one source, screen or routing button.
 
 `swift test` runs the camera code against pretend cameras on this Mac and checks the stops go out.
@@ -78,13 +81,13 @@ In the config file, this is `mixNames`, `screens` and `routes`. Claude can use `
 
 ## Graphics and lower thirds previews (NDI)
 
-Tiles and the Next and Live monitors can show any NDI source, typically a CueScreens screen with an NDI output added. In Setup, under Volunteer source row, pick the NDI picture for a non-camera source such as Graphics. Under Key buttons, pick an NDI source with alpha (such as CueScreens' lower thirds sent with alpha). It is laid over the Next and Live pictures when the key is on them: on Live when it's on air, and on Next when it will be on air after the next Cut or Fade (a tied DSK or a key selected in the next transition).
+Tiles and the Next and Live monitors can show any NDI source, typically a Churchfront Screens screen with an NDI output added. In Setup, under Volunteer source row, pick the NDI picture for a non-camera source such as Graphics. Under Key buttons, pick an NDI source with alpha (such as Churchfront Screens' lower thirds sent with alpha). It is laid over the Next and Live pictures when the key is on them: on Live when it's on air, and on Next when it will be on air after the next Cut or Fade (a tied DSK or a key selected in the next transition).
 
-Previews use NDI's low-bandwidth preview stream, so they cost little network or processor time. They need the NDI runtime on this Mac (NDI Tools). In the config file, it's the `ndi` field on a source or key, with the exact name from Setup or Claude's `list_ndi_sources`. The preview shows what CueScreens is drawing, not the switcher's actual output.
+Previews use NDI's low-bandwidth preview stream, so they cost little network or processor time. They need the NDI runtime on this Mac (NDI Tools). In the config file, it's the `ndi` field on a source or key, with the exact name from Setup or Claude's `list_ndi_sources`. The preview shows what Churchfront Screens is drawing, not the switcher's actual output.
 
 ## Auto tracking
 
-**Track** (under the joystick) makes the Canon camera on Next follow the person nearest the middle of its shot. Click a person on the Next picture to follow them instead. CueVideo finds people and their body landmarks (eyes, shoulders, hips, ankles) in the camera's preview picture with Apple's Vision framework. It works out whether the shot is **shoulders up**, **waist up** or **full length**, and frames it the way a broadcast operator would:
+**Track** (under the joystick) makes the Canon camera on Next follow the person nearest the middle of its shot. Click a person on the Next picture to follow them instead. Churchfront Video finds people and their body landmarks (eyes, shoulders, hips, ankles) in the camera's preview picture with Apple's Vision framework. It works out whether the shot is **shoulders up**, **waist up** or **full length**, and frames it the way a broadcast operator would:
 
 - Eyes near the upper third line, with headroom to suit the shot size.
 - Frame edges between joints: mid-chest, just below the waist, or a little room under the feet.
@@ -105,24 +108,24 @@ Tracking keeps to one person by what they look like (clothes, build and colourin
 **Engineer → Stage scan** (⇧⌘S), for before a service with everyone in place (rehearsal or soundcheck):
 
 1. Each Canon camera that isn't on Live, tracking or held by another controller goes to a wide shot, and comes back afterwards. The wide shot is that camera's shot named **Stage** or **Wide** if it has one (worth making: frame the stage as tightly as covers everyone, so people are bigger in the picture). Otherwise it's where the camera points now, zoomed all the way out.
-2. CueVideo finds the people in each wide shot and works out the shot that frames each one from that camera (waist up by default), from the camera's own angles and angle of view.
+2. Churchfront Video finds the people in each wide shot and works out the shot that frames each one from that camera (waist up by default), from the camera's own angles and angle of view.
 3. It shows a small picture of each person per camera. A letter marks its guess at the same person on another camera. Type a name or role under one and the others with that letter fill in; fix any it got wrong.
-4. **Save shots and names** adds a shot per labelled person to each camera's row in the shot grid (replacing the last scan's; shots made by hand are kept, and marked `"auto": true` in the config file), and remembers each person's look. Under Track, **Follow by name** then follows that person wherever they are in the shot. Names last until CueVideo quits.
+4. **Save shots and names** adds a shot per labelled person to each camera's row in the shot grid (replacing the last scan's; shots made by hand are kept, and marked `"auto": true` in the config file), and remembers each person's look. Under Track, **Follow by name** then follows that person wherever they are in the shot. Names last until Churchfront Video quits.
 
 The shots are for where people stood during the scan. Claude can use `scan_stage`, `label_stage_scan` and `start_tracking` with `person`.
 
 ## Canon cameras take one controller at a time
 
 Only one session controls a Canon camera at a time. If another controller (another
-copy of CueVideo or CueStack, a Companion Canon connection, an RC-IP100) keeps
+copy of Churchfront Video or Churchfront Cues, a Companion Canon connection, an RC-IP100) keeps
 claiming the same cameras, the two trade control and the joystick seems broken.
-CueVideo shows "waiting for control" when this happens; close the other one.
+Churchfront Video shows "waiting for control" when this happens; close the other one.
 
 ## Testing without hardware
 
 `python3 Tools/fake_atem.py 9910 --cams` starts a pretend ATEM and three pretend
 VISCA cameras, then
-`CUEVIDEO_HOST=127.0.0.1 CUEVIDEO_FAKECAMS=127.0.0.1 CUEVIDEO_SELFTEST=1 CUEVIDEO_SNAPSHOT=<folder> ./CueVideo.app/Contents/MacOS/CueVideo`
+`CUEVIDEO_HOST=127.0.0.1 CUEVIDEO_FAKECAMS=127.0.0.1 CUEVIDEO_SELFTEST=1 CUEVIDEO_SNAPSHOT=<folder> "./Churchfront Video.app/Contents/MacOS/CueVideo"`
 runs every command, prints the state after each, and writes screenshots. Self-tests
 never write to the setup file. Never run the self-test against a switcher that is
 live on a service.
