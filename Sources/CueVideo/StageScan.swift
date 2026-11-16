@@ -146,7 +146,7 @@ final class StageScan: ObservableObject {
         if c.proto != .canonXC || c.host.isEmpty { return "only Canon cameras report where they point" }
         if let i = c.atemInput, (booth.atem.state.tally[i] ?? 0) & 1 != 0 { return "it's on Live" }
         if AutoTracker.shared.isTracking(c.id) { return "it's auto tracking" }
-        if !booth.ptz.hasControl(c) { return "CueVideo doesn't have control of it" }
+        if !booth.ptz.hasControl(c) { return "Churchfront Video doesn't have control of it" }
         return nil
     }
 
