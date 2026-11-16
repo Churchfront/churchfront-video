@@ -239,7 +239,7 @@ struct ConnectView: View {
             Text("Churchfront Video talks to the switcher directly over your network. No Blackmagic software needed.\nFind the switcher's IP address in ATEM Setup under Network.")
                 .font(.sans(14)).foregroundStyle(T.inkMuted).multilineTextAlignment(.center)
             HStack {
-                TextField("192.168.10.240", text: $host)
+                TextField("Such as 192.168.1.240", text: $host)
                     .textFieldStyle(.plain).font(.sans(16))
                     .padding(.horizontal, T.s3).frame(width: 260, height: 40)
                     .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))

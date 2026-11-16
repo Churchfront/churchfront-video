@@ -84,8 +84,8 @@ while let line = readLine(strippingNewline: true) {
         result(id, [
             "protocolVersion": supported.contains(asked) ? asked : supported[0],
             "capabilities": ["tools": [:] as [String: Any]],
-            "serverInfo": ["name": "cuevideo", "version": "0.1.0"],
-            "instructions": "Controls Churchfront Video, the church booth app for the ATEM switcher and PTZ cameras. Call get_status first to see what's Live and Next, the sources, cameras, shots and key buttons. Cuts, fades and Live changes go out to the congregation and the stream immediately, so confirm with the person before changing what's live during a service. Camera tools act on the camera on Next unless one is named, and refuse a camera that's on Live unless allow_live is true.",
+            "serverInfo": ["name": "cuevideo", "version": "0.1.1"],
+            "instructions": "Controls Churchfront Video, the church booth app for the ATEM switcher and PTZ cameras. Setting it up for the first time (get_config shows no atemHost or no cameras): call find_devices to locate the ATEM and cameras on the network, confirm with the person which camera is which and which switcher input each feeds, save them with update_config (atemHost, cameras with name, host, proto, atemInput), then list_ndi_sources for previews and add sources and key buttons. Explain each step in plain words; the person may be a volunteer. Running it: call get_status first to see what's Live and Next, the sources, cameras, shots and key buttons. Cuts, fades and Live changes go out to the congregation and the stream immediately, so confirm with the person before changing what's live during a service. Camera tools act on the camera on Next unless one is named, and refuse a camera that's on Live unless allow_live is true.",
         ])
     case "ping":
         result(id, [:])
