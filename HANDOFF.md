@@ -46,15 +46,6 @@ Status of CueVideo when it moved from Jake's MacBook Pro to the church booth.
 - Live NDI video in the monitor (no multiview NDI source on the network yet).
 - Macros (this switcher has none recorded).
 
-## Church network (192.168.20.0/24), from a quick scan; not yet confirmed
-| IP | Hardware maker (MAC prefix) | Likely device |
-|---|---|---|
-| 192.168.20.31 | Blackmagic Design | ATEM 2 M/E Constellation HD (confirmed) |
-| 192.168.20.91 / .92 / .93 | Canon | CR-N500 / CR-N100 / CR-N300 PTZ (confirmed; Canon HTTP works, VISCA off) |
-| 192.168.20.164 | Allen & Heath | Audio console |
-| 192.168.20.206, .254 | Shure | Wireless receivers |
-| 192.168.20.1 | Ubiquiti | Gateway |
-
 ## First steps at the booth
 1. `./build.sh debug`
 2. Read-only first: open the app, connect to the ATEM IP, confirm names, tally
