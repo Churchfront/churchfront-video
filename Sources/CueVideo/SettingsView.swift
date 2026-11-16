@@ -28,7 +28,7 @@ struct SwitcherWindow: View {
 
 /// The parts of Setup, as tabs across the top of the page.
 enum SetupPage: String, CaseIterable, Identifiable {
-    case switcher, sources, keys, cameras, tracking, file
+    case switcher, sources, keys, cameras, tracking, assistant, file
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -37,6 +37,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .keys: return "Key buttons"
         case .cameras: return "Cameras"
         case .tracking: return "Tracking"
+        case .assistant: return "AI assistant"
         case .file: return "Setup file"
         }
     }
@@ -47,6 +48,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .keys: return "On and off buttons under Fade and Cut, such as lower thirds."
         case .cameras: return "The PTZ cameras, the switcher input each one feeds, and their saved shots."
         case .tracking: return "How auto tracking follows a person."
+        case .assistant: return "Let Claude set up and run Churchfront Video for you, in plain words."
         case .file: return "Everything in Setup is saved in one file that people and Claude can edit."
         }
     }
@@ -57,6 +59,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .keys: return "Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in Churchfront Screens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures."
         case .cameras: return "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it."
         case .tracking: return "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back."
+        case .assistant: return "Connecting adds Churchfront Video to the Claude desktop app on this Mac. Claude can then find your switcher and cameras on the network, set them up with you, and run the switcher when you ask. It checks with you before changing anything live. Claude for Mac is free from claude.ai/download."
         case .file: return "The file is plain JSON. You, the system owner or Claude can edit it directly; Churchfront Video picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it."
         }
     }
@@ -82,6 +85,7 @@ struct SetupTab: View {
             case .keys: keyButtons
             case .cameras: cameras
             case .tracking: tracking
+            case .assistant: AssistantSetup()
             case .file: configFile
             }
         }
@@ -660,5 +664,55 @@ struct NDIPicker: View {
             Button("Look again") { ndi.scan() }
         }
         .onAppear { ndi.scan() }
+    }
+}
+
+
+/// Setup > AI assistant: one button that adds Churchfront Video to the Claude desktop app.
+struct AssistantSetup: View {
+    @State private var state = ClaudeConnect.state()
+    @State private var note: String?
+    @State private var copied = false
+
+    var body: some View {
+        Card(title: "Claude") {
+            switch state {
+            case .runFromDownloads:
+                Text("Move Churchfront Video to your Applications folder and open it from there, then come back here to connect Claude.")
+                    .font(.sans(13)).fixedSize(horizontal: false, vertical: true)
+            case .noClaude:
+                Text("Install the Claude desktop app first. It's free.").font(.sans(13))
+                HStack(spacing: T.s2) {
+                    Button("Get Claude for Mac") { NSWorkspace.shared.open(URL(string: "https://claude.ai/download")!) }.buttonStyle(CueButton(kind: .primary))
+                    Button("I've installed it") { state = ClaudeConnect.state() }.buttonStyle(CueButton())
+                }
+            case .notConnected, .stalePath:
+                Text(state == .stalePath ? "Claude is connected to another copy of Churchfront Video. Connect it to this one." : "Claude isn't connected yet.")
+                    .font(.sans(13))
+                Button("Connect Claude") {
+                    note = ClaudeConnect.connect()
+                    state = ClaudeConnect.state()
+                }
+                .buttonStyle(CueButton(kind: .primary))
+            case .connected:
+                Text("Connected. Quit Claude (Claude > Quit) and open it again, then ask it something like:")
+                    .font(.sans(13)).fixedSize(horizontal: false, vertical: true)
+                Text(ClaudeConnect.firstPrompt).font(.sans(13, .semibold)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: T.s2) {
+                    Button(copied ? "Copied" : "Copy this") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(ClaudeConnect.firstPrompt, forType: .string)
+                        copied = true
+                    }
+                    .buttonStyle(CueButton(kind: .primary))
+                    Button("Disconnect") { note = ClaudeConnect.disconnect(); state = ClaudeConnect.state(); copied = false }.buttonStyle(CueButton(kind: .quiet))
+                }
+            }
+            if let note {
+                Text(note).font(.sans(12, .semibold)).foregroundStyle(T.danger).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: 760, alignment: .leading)
+        .onAppear { state = ClaudeConnect.state() }
     }
 }
