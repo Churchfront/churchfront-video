@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The ATEM and PTZ engine. Plain .NET, no Windows UI, so it builds and tests anywhere. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>CueATEM</RootNamespace>
+  </PropertyGroup>
+</Project>

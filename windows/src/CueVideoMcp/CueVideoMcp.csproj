@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- cuevideo-mcp.exe: the MCP server Claude runs. Passes every call to the running app. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>cuevideo-mcp</AssemblyName>
+    <RootNamespace>CueVideoMcp</RootNamespace>
+  </PropertyGroup>
+</Project>

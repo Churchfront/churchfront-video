@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Runs the engine, cameras, config and Claude tools against tools/FakeDevices. Usage: dotnet run from this folder. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CueVideo.Core\CueVideo.Core.csproj" />
+  </ItemGroup>
+</Project>

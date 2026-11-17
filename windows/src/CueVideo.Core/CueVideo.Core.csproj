@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Everything the app does that isn't drawing: config file, Claude's tools, control server, device finder. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>CueVideo</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CueATEM\CueATEM.csproj" />
+  </ItemGroup>
+</Project>

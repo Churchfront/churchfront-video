@@ -1,0 +1,66 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{478B0ACE-9BB3-4F5D-8C3F-7C22E329541C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CueATEM", "src\CueATEM\CueATEM.csproj", "{DBCD1DC9-7E29-4033-BC04-C246DFAB645D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CueVideo.Core", "src\CueVideo.Core\CueVideo.Core.csproj", "{AFB3A135-9AC7-40FB-9A1D-1A42D3F9B7B3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CueVideoMcp", "src\CueVideoMcp\CueVideoMcp.csproj", "{04B95A05-FF31-48D0-AB77-99E3F88BC66A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChurchfrontVideo", "src\ChurchfrontVideo\ChurchfrontVideo.csproj", "{A3619AD8-7BA2-44F2-B1FE-820784888B9E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{1A38E2FB-622E-49D6-9F12-D5CA8D2FB90B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Smoke", "tests\Smoke\Smoke.csproj", "{48495950-D5E0-4057-83EB-668689C078A8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{44F0E051-E0AE-441C-8D8C-9A3697B17526}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FakeDevices", "tools\FakeDevices\FakeDevices.csproj", "{028AF505-2568-4443-A86E-77EF1F6E7FB7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DBCD1DC9-7E29-4033-BC04-C246DFAB645D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DBCD1DC9-7E29-4033-BC04-C246DFAB645D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DBCD1DC9-7E29-4033-BC04-C246DFAB645D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DBCD1DC9-7E29-4033-BC04-C246DFAB645D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AFB3A135-9AC7-40FB-9A1D-1A42D3F9B7B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AFB3A135-9AC7-40FB-9A1D-1A42D3F9B7B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AFB3A135-9AC7-40FB-9A1D-1A42D3F9B7B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AFB3A135-9AC7-40FB-9A1D-1A42D3F9B7B3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{04B95A05-FF31-48D0-AB77-99E3F88BC66A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04B95A05-FF31-48D0-AB77-99E3F88BC66A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{04B95A05-FF31-48D0-AB77-99E3F88BC66A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04B95A05-FF31-48D0-AB77-99E3F88BC66A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A3619AD8-7BA2-44F2-B1FE-820784888B9E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3619AD8-7BA2-44F2-B1FE-820784888B9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3619AD8-7BA2-44F2-B1FE-820784888B9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3619AD8-7BA2-44F2-B1FE-820784888B9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48495950-D5E0-4057-83EB-668689C078A8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48495950-D5E0-4057-83EB-668689C078A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48495950-D5E0-4057-83EB-668689C078A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48495950-D5E0-4057-83EB-668689C078A8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{028AF505-2568-4443-A86E-77EF1F6E7FB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{028AF505-2568-4443-A86E-77EF1F6E7FB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{028AF505-2568-4443-A86E-77EF1F6E7FB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{028AF505-2568-4443-A86E-77EF1F6E7FB7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{DBCD1DC9-7E29-4033-BC04-C246DFAB645D} = {478B0ACE-9BB3-4F5D-8C3F-7C22E329541C}
+		{AFB3A135-9AC7-40FB-9A1D-1A42D3F9B7B3} = {478B0ACE-9BB3-4F5D-8C3F-7C22E329541C}
+		{04B95A05-FF31-48D0-AB77-99E3F88BC66A} = {478B0ACE-9BB3-4F5D-8C3F-7C22E329541C}
+		{A3619AD8-7BA2-44F2-B1FE-820784888B9E} = {478B0ACE-9BB3-4F5D-8C3F-7C22E329541C}
+		{48495950-D5E0-4057-83EB-668689C078A8} = {1A38E2FB-622E-49D6-9F12-D5CA8D2FB90B}
+		{028AF505-2568-4443-A86E-77EF1F6E7FB7} = {44F0E051-E0AE-441C-8D8C-9A3697B17526}
+	EndGlobalSection
+EndGlobal
