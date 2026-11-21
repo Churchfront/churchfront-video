@@ -33,6 +33,21 @@ enum ShotSize: String, CaseIterable, Identifiable {
     var short: String {
         switch self { case .shoulders: return "Close"; case .waist: return "Waist"; case .full: return "Full" }
     }
+    /// `name` and `short` in the app's language, for the screen. The English ones are for Claude's tools.
+    var label: String {
+        switch self {
+        case .shoulders: return String(localized: "Shoulders up")
+        case .waist: return String(localized: "Waist up")
+        case .full: return String(localized: "Full length")
+        }
+    }
+    var shortLabel: String {
+        switch self {
+        case .shoulders: return String(localized: "Close", comment: "Shot size: shoulders up")
+        case .waist: return String(localized: "Waist", comment: "Shot size: waist up")
+        case .full: return String(localized: "Full", comment: "Shot size: full length")
+        }
+    }
 
     /// The built-in rule for this size. The setup file's "framing" can change any part of it
     /// while CueVideo runs (Setup, the config file, or Claude's set_framing).
@@ -195,15 +210,15 @@ final class AutoTracker: ObservableObject {
     func start(_ camera: PTZCamera, at point: CGPoint? = nil, size: ShotSize? = nil, person: String? = nil, done: ((String?) -> Void)? = nil) {
         stop(camera.id)
         guard let picture = CameraPicture.of(camera) else {
-            done?("Auto tracking needs the camera's picture: a Canon camera, or an NDI picture set for its switcher input in Setup.")
+            done?(String(localized: "Auto tracking needs the camera's picture: a Canon camera, or an NDI picture set for its switcher input in Setup."))
             return
         }
         var s = Session(camera: camera.id)
         if let person {
             guard let cast = StageCast.shared.look(person) else {
                 let names = StageCast.shared.names
-                done?(names.isEmpty ? "No one has been labelled yet. Run a stage scan first."
-                                    : "No one called \(person) in the last stage scan. It has: \(names.joined(separator: ", ")).")
+                done?(names.isEmpty ? String(localized: "No one has been labelled yet. Run a stage scan first.")
+                                    : String(localized: "No one called \(person) in the last stage scan. It has: \(names.joined(separator: ", "))."))
                 return
             }
             s.person = cast.name
@@ -247,7 +262,7 @@ final class AutoTracker: ObservableObject {
         pictures.removeValue(forKey: id)?.release()
         if s.sentPan != 0 || s.sentTilt != 0 { ptz.trackDrive(pan: 0, tilt: 0, camera: id) }
         if s.sentZoom != 0 { ptz.trackZoom(0, camera: id) }
-        finish(id, "Tracking was stopped.")
+        finish(id, String(localized: "Tracking was stopped."))
         if sessions.isEmpty { timer?.invalidate(); timer = nil }
     }
 
@@ -436,7 +451,7 @@ final class AutoTracker: ObservableObject {
     }
 
     private func notFound(_ s: Session) -> String {
-        s.person.map { "Can't see \($0) in the picture." } ?? "No one is in the picture."
+        s.person.map { String(localized: "Can't see \($0) in the picture.") } ?? String(localized: "No one is in the picture.")
     }
 
     /// Pan, tilt and zoom toward the framing for this shot size.
@@ -619,7 +634,7 @@ final class AutoTracker: ObservableObject {
             sessions[id] = s
         }
         for (id, s) in sessions where s.target == nil && now.timeIntervalSince(s.started) > 4 {
-            finish(id, s.person.map { "Can't see \($0) in the picture, or the picture isn't coming in." } ?? "No one is in the picture, or the picture isn't coming in.")
+            finish(id, s.person.map { String(localized: "Can't see \($0) in the picture, or the picture isn't coming in.") } ?? String(localized: "No one is in the picture, or the picture isn't coming in."))
         }
     }
 

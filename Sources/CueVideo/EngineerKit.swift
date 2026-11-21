@@ -23,9 +23,9 @@ struct Page<Content: View>: View {
 
 /// A page's title, one line on what it's for, and a "?" holding the longer explanation.
 struct PageHeader<Trailing: View>: View {
-    let title: String
-    let purpose: String
-    var help: String? = nil
+    let title: LocalizedStringKey
+    let purpose: LocalizedStringKey
+    var help: LocalizedStringKey? = nil
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
@@ -44,14 +44,14 @@ struct PageHeader<Trailing: View>: View {
 }
 
 extension PageHeader where Trailing == EmptyView {
-    init(title: String, purpose: String, help: String? = nil) {
+    init(title: LocalizedStringKey, purpose: LocalizedStringKey, help: LocalizedStringKey? = nil) {
         self.init(title: title, purpose: purpose, help: help) { EmptyView() }
     }
 }
 
 /// A small "?" that opens the longer explanation, so pages don't open with paragraphs.
 struct HelpButton: View {
-    let text: String
+    let text: LocalizedStringKey
     @State private var open = false
     var body: some View {
         Button { open.toggle() } label: {
@@ -68,8 +68,8 @@ struct HelpButton: View {
 
 /// A titled block on a page.
 struct Card<Content: View>: View {
-    var title: String? = nil
-    var help: String? = nil
+    var title: LocalizedStringKey? = nil
+    var help: LocalizedStringKey? = nil
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -91,9 +91,9 @@ struct Card<Content: View>: View {
 
 /// A column heading over a table of rows.
 struct Col: View {
-    let title: String
+    let title: LocalizedStringKey
     var width: CGFloat? = nil
-    init(_ title: String, _ width: CGFloat? = nil) { self.title = title; self.width = width }
+    init(_ title: LocalizedStringKey, _ width: CGFloat? = nil) { self.title = title; self.width = width }
     var body: some View {
         Text(title).font(.sans(10, .bold)).tracking(0.8).textCase(.uppercase).foregroundStyle(T.inkSubtle)
             .lineLimit(1).frame(width: width, alignment: .leading)
@@ -134,7 +134,7 @@ struct CueButton: ButtonStyle {
 /// A small icon button with a tooltip: reorder, remove, edit.
 struct IconButton: View {
     let icon: String
-    let help: String
+    let help: LocalizedStringKey
     var color: Color = T.inkMuted
     var size: CGFloat = 12
     let action: () -> Void
@@ -152,7 +152,7 @@ struct IconButton: View {
 
 /// A menu that looks like a field: what's chosen now, and a chevron.
 struct MenuField<Content: View>: View {
-    let text: String
+    let text: LocalizedStringKey
     var width: CGFloat? = nil
     var icon: String? = nil
     var strong = false
@@ -181,7 +181,7 @@ struct MenuField<Content: View>: View {
 
 /// A row of choices, one lit: sub-pages, shot sizes, M/Es.
 struct Segments<V: Hashable>: View {
-    let items: [(String, V)]
+    let items: [(LocalizedStringKey, V)]
     @Binding var selection: V
 
     var body: some View {
@@ -206,7 +206,7 @@ struct Segments<V: Hashable>: View {
 
 /// A small tag: LIVE, NEXT, ON, HIDDEN.
 struct Tag: View {
-    let text: String
+    let text: LocalizedStringKey
     var color: Color = T.lineStrong
     var ink: Color = T.ink
     var size: CGFloat = 9
@@ -220,7 +220,7 @@ struct Tag: View {
 
 /// A section that folds away, for things looked at now and then.
 struct Fold<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let count: Int
     @Binding var open: Bool
     @ViewBuilder let content: Content
@@ -232,7 +232,7 @@ struct Fold<Content: View>: View {
                     Image(systemName: open ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(T.inkSubtle)
                         .frame(width: 12)
                     Text(title).panelLabel()
-                    Text("\(count)").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle)
+                    Text(verbatim: "\(count)").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle)
                     Spacer()
                 }
                 .contentShape(Rectangle())

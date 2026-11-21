@@ -53,11 +53,11 @@ extension View {
 
 /// Label: bold, ALL CAPS, tracked 0.09em. Buttons and tabs.
 struct LabelText: View {
-    var text: String
+    var text: LocalizedStringKey
     var size: CGFloat = 12
-    init(_ text: String, size: CGFloat = 12) { self.text = text; self.size = size }
+    init(_ text: LocalizedStringKey, size: CGFloat = 12) { self.text = text; self.size = size }
     var body: some View {
-        Text(text.uppercased()).font(.sans(size, .bold)).tracking(size * 0.09).lineLimit(1)
+        Text(text).textCase(.uppercase).font(.sans(size, .bold)).tracking(size * 0.09).lineLimit(1)
     }
 }
 
@@ -71,7 +71,7 @@ struct Hairline: View {
 /// The secondary button: a caps label in a bordered pill. `active` marks a choice that is
 /// on with the accent wash.
 struct PillButton: View {
-    var title: String
+    var title: LocalizedStringKey
     var icon: String? = nil
     var active = false
     var height: CGFloat = 28
@@ -101,7 +101,7 @@ struct PillButton: View {
 /// A short status word on its own wash.
 struct Badge: View {
     enum Tone { case neutral, success, warning, danger }
-    var text: String
+    var text: LocalizedStringKey
     var tone: Tone = .neutral
     var dot = false
     var body: some View {
@@ -115,7 +115,7 @@ struct Badge: View {
         }()
         HStack(spacing: 5) {
             if dot { Circle().fill(fg).frame(width: 6, height: 6) }
-            Text(text.uppercased()).font(.sans(10, .bold)).tracking(10 * 0.09)
+            Text(text).textCase(.uppercase).font(.sans(10, .bold)).tracking(10 * 0.09)
         }
         .foregroundStyle(fg)
         .padding(.horizontal, 7).frame(height: 20)
@@ -126,8 +126,10 @@ struct Badge: View {
 
 /// A backlit panel button, like the keys on an ATEM control surface.
 struct PanelButton: View {
-    let title: String
-    var subtitle: String? = nil
+    let title: LocalizedStringKey
+    var subtitle: LocalizedStringKey? = nil
+    /// Caps, like the key labels on a switcher panel.
+    var uppercase = false
     var lit: Color? = nil
     var width: CGFloat = 76
     var height: CGFloat = 56
@@ -140,8 +142,8 @@ struct PanelButton: View {
             TimelineView(.periodic(from: .now, by: 0.4)) { ctx in
                 let on = lit != nil && (!blink || Int(ctx.date.timeIntervalSinceReferenceDate / 0.4) % 2 == 0)
                 VStack(spacing: 2) {
-                    Text(title).font(.sans(titleSize, .bold)).lineLimit(1).minimumScaleFactor(0.6)
-                    if let subtitle { Text(subtitle).font(.sans(9, .medium)).lineLimit(1).opacity(0.8) }
+                    Text(title).textCase(uppercase ? .uppercase : nil).font(.sans(titleSize, .bold)).lineLimit(1).minimumScaleFactor(0.6)
+                    if let subtitle { Text(subtitle).textCase(uppercase ? .uppercase : nil).font(.sans(9, .medium)).lineLimit(1).opacity(0.8) }
                 }
                 .padding(.horizontal, 4)
                 .frame(width: width, height: height)

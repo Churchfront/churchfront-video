@@ -15,8 +15,8 @@ struct VolunteerView: View {
         VStack(spacing: 0) {
             VStack(spacing: T.s3) {
                 HStack(spacing: T.s3) {
-                    BusMonitor(title: "Next", input: atem.state.preview[booth.me], color: T.preview)
-                    BusMonitor(title: "Live", input: atem.state.program[booth.me], color: T.program)
+                    BusMonitor(title: "Next", live: false, input: atem.state.preview[booth.me], color: T.preview)
+                    BusMonitor(title: "Live", live: true, input: atem.state.program[booth.me], color: T.program)
                 }
                 .frame(maxHeight: .infinity)
                 SourceRow()
@@ -34,7 +34,7 @@ struct VolunteerView: View {
                         // Exposure for the camera on Next, shown when wanted, so the shot grid
                         // gets the room the rest of the time.
                         PillButton(title: "Exposure", icon: "camera.aperture", active: showExposure) { showExposure.toggle() }
-                            .help(showExposure ? "Hide exposure" : "Show gain, shutter, iris and white balance for the camera on Next")
+                            .help(showExposure ? String(localized: "Hide exposure") : String(localized: "Show gain, shutter, iris and white balance for the camera on Next"))
                     }
                     HStack(alignment: .top, spacing: T.s4) {
                         if showExposure { ExposurePanel() }
@@ -59,10 +59,10 @@ struct VolunteerView: View {
 /// A numbered step label: 1 Pick, 2 Frame, 3 Take.
 struct StepLabel: View {
     let n: Int
-    let text: String
+    let text: LocalizedStringKey
     var body: some View {
         HStack(spacing: T.s2) {
-            Text("\(n)").font(.sans(12, .bold)).foregroundStyle(T.onAction)
+            Text(verbatim: "\(n)").font(.sans(12, .bold)).foregroundStyle(T.onAction)
                 .frame(width: 20, height: 20).background(Circle().fill(T.accent))
             Text(text).panelLabel()
         }
@@ -73,7 +73,9 @@ struct StepLabel: View {
 /// otherwise the source's name written large.
 struct BusMonitor: View {
     @EnvironmentObject var booth: Booth
-    let title: String
+    let title: LocalizedStringKey
+    /// Live, or else Next.
+    let live: Bool
     let input: Int?
     let color: Color
     @EnvironmentObject var atem: ATEMClient
@@ -95,7 +97,7 @@ struct BusMonitor: View {
     /// Live shows the fade the way the switcher's output does: Next comes in over Live as
     /// the transition runs. Only when the transition takes the background (not just a key).
     var incoming: Incoming? {
-        guard title == "Live" else { return nil }
+        guard live else { return nil }
         let s = atem.state, me = booth.me
         guard s.inTransition[me] == true, (s.nextSelection[me] ?? 1) & 1 != 0 else { return nil }
         return Incoming(input: s.preview[me], amount: min(1, max(0, s.position[me] ?? 0)), dip: s.style[me] == 1)
@@ -119,7 +121,7 @@ struct BusMonitor: View {
         let keys = store.config.keys.filter { k in
             guard let n = k.ndi, !n.isEmpty, n != store.ndi(input) else { return false }
             guard k.dsk != nil || (k.me ?? 1) - 1 == booth.me else { return false }
-            return title == "Live" ? k.isOn(s) : k.onNext(s)
+            return live ? k.isOn(s) : k.onNext(s)
         }
         var seen = Set<String>()
         return keys.compactMap(\.ndi).filter { seen.insert($0).inserted }
@@ -128,7 +130,7 @@ struct BusMonitor: View {
     /// Clicking a person on Next follows them. On Live, a click only switches who an
     /// already-tracking camera follows, so a stray click can't start moving the live shot.
     func pick(_ camera: PTZCamera) -> ((CGPoint) -> Void)? {
-        guard title == "Next" || tracker.isTracking(camera.id) else { return nil }
+        guard !live || tracker.isTracking(camera.id) else { return nil }
         return { p in tracker.start(camera, at: p) }
     }
 
@@ -158,8 +160,8 @@ struct BusMonitor: View {
         .clipShape(Rectangle())
         .overlay(Rectangle().stroke(color, lineWidth: 3))
         .overlay(alignment: .topLeading) {
-            Text(title.uppercased()).font(.sans(13, .bold)).tracking(1.2)
-                .foregroundStyle(title == "Next" ? T.onAction : .white)
+            Text(title).textCase(.uppercase).font(.sans(13, .bold)).tracking(1.2)
+                .foregroundStyle(live ? .white : T.onAction)
                 .padding(.horizontal, 10).frame(height: 26)
                 .background(RoundedRectangle(cornerRadius: T.rSM).fill(color))
                 .padding(T.s3)
@@ -237,7 +239,7 @@ struct SourceTile: View {
                 }
                 HStack(spacing: 6) {
                     Text(store.label(source.input, atem.state)).font(.sans(14, .semibold)).lineLimit(1)
-                    if isLive { badge("LIVE", T.program) } else if isNext { badge("NEXT", T.preview) }
+                    if isLive { badge("Live", T.program) } else if isNext { badge("Next", T.preview) }
                     if let camera, AutoTracker.shared.isTracking(camera.id) {
                         Image(systemName: "figure.walk").font(.system(size: 11, weight: .bold)).foregroundStyle(T.accent)
                     }
@@ -255,11 +257,11 @@ struct SourceTile: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-        .help("Put \(store.label(source.input, atem.state)) on Next")
+        .help(String(localized: "Put \(store.label(source.input, atem.state)) on Next"))
     }
 
-    func badge(_ s: String, _ c: Color) -> some View {
-        Text(s).font(.sans(10, .bold)).foregroundStyle(c == T.preview ? T.onAction : .white)
+    func badge(_ s: LocalizedStringKey, _ c: Color) -> some View {
+        Text(s).textCase(.uppercase).font(.sans(10, .bold)).foregroundStyle(c == T.preview ? T.onAction : .white)
             .padding(.horizontal, 5).frame(height: 16)
             .background(RoundedRectangle(cornerRadius: T.rSM).fill(c))
     }
@@ -350,9 +352,9 @@ struct NextCameraHeader: View {
         let cam = ptz.cameras.first { $0.atemInput == next && !$0.host.isEmpty }
         HStack(spacing: T.s2) {
             Image(systemName: cam == nil ? "video.slash" : "video.fill").font(.system(size: 13, weight: .semibold))
-            Text(cam?.name ?? "No camera on Next").font(.sans(16, .bold))
+            Text(cam?.name ?? String(localized: "No camera on Next")).font(.sans(16, .bold))
             if cam != nil {
-                Text("ON NEXT").font(.sans(10, .bold)).tracking(1).foregroundStyle(T.onAction)
+                Text("On Next").textCase(.uppercase).font(.sans(10, .bold)).tracking(1).foregroundStyle(T.onAction)
                     .padding(.horizontal, 6).frame(height: 18)
                     .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.preview))
             } else {
@@ -417,7 +419,7 @@ struct ExposureShots: View {
                 Label("Save exposure", systemImage: "plus").font(.sans(11, .bold)).foregroundStyle(T.accentStrong)
             }
             .buttonStyle(.plain)
-            .help("Save \(camera.name)'s exposure now (gain, shutter, iris and white balance) as a shot")
+            .help(String(localized: "Save \(camera.name)'s exposure now (gain, shutter, iris and white balance) as a shot"))
             .popover(isPresented: $saving, arrowEdge: .top) { savePopover }
             ScrollView {
                 VStack(spacing: 4) {
@@ -433,7 +435,7 @@ struct ExposureShots: View {
                             }
                     }
                     ForEach(presets, id: \.self) { n in
-                        item(ptz.presetNames(camera)[n] ?? "Preset \(n)", "ON CAMERA", used: lastUsed == "preset:\(n)") {
+                        item(ptz.presetNames(camera)[n] ?? String(localized: "Preset \(n)"), "On camera", used: lastUsed == "preset:\(n)") {
                             ptz.recall(n, camera: camera.id); lastUsed = "preset:\(n)"
                         }
                     }
@@ -456,7 +458,7 @@ struct ExposureShots: View {
             }
             Button("Cancel", role: .cancel) { renaming = nil }
         }
-        .confirmationDialog("Delete \(deleting?.name ?? "this shot")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+        .confirmationDialog("Delete \(deleting?.name ?? String(localized: "this shot"))?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete", role: .destructive) {
                 if let d = deleting, let i = ptz.cameras.firstIndex(where: { $0.id == camera.id }) {
                     ptz.cameras[i].shots.removeAll { $0.id == d.id }
@@ -469,11 +471,11 @@ struct ExposureShots: View {
         }
     }
 
-    func item(_ title: String, _ subtitle: String?, used: Bool, _ action: @escaping () -> Void) -> some View {
+    func item(_ title: String, _ subtitle: LocalizedStringKey?, used: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 0) {
                 Text(title).font(.sans(12, .semibold)).lineLimit(1).minimumScaleFactor(0.75)
-                if let subtitle { Text(subtitle).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
+                if let subtitle { Text(subtitle).textCase(.uppercase).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
             }
             .foregroundStyle(used ? T.onAction : T.ink)
             .frame(maxWidth: .infinity).frame(height: 30)
@@ -543,7 +545,7 @@ struct ExposureControls: View {
 
     /// `brighterIsUp`: whether a bigger number makes the picture brighter (gain) or darker
     /// (shutter speed and f-number).
-    func row(_ label: String, _ text: String, auto: Bool, list: [Int], value: Int?, brighterIsUp: Bool,
+    func row(_ label: LocalizedStringKey, _ text: String, auto: Bool, list: [Int], value: Int?, brighterIsUp: Bool,
              set: @escaping (Int) -> Void) -> some View {
         let i = value.flatMap { v in list.firstIndex(of: v) ?? list.firstIndex { $0 >= v } }
         func step(_ brighter: Bool) {
@@ -555,7 +557,7 @@ struct ExposureControls: View {
         return HStack(spacing: 4) {
             Text(label).font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle).frame(width: 46, alignment: .leading)
             stepButton("sun.min", "Darker") { step(false) }
-            Text(auto ? "Auto" : text).font(.sans(13, .semibold)).monospacedDigit()
+            Text(auto ? String(localized: "Auto") : text).font(.sans(13, .semibold)).monospacedDigit()
                 .frame(maxWidth: .infinity).frame(height: 28)
                 .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceSunken))
             stepButton("sun.max", "Brighter") { step(true) }
@@ -609,7 +611,7 @@ struct ExposureControls: View {
         .disabled(list.isEmpty && e.value.wb == nil)
     }
 
-    func stepButton(_ icon: String, _ help: String, _ action: @escaping () -> Void) -> some View {
+    func stepButton(_ icon: String, _ help: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon).font(.system(size: 12, weight: .semibold)).frame(width: 30, height: 28)
                 .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceRaised))
@@ -663,7 +665,7 @@ struct PresetGrid: View {
             Button("Save") { rename() }
             Button("Cancel", role: .cancel) { renaming = nil }
         }
-        .confirmationDialog("Delete \(deleting?.shot.name ?? "this shot")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+        .confirmationDialog("Delete \(deleting?.shot.name ?? String(localized: "this shot"))?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete", role: .destructive) {
                 if let d = deleting, let i = ptz.cameras.firstIndex(where: { $0.id == d.camera }) {
                     ptz.cameras[i].shots.removeAll { $0.id == d.shot.id }
@@ -675,7 +677,7 @@ struct PresetGrid: View {
             Button("Delete from camera", role: .destructive) {
                 if let d = deletingPreset {
                     ptz.deleteCameraPreset(d.n, camera: d.camera) { why in
-                        if let why { problem = "Couldn't delete that preset. \(why)" }
+                        if let why { problem = String(localized: "Couldn't delete that preset. \(why)") }
                     }
                 }
                 deletingPreset = nil
@@ -700,7 +702,7 @@ struct PresetGrid: View {
             Button { if let i = c.atemInput { atem.setPreview(i, me: booth.me) } } label: {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(c.name).font(.sans(13, .bold)).lineLimit(1)
-                    Text(live ? "LIVE" : (next ? "NEXT" : " ")).font(.sans(9, .bold)).tracking(0.8)
+                    Text(live ? String(localized: "Live") : (next ? String(localized: "Next") : " ")).textCase(.uppercase).font(.sans(9, .bold)).tracking(0.8)
                         .foregroundStyle(live ? T.program : T.preview)
                 }
                 .foregroundStyle(T.ink)
@@ -711,7 +713,7 @@ struct PresetGrid: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressStyle())
-            .help("Put \(c.name) on Next")
+            .help(String(localized: "Put \(c.name) on Next"))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(c.shots.filter { $0.kind == .position }) { s in
@@ -728,7 +730,7 @@ struct PresetGrid: View {
                         }
                     }
                     ForEach(cameraPresets(c).filter { !(ptz.exposurePresets[c.id]?.contains($0) ?? false) }, id: \.self) { n in
-                        cell(ptz.presetNames(c)[n] ?? "Preset \(n)", "ON CAMERA",
+                        cell(ptz.presetNames(c)[n] ?? String(localized: "Preset \(n)"), "On camera",
                              used: lastUsed[c.id] == "preset:\(n)", live: live) {
                             go(c) { ptz.recall(n, camera: c.id); lastUsed[c.id] = "preset:\(n)" }
                         }
@@ -744,7 +746,7 @@ struct PresetGrid: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(PressStyle())
-                        .help("Save where \(c.name) is now as a new shot")
+                        .help(String(localized: "Save where \(c.name) is now as a new shot"))
                         .popover(isPresented: Binding(get: { savingFor == c.id }, set: { if !$0 { savingFor = nil } }), arrowEdge: .top) {
                             savePopover(c)
                         }
@@ -754,11 +756,11 @@ struct PresetGrid: View {
         }
     }
 
-    func cell(_ title: String, _ subtitle: String?, used: Bool, live: Bool, _ action: @escaping () -> Void) -> some View {
+    func cell(_ title: String, _ subtitle: LocalizedStringKey?, used: Bool, live: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 1) {
                 Text(title).font(.sans(13, .semibold)).lineLimit(1).minimumScaleFactor(0.75)
-                if let subtitle { Text(subtitle).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
+                if let subtitle { Text(subtitle).textCase(.uppercase).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
             }
             .foregroundStyle(used ? T.onAction : T.ink)
             .padding(.horizontal, 6)
@@ -776,16 +778,17 @@ struct PresetGrid: View {
         if onLive(c) { liveMove = (c.id, run) } else { run() }
     }
 
-    static let noReading = "The camera didn't report its settings, so the shot wasn't saved. Check that it's answering and try again."
+    static let noReading = String(localized: "The camera didn't report its settings, so the shot wasn't saved. Check that it's answering and try again.")
 
     var liveQuestion: String {
-        guard let id = liveMove?.camera, let c = ptz.cameras.first(where: { $0.id == id }) else { return "Move the live camera?" }
-        return "\(c.name) is on Live. Move it anyway?"
+        guard let id = liveMove?.camera, let c = ptz.cameras.first(where: { $0.id == id }) else { return String(localized: "Move the live camera?") }
+        return String(localized: "\(c.name) is on Live. Move it anyway?")
     }
 
     var presetQuestion: String {
-        guard let d = deletingPreset, let c = ptz.cameras.first(where: { $0.id == d.camera }) else { return "Delete this preset?" }
-        return "Delete \"\(ptz.presetNames(c)[d.n] ?? "Preset \(d.n)")\" from \(c.name)?"
+        guard let d = deletingPreset, let c = ptz.cameras.first(where: { $0.id == d.camera }) else { return String(localized: "Delete this preset?") }
+        let preset = ptz.presetNames(c)[d.n] ?? String(localized: "Preset \(d.n)")
+        return String(localized: "Delete \"\(preset)\" from \(c.name)?")
     }
 
     func savePopover(_ t: PTZCamera) -> some View {
@@ -841,9 +844,9 @@ struct TakePanel: View {
             HStack(spacing: T.s2) {
                 Button { atem.auto(me: me) } label: {
                     VStack(spacing: 2) {
-                        Text(fading ? "FADING" : "FADE").font(.sans(24, .bold))
-                        Text(fading ? "\(store.label(s.program[me], s)) to \(store.label(s.preview[me], s))"
-                                    : "\(String(format: "%.1f", Double(s.mixRate[me] ?? 30) / 30)) s · Return")
+                        Text(fading ? String(localized: "Fading") : String(localized: "Fade")).textCase(.uppercase).font(.sans(24, .bold))
+                        Text(fading ? String(localized: "\(store.label(s.program[me], s)) to \(store.label(s.preview[me], s))")
+                                    : String(localized: "\((Double(s.mixRate[me] ?? 30) / 30).formatted(.number.precision(.fractionLength(1)))) s · Return"))
                             .font(.sans(11, .medium)).opacity(0.85).lineLimit(1).minimumScaleFactor(0.7)
                     }
                     .foregroundStyle(.white).padding(.horizontal, 4)
@@ -861,7 +864,7 @@ struct TakePanel: View {
                 .help("Fade from Live to Next (Return)")
                 Button { atem.cut(me: me) } label: {
                     VStack(spacing: 2) {
-                        Text("CUT").font(.sans(24, .bold))
+                        Text("Cut").textCase(.uppercase).font(.sans(24, .bold))
                         Text("Space").font(.sans(11, .medium)).opacity(0.85)
                     }
                     .foregroundStyle(T.ink)
@@ -877,14 +880,14 @@ struct TakePanel: View {
             // thirds. Lit while on air, press to turn on or off.
             LazyVGrid(columns: [GridItem(.fixed(121), spacing: T.s2), GridItem(.fixed(121))], alignment: .leading, spacing: T.s2) {
                 let ftb = s.ftbInTransition[me] ?? false
-                PanelButton(title: "BLACK", subtitle: black ? "IN BLACK" : (ftb ? "FADING" : "OFF"), lit: black || ftb ? T.program : nil,
+                PanelButton(title: "Black", subtitle: black ? "In black" : (ftb ? "Fading" : "Off"), uppercase: true, lit: black || ftb ? T.program : nil,
                             width: 121, height: 48, titleSize: 14, blink: black) { atem.fadeToBlack(me: me) }
-                    .help(black ? "Fade back up from black" : "Fade everything to black")
+                    .help(black ? String(localized: "Fade back up from black") : String(localized: "Fade everything to black"))
                 ForEach(store.config.keys) { k in
                     let on = k.isOn(s)
-                    PanelButton(title: k.label.uppercased(), subtitle: on ? "ON AIR" : "OFF", lit: on ? T.program : nil,
+                    PanelButton(title: .verbatim(k.label), subtitle: on ? "On air" : "Off", uppercase: true, lit: on ? T.program : nil,
                                 width: 121, height: 48, titleSize: 13) { k.toggle(atem) }
-                        .help(on ? "Take \(k.label) off (\(k.target))" : "Put \(k.label) on (\(k.target))")
+                        .help(on ? String(localized: "Take \(k.label) off (\(k.target))") : String(localized: "Put \(k.label) on (\(k.target))"))
                 }
             }
         }
@@ -917,20 +920,20 @@ struct TrackButton: View {
             }
             .buttonStyle(PressStyle())
             .disabled(CameraPicture.of(camera, store) == nil)
-            .help(s == nil ? "Follow the person in the middle of the shot. Or click someone on the Next picture. Moving the joystick stops tracking."
-                           : "Stop following. Moving the joystick or recalling a shot also stops it.")
+            .help(s == nil ? String(localized: "Follow the person in the middle of the shot. Or click someone on the Next picture. Moving the joystick stops tracking.")
+                           : String(localized: "Stop following. Moving the joystick or recalling a shot also stops it."))
             if let s {
                 // The follow shot: tap to reframe. The highlighted one is what it's framing to.
                 HStack(spacing: 2) {
                     ForEach(ShotSize.allCases) { z in
                         Button { tracker.setSize(camera.id, z) } label: {
-                            Text(z.short).font(.sans(11, .semibold))
+                            Text(z.shortLabel).font(.sans(11, .semibold))
                                 .foregroundStyle(s.size == z ? T.onAction : T.inkMuted)
                                 .frame(maxWidth: .infinity).frame(height: 24)
                                 .background(RoundedRectangle(cornerRadius: T.rSM).fill(s.size == z ? T.accent : T.surfaceSunken))
                         }
                         .buttonStyle(PressStyle())
-                        .help("Frame \(z.name.lowercased())")
+                        .help(String(localized: "Frame: \(z.label)"))
                     }
                 }
                 // Follow speed, right here so it can be nudged during a service.
@@ -943,7 +946,7 @@ struct TrackButton: View {
                     speedButton("plus", 0.25)
                 }
                 .help("How quickly tracking cameras follow. Raise it if the camera falls behind, lower it if it overshoots.")
-                Text([TrackingBadge.words(s.phase), s.person, s.phase == .following ? s.size.name : nil].compactMap { $0 }.joined(separator: " · "))
+                Text([TrackingBadge.words(s.phase), s.person, s.phase == .following ? s.size.label : nil].compactMap { $0 }.joined(separator: " · "))
                     .font(.sans(11, .semibold))
                     .foregroundStyle(s.phase == .following ? T.accent : T.warning)
                     .fixedSize(horizontal: false, vertical: true)
@@ -985,10 +988,10 @@ struct TrackingBadge: View {
 
     static func words(_ p: AutoTracker.Phase?) -> String? {
         switch p {
-        case .starting: return "Looking for someone"
-        case .following: return "Following"
-        case .searching: return "Lost sight, holding"
-        case .lost: return "Lost them, looking"
+        case .starting: return String(localized: "Looking for someone")
+        case .following: return String(localized: "Following")
+        case .searching: return String(localized: "Lost sight, holding")
+        case .lost: return String(localized: "Lost them, looking")
         case nil: return nil
         }
     }

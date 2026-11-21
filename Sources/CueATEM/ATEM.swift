@@ -223,13 +223,13 @@ public final class ATEMClient: ObservableObject {
         let t = now()
         if t - lastInbound > 3 {
             if t - lastHello > 1.5 {
-                setLink(.offline("No answer from \(target)"))
+                setLink(.offline(String(localized: "No answer from \(target)", bundle: .cueATEM)))
                 open()
             }
             return
         }
         for i in inFlight.indices where t - inFlight[i].sent > 0.06 {
-            if inFlight[i].tries >= 10 { setLink(.offline("The switcher stopped answering")); open(); return }
+            if inFlight[i].tries >= 10 { setLink(.offline(String(localized: "The switcher stopped answering", bundle: .cueATEM))); open(); return }
             var d = inFlight[i].data
             d[0] |= Flag.retransmit << 3
             conn?.send(content: d, completion: .contentProcessed { _ in })

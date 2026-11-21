@@ -276,10 +276,10 @@ final class ConfigStore: ObservableObject {
 
     /// A routing source in plain words: M/E outputs by what they're for, others by label.
     func routeLabel(_ source: Int?, _ state: ATEMState) -> String {
-        guard let source else { return "Nothing" }
+        guard let source else { return String(localized: "Nothing") }
         if (10000..<11000).contains(source) {
             let me = (source - 10000) / 10 - 1, preview = source % 10 == 1
-            return preview ? "\(mixName(me)) preview" : mixName(me)
+            return preview ? String(localized: "\(mixName(me)) preview") : mixName(me)
         }
         return label(source, state)
     }
@@ -304,10 +304,10 @@ final class ConfigStore: ObservableObject {
     func screen(aux: Int) -> ScreenOutput? { config.screens.first { $0.aux.contains(aux) } }
 
     func label(_ input: Int?, _ state: ATEMState) -> String {
-        guard let input else { return "Nothing" }
+        guard let input else { return String(localized: "Nothing") }
         if let l = config.sources.first(where: { $0.input == input })?.label, !l.isEmpty { return l }
         if let cam = config.cameras.first(where: { $0.atemInput == input }), !cam.name.isEmpty { return cam.name }
-        return state.inputs[input]?.long ?? "Input \(input)"
+        return state.inputs[input]?.long ?? String(localized: "Input \(input)")
     }
 
     // MARK: Private
@@ -372,7 +372,7 @@ final class ConfigStore: ObservableObject {
             fileError = nil
             keepLastGood(config, data)
         } catch {
-            fileError = "Couldn't save the setup: \(error.localizedDescription)"
+            fileError = String(localized: "Couldn't save the setup: \(error.localizedDescription)")
         }
     }
 
@@ -396,9 +396,9 @@ final class ConfigStore: ObservableObject {
         guard let e = error as? DecodingError else { return error.localizedDescription }
         func path(_ p: [CodingKey]) -> String { p.map { $0.intValue.map { "[\($0)]" } ?? ".\($0.stringValue)" }.joined() }
         switch e {
-        case .dataCorrupted(let ctx): return "Not valid JSON: \(ctx.underlyingError?.localizedDescription ?? ctx.debugDescription)"
-        case .typeMismatch(_, let ctx), .valueNotFound(_, let ctx): return "Wrong value at \(path(ctx.codingPath)): \(ctx.debugDescription)"
-        case .keyNotFound(let k, let ctx): return "Missing \(k.stringValue) at \(path(ctx.codingPath))"
+        case .dataCorrupted(let ctx): return String(localized: "Not valid JSON: \(ctx.underlyingError?.localizedDescription ?? ctx.debugDescription)")
+        case .typeMismatch(_, let ctx), .valueNotFound(_, let ctx): return String(localized: "Wrong value at \(path(ctx.codingPath)): \(ctx.debugDescription)")
+        case .keyNotFound(let k, let ctx): return String(localized: "Missing \(k.stringValue) at \(path(ctx.codingPath))")
         @unknown default: return error.localizedDescription
         }
     }

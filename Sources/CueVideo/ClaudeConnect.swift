@@ -56,15 +56,15 @@ enum ClaudeConnect {
     /// or nil when it worked.
     @discardableResult
     static func connect() -> String? {
-        if runningFromTemporaryPlace { return "Move Churchfront Video to your Applications folder and open it from there first." }
+        if runningFromTemporaryPlace { return String(localized: "Move Churchfront Video to your Applications folder and open it from there first.") }
         let fm = FileManager.default
         let exists = fm.fileExists(atPath: configURL.path)
         var config: [String: Any] = [:]
         if exists {
-            guard let data = try? Data(contentsOf: configURL) else { return "Couldn't read Claude's settings file." }
+            guard let data = try? Data(contentsOf: configURL) else { return String(localized: "Couldn't read Claude's settings file.") }
             if !data.isEmpty {
                 guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    return "Claude's settings file has a problem, so it was left alone: \(configURL.path)"
+                    return String(localized: "Claude's settings file has a problem, so it was left alone: \(configURL.path)")
                 }
                 config = obj
             }
@@ -79,9 +79,9 @@ enum ClaudeConnect {
             let data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             try data.write(to: configURL, options: .atomic)
         } catch {
-            return "Couldn't save Claude's settings: \(error.localizedDescription)"
+            return String(localized: "Couldn't save Claude's settings: \(error.localizedDescription)")
         }
-        return state() == .connected ? nil : "Saved, but Claude's settings didn't read back as expected."
+        return state() == .connected ? nil : String(localized: "Saved, but Claude's settings didn't read back as expected.")
     }
 
     /// Takes the churchfront-video entry out again, leaving the rest of the file alone.
@@ -95,9 +95,9 @@ enum ClaudeConnect {
             let data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             try data.write(to: configURL, options: .atomic)
             return nil
-        } catch { return "Couldn't save Claude's settings: \(error.localizedDescription)" }
+        } catch { return String(localized: "Couldn't save Claude's settings: \(error.localizedDescription)") }
     }
 
     /// What to say to Claude after connecting.
-    static let firstPrompt = "Help me set up Churchfront Video for our church. Find our ATEM switcher and PTZ cameras on the network, check with me which camera is which, and set them up."
+    static let firstPrompt = String(localized: "Help me set up Churchfront Video for our church. Find our ATEM switcher and PTZ cameras on the network, check with me which camera is which, and set them up.")
 }

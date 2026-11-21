@@ -106,18 +106,18 @@ public struct CameraExposure: Hashable {
     public init() {}
 
     public func gainLabel(_ v: Int?) -> String {
-        gainIsLevel ? (v.map { "Level \($0)" } ?? "?") : Self.gainText(v)
+        gainIsLevel ? (v.map { String(localized: "Level \($0)", bundle: .cueATEM) } ?? "?") : Self.gainText(v)
     }
 
     /// "Auto", "Daylight", "Tungsten" or "4300 K".
     public static func wbText(_ mode: String?, _ kelvin: Int?) -> String {
         switch mode {
-        case "auto": return "Auto"
-        case "daylight": return "Daylight"
-        case "tungsten": return "Tungsten"
-        case "kelvin": return kelvin.map { "\($0) K" } ?? "Kelvin"
+        case "auto": return String(localized: "Auto", bundle: .cueATEM)
+        case "daylight": return String(localized: "Daylight", bundle: .cueATEM)
+        case "tungsten": return String(localized: "Tungsten", bundle: .cueATEM)
+        case "kelvin": return kelvin.map { "\($0) K" } ?? String(localized: "Kelvin", bundle: .cueATEM)
         case nil: return kelvin.map { "\($0) K" } ?? "?"
-        default: return "Custom"
+        default: return String(localized: "Custom", bundle: .cueATEM)
         }
     }
 
@@ -881,7 +881,7 @@ final class CanonLink: PTZLink {
     /// CueVideo's everyday session gets control back on its next keep-alive.
     func deletePreset(_ n: Int, _ done: @escaping (String?) -> Void) {
         guard let login = CameraLogin.load() else {
-            done("No camera login saved. Add the cameras' admin login in Setup, under PTZ cameras."); return
+            done(String(localized: "No camera login saved. Add the cameras' admin login in Setup, under PTZ cameras.", bundle: .cueATEM)); return
         }
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = 5
@@ -903,8 +903,8 @@ final class CanonLink: PTZLink {
             readInfo()  // refresh the preset list either way
         }
         call("open.cgi?s.priority=40") { code, _, body in
-            if code == 401 { finish("The camera turned down the saved login. Check the user name and password in Setup.", nil); return }
-            guard let sid = Self.parse(body)["s"] else { finish("The camera wouldn't open a logged-in session (HTTP \(code)).", nil); return }
+            if code == 401 { finish(String(localized: "The camera turned down the saved login. Check the user name and password in Setup.", bundle: .cueATEM), nil); return }
+            guard let sid = Self.parse(body)["s"] else { finish(String(localized: "The camera wouldn't open a logged-in session (HTTP \(code)).", bundle: .cueATEM), nil); return }
             var tries = 0
             func claim() {
                 call("claim.cgi?s=\(sid)") { _, _, body in
@@ -912,13 +912,13 @@ final class CanonLink: PTZLink {
                     if control.hasPrefix("enabled") {
                         call("preset/set?p=\(n)&cmd=delete&s=\(sid)") { _, status, body in
                             if status.hasPrefix("0") { finish(nil, sid) }
-                            else { finish("The camera said: \(status.isEmpty ? body.trimmingCharacters(in: .whitespacesAndNewlines) : status)", sid) }
+                            else { finish(String(localized: "The camera said: \(status.isEmpty ? body.trimmingCharacters(in: .whitespacesAndNewlines) : status)", bundle: .cueATEM), sid) }
                         }
                     } else if tries < 6 {
                         tries += 1
                         self.queue.asyncAfter(deadline: .now() + 0.5) { claim() }
                     } else {
-                        finish("Another controller has the camera, so it wouldn't hand over control (\(control)).", sid)
+                        finish(String(localized: "Another controller has the camera, so it wouldn't hand over control (\(control)).", bundle: .cueATEM), sid)
                     }
                 }
             }
@@ -1193,7 +1193,7 @@ public final class PTZController: ObservableObject {
     /// worked, or the reason it didn't.
     public func deleteCameraPreset(_ n: Int, camera id: UUID, done: @escaping (String?) -> Void) {
         queue.async {
-            guard let l = self.links[id] else { DispatchQueue.main.async { done("That camera isn't set up.") }; return }
+            guard let l = self.links[id] else { DispatchQueue.main.async { done(String(localized: "That camera isn't set up.", bundle: .cueATEM)) }; return }
             l.deletePreset(n) { why in DispatchQueue.main.async { done(why) } }
         }
     }

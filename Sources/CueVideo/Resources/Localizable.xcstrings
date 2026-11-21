@@ -1,0 +1,4686 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+      "shouldTranslate" : false
+    },
+    "%@" : {
+      "shouldTranslate" : false
+    },
+    "%@ / %@" : {
+      "shouldTranslate" : false
+    },
+    "%@ On or Off" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ein oder aus"
+          }
+        }
+      }
+    },
+    "%@ already has your own shot called %@, so it was kept." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ hat schon eine eigene Einstellung namens %2$@, sie wurde behalten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ already has your own shot called %2$@, so it was kept."
+          }
+        }
+      }
+    },
+    "%@ can't move now: %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ kann sich gerade nicht bewegen: %2$@."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ can't move now: %2$@."
+          }
+        }
+      }
+    },
+    "%@ is back to what it was." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist wieder wie vorher."
+          }
+        }
+      }
+    },
+    "%@ is locked. Unlock Encoders and feeds to change it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist gesperrt. Entsperre Encoder und Zuspielungen, um es zu ändern."
+          }
+        }
+      }
+    },
+    "%@ is now live on %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ist jetzt live auf %2$@."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is now live on %2$@."
+          }
+        }
+      }
+    },
+    "%@ is on Live. Move it anyway?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist live. Trotzdem bewegen?"
+          }
+        }
+      }
+    },
+    "%@ is showing %@. Click to open Routing." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ zeigt %2$@. Klicken öffnet das Routing."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is showing %2$@. Click to open Routing."
+          }
+        }
+      }
+    },
+    "%@ is showing different pictures on its outputs. Click to open Routing." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ zeigt auf seinen Ausgängen unterschiedliche Bilder. Klicken öffnet das Routing."
+          }
+        }
+      }
+    },
+    "%@ not answering" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ antwortet nicht"
+          }
+        }
+      }
+    },
+    "%@ now shows %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ zeigt jetzt %2$@."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ now shows %2$@."
+          }
+        }
+      }
+    },
+    "%@ preview" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Preview"
+          }
+        }
+      }
+    },
+    "%@ s · Return" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ s · Return"
+          }
+        }
+      }
+    },
+    "%@ saw no one in its wide shot." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat in der Totalen niemanden gesehen."
+          }
+        }
+      }
+    },
+    "%@ saw two people labelled %@; only the first got a shot." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ hat zwei Personen mit dem Namen %2$@ gesehen; nur die erste hat eine Einstellung bekommen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ saw two people labelled %2$@; only the first got a shot."
+          }
+        }
+      }
+    },
+    "%@ to %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ zu %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ to %2$@"
+          }
+        }
+      }
+    },
+    "%@ waiting for control" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ wartet auf Steuerung"
+          }
+        }
+      }
+    },
+    "%@ was left on its wide shot because it's now in use." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bleibt in der Totalen, weil sie gerade benutzt wird."
+          }
+        }
+      }
+    },
+    "%@ was left out: %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ wurde ausgelassen: %2$@."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ was left out: %2$@."
+          }
+        }
+      }
+    },
+    "%@ was left out: it didn't answer." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ wurde ausgelassen: Sie hat nicht geantwortet."
+          }
+        }
+      }
+    },
+    "%@, protocol %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, Protokoll %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, protocol %2$@"
+          }
+        }
+      }
+    },
+    "%@, switcher output %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, Mischer-Ausgang %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, switcher output %2$@"
+          }
+        }
+      }
+    },
+    "%@. Reconnecting on its own; buttons do nothing until it's back." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. Verbindet sich von selbst neu; bis dahin tun die Tasten nichts."
+          }
+        }
+      }
+    },
+    "%@. Space, Return and the number keys do nothing here, so they can't cut or fade." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. Leertaste, Return und die Zahlentasten tun hier nichts, damit nichts versehentlich geschnitten oder geblendet wird."
+          }
+        }
+      }
+    },
+    "%@: drop a source here to put it live, or drag this onto a destination" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: Zieh eine Quelle hierher, um sie live zu schalten, oder zieh dies auf ein Ziel"
+          }
+        }
+      }
+    },
+    "%@: going wide" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: fährt in die Totale"
+          }
+        }
+      }
+    },
+    "%@: looking for people" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: sucht Personen"
+          }
+        }
+      }
+    },
+    "%@: no picture came in, so no one was found on it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: Es kam kein Bild an, deshalb wurde niemand gefunden."
+          }
+        }
+      }
+    },
+    "%@: what Operate cuts and fades. Drag it onto a destination to send it there." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: Hier schneidet und blendet die Bedienung. Zieh es auf ein Ziel, um es dorthin zu schicken."
+          }
+        }
+      }
+    },
+    "%lld K" : {
+      "shouldTranslate" : false
+    },
+    "%lld cameras will move." : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Kamera wird sich bewegen."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Kameras werden sich bewegen."
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld camera will move."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld cameras will move."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld saved shots, %lld on the camera" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@shots@, %#@cam@"
+          },
+          "substitutions" : {
+            "cam" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg in der Kamera"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg in der Kamera"
+                    }
+                  }
+                }
+              }
+            },
+            "shots" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg gespeicherte Einstellung"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg gespeicherte Einstellungen"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@shots@, %#@cam@"
+          },
+          "substitutions" : {
+            "cam" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg on the camera"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg on the camera"
+                    }
+                  }
+                }
+              }
+            },
+            "shots" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg saved shot"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg saved shots"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "4, 5" : {
+      "shouldTranslate" : false
+    },
+    "A self-test is running, so changes aren't saved." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Selbsttest läuft, Änderungen werden nicht gespeichert."
+          }
+        }
+      }
+    },
+    "A small live picture of what this is showing, in the bar across the top. Up to four." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein kleines Livebild davon, was hier gezeigt wird, in der Leiste oben. Bis zu vier."
+          }
+        }
+      }
+    },
+    "AI assistant" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KI-Assistent"
+          }
+        }
+      }
+    },
+    "ATEM switcher" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ATEM-Bildmischer"
+          }
+        }
+      }
+    },
+    "Add a camera" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera hinzufügen"
+          }
+        }
+      }
+    },
+    "Add a key button" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key-Taste hinzufügen"
+          }
+        }
+      }
+    },
+    "Add a source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle hinzufügen"
+          }
+        }
+      }
+    },
+    "Add exposure from the camera now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuelle Belichtung der Kamera hinzufügen"
+          }
+        }
+      }
+    },
+    "Add position from the camera now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuelle Position der Kamera hinzufügen"
+          }
+        }
+      }
+    },
+    "Address" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adresse"
+          }
+        }
+      }
+    },
+    "After a scan, each person each camera saw appears here with a box for their name." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach einem Scan erscheint hier jede Person, die eine Kamera gesehen hat, mit einem Feld für ihren Namen."
+          }
+        }
+      }
+    },
+    "An NDI source showing what switcher input %lld carries. It's only for looking at here; it changes nothing on the switcher." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine NDI-Quelle, die zeigt, was auf Mischer-Eingang %lld liegt. Sie dient nur zur Ansicht hier und ändert nichts am Mischer."
+          }
+        }
+      }
+    },
+    "An NDI source showing what this input carries, such as a Churchfront Screens screen sent to NDI, for its tile and the Next and Live pictures." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine NDI-Quelle, die zeigt, was auf diesem Eingang liegt, etwa ein Bildschirm aus Churchfront Screens mit NDI-Ausgang. Für die Kachel und die Bilder Nächstes und Live."
+          }
+        }
+      }
+    },
+    "An NDI source with alpha showing this key, such as Churchfront Screens' lower thirds sent to NDI with alpha. It's laid over the Next and Live pictures when the key is on them." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine NDI-Quelle mit Alpha, die diesen Key zeigt, etwa die Bauchbinden aus Churchfront Screens per NDI mit Alpha. Sie wird über die Bilder Nächstes und Live gelegt, wenn der Key darauf ist."
+          }
+        }
+      }
+    },
+    "Answering" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antwortet"
+          }
+        }
+      }
+    },
+    "Auto" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto"
+          }
+        }
+      }
+    },
+    "Auto exposure" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatische Belichtung"
+          }
+        }
+      }
+    },
+    "Auto exposure on" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatische Belichtung an"
+          }
+        }
+      }
+    },
+    "Auto tracking" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatische Verfolgung"
+          }
+        }
+      }
+    },
+    "Auto tracking needs the camera's picture: a Canon camera, or an NDI picture set for its switcher input in Setup." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die automatische Verfolgung braucht das Bild der Kamera: eine Canon-Kamera oder ein NDI-Bild, das in der Einrichtung für ihren Mischer-Eingang gewählt ist."
+          }
+        }
+      }
+    },
+    "Aux %lld" : {
+      "shouldTranslate" : false
+    },
+    "Aux outputs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aux-Ausgänge"
+          }
+        }
+      }
+    },
+    "Black" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schwarz"
+          }
+        }
+      }
+    },
+    "Bright stage" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Helle Bühne"
+          }
+        }
+      }
+    },
+    "Brighter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heller"
+          }
+        }
+      }
+    },
+    "Button label" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschriftung"
+          }
+        }
+      }
+    },
+    "Buttons in the bottom right of Operate. Each one sends one or more screens a picture, like a macro, and lights up while the screens match it. The easy way to make one: route the screens the way you want above, then save that as a button." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tasten unten rechts in Bedienen. Jede schickt einem oder mehreren Bildschirmen ein Bild, wie ein Macro, und leuchtet, solange die Bildschirme dazu passen. So geht's am einfachsten: Route die Bildschirme oben so, wie du sie willst, und speichere das als Taste."
+          }
+        }
+      }
+    },
+    "Camera" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera"
+          }
+        }
+      }
+    },
+    "Camera admin login" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Admin-Login der Kameras"
+          }
+        }
+      }
+    },
+    "Camera speed for the joystick, zoom and arrow keys. Slow it down for fine framing on a tight shot." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera-Tempo für Joystick, Zoom und Pfeiltasten. Langsamer für feines Ausrichten bei engen Einstellungen."
+          }
+        }
+      }
+    },
+    "Cameras" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameras"
+          }
+        }
+      }
+    },
+    "Can follow by name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach Namen verfolgbar"
+          }
+        }
+      }
+    },
+    "Can't see %@ in the picture, or the picture isn't coming in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist nicht im Bild, oder das Bild kommt nicht an."
+          }
+        }
+      }
+    },
+    "Can't see %@ in the picture." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist nicht im Bild."
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
+      }
+    },
+    "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Canon (HTTP) funktioniert ohne Kamera-Einstellungen, meldet, wohin die Kamera zeigt, und zeigt die in der Kamera gespeicherten Presets. Die meisten anderen Kameras sprechen VISCA over IP (UDP 52381); PTZOptics kann auch VISCA over TCP (5678). Gib für jede Kamera den Mischer-Eingang an, an dem sie hängt. Dann kann die Bedienung sie bewegen, sobald sie auf Nächstes liegt."
+          }
+        }
+      }
+    },
+    "Canon cameras take commands from one controller at a time. A logged-in session, like the camera's own web page, outranks Churchfront Video." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Canon-Kameras nehmen Befehle immer nur von einer Steuerung an. Eine angemeldete Sitzung, etwa die eigene Webseite der Kamera, hat Vorrang vor Churchfront Video."
+          }
+        }
+      }
+    },
+    "Change the name, outputs or wiring note" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name, Ausgänge oder Verkabelungsnotiz ändern"
+          }
+        }
+      }
+    },
+    "Choose a live picture for this source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Livebild für diese Quelle wählen"
+          }
+        }
+      }
+    },
+    "Churchfront Video" : {
+      "shouldTranslate" : false
+    },
+    "Churchfront Video doesn't have control of it" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Churchfront Video hat keine Steuerung über sie"
+          }
+        }
+      }
+    },
+    "Churchfront Video shows the new language the next time it opens." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Churchfront Video zeigt die neue Sprache beim nächsten Öffnen."
+          }
+        }
+      }
+    },
+    "Churchfront Video talks to the switcher directly over your network. No Blackmagic software needed.\nFind the switcher's IP address in ATEM Setup under Network." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Churchfront Video spricht direkt über dein Netzwerk mit dem Mischer. Keine Blackmagic-Software nötig.\nDie IP-Adresse des Mischers findest du in ATEM Setup unter Network."
+          }
+        }
+      }
+    },
+    "Claude" : {
+      "shouldTranslate" : false
+    },
+    "Claude is connected to another copy of Churchfront Video. Connect it to this one." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude ist mit einer anderen Kopie von Churchfront Video verbunden. Verbinde es mit dieser."
+          }
+        }
+      }
+    },
+    "Claude isn't connected yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude ist noch nicht verbunden."
+          }
+        }
+      }
+    },
+    "Claude's settings file has a problem, so it was left alone: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claudes Einstellungsdatei hat einen Fehler, deshalb wurde sie nicht angefasst: %@"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "comment" : "Shot size: shoulders up",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nah"
+          }
+        }
+      }
+    },
+    "Commands sent to the switcher" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An den Mischer gesendete Befehle"
+          }
+        }
+      }
+    },
+    "Connect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinden"
+          }
+        }
+      }
+    },
+    "Connect Claude" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude verbinden"
+          }
+        }
+      }
+    },
+    "Connect to your ATEM" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit deinem ATEM verbinden"
+          }
+        }
+      }
+    },
+    "Connected. Quit Claude (Claude > Quit) and open it again, then ask it something like:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbunden. Beende Claude (Claude > Beenden) und öffne es wieder. Frag es dann zum Beispiel:"
+          }
+        }
+      }
+    },
+    "Connecting" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindet"
+          }
+        }
+      }
+    },
+    "Connecting adds Churchfront Video to the Claude desktop app on this Mac. Claude can then find your switcher and cameras on the network, set them up with you, and run the switcher when you ask. It checks with you before changing anything live. Claude for Mac is free from claude.ai/download." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Verbinden wird Churchfront Video zur Claude-Desktop-App auf diesem Mac hinzugefügt. Claude kann dann deinen Mischer und deine Kameras im Netzwerk finden, sie mit dir einrichten und den Mischer bedienen, wenn du darum bittest. Bevor es etwas live ändert, fragt es dich. Claude für Mac gibt es kostenlos unter claude.ai/download."
+          }
+        }
+      }
+    },
+    "Connecting to %@…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinde mit %@ …"
+          }
+        }
+      }
+    },
+    "Connections and log" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindungen und Protokoll"
+          }
+        }
+      }
+    },
+    "Control" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steuerung"
+          }
+        }
+      }
+    },
+    "Cooler (bluer)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kälter (blauer)"
+          }
+        }
+      }
+    },
+    "Copied" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopiert"
+          }
+        }
+      }
+    },
+    "Copies everything on this page as text, ready to paste to Claude or the system owner" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopiert alles auf dieser Seite als Text, zum Einfügen bei Claude oder für die verantwortliche Person"
+          }
+        }
+      }
+    },
+    "Copy path" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pfad kopieren"
+          }
+        }
+      }
+    },
+    "Copy report" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bericht kopieren"
+          }
+        }
+      }
+    },
+    "Copy this" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopieren"
+          }
+        }
+      }
+    },
+    "Couldn't delete that preset from %@. %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Preset konnte nicht aus %1$@ gelöscht werden. %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Couldn't delete that preset from %1$@. %2$@"
+          }
+        }
+      }
+    },
+    "Couldn't delete that preset. %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Preset konnte nicht gelöscht werden. %@"
+          }
+        }
+      }
+    },
+    "Couldn't read Claude's settings file." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claudes Einstellungsdatei konnte nicht gelesen werden."
+          }
+        }
+      }
+    },
+    "Couldn't save Claude's settings: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claudes Einstellungen konnten nicht gespeichert werden: %@"
+          }
+        }
+      }
+    },
+    "Couldn't save the setup: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Einrichtung konnte nicht gespeichert werden: %@"
+          }
+        }
+      }
+    },
+    "Count from %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab %lld zählen"
+          }
+        }
+      }
+    },
+    "Count from 0" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab 0 zählen"
+          }
+        }
+      }
+    },
+    "Count from 1" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab 1 zählen"
+          }
+        }
+      }
+    },
+    "Counted from 1. Several, such as 4, 5, switch together." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab 1 gezählt. Mehrere, etwa 4, 5, schalten gemeinsam."
+          }
+        }
+      }
+    },
+    "Cut" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cut"
+          }
+        }
+      }
+    },
+    "Cut (Space)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cut (Leertaste)"
+          }
+        }
+      }
+    },
+    "DSK %lld" : {
+      "shouldTranslate" : false
+    },
+    "DSK %lld: %@" : {
+      "shouldTranslate" : false
+    },
+    "Darker" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dunkler"
+          }
+        }
+      }
+    },
+    "Daylight" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tageslicht"
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen"
+          }
+        }
+      }
+    },
+    "Delete \"%@\" from %@?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%1$@“ aus %2$@ löschen?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete \"%1$@\" from %2$@?"
+          }
+        }
+      }
+    },
+    "Delete %@?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ löschen?"
+          }
+        }
+      }
+    },
+    "Delete from camera" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus der Kamera löschen"
+          }
+        }
+      }
+    },
+    "Delete from camera…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus der Kamera löschen …"
+          }
+        }
+      }
+    },
+    "Delete this preset?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Preset löschen?"
+          }
+        }
+      }
+    },
+    "Delete…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen …"
+          }
+        }
+      }
+    },
+    "Destinations" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ziele"
+          }
+        }
+      }
+    },
+    "Disconnect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trennen"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fertig"
+          }
+        }
+      }
+    },
+    "Drag a source or a mix onto a destination, or click one and then the other. It changes right away." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zieh eine Quelle oder einen Mix auf ein Ziel, oder klick erst das eine, dann das andere an. Es ändert sich sofort."
+          }
+        }
+      }
+    },
+    "Drag onto a destination or a mix, or click this and then click where it should go" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf ein Ziel oder einen Mix ziehen, oder dies anklicken und dann das Ziel"
+          }
+        }
+      }
+    },
+    "Drop a source to put it live" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle hierher ziehen, um sie live zu schalten"
+          }
+        }
+      }
+    },
+    "Each camera that isn't on Live goes to a wide shot, finds the people in it, and comes back. Label each person, and Churchfront Video saves a shot of them on every camera that saw them and can follow them by name for the rest of the day.\n\nThe wide shot is a camera's shot named Stage or Wide if it has one. Otherwise it's where the camera points now, zoomed all the way out. A tighter Stage shot makes people bigger in the picture and easier to find.\n\nThe shots are for where people stood during the scan, so run it at rehearsal or soundcheck." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jede Kamera, die nicht live ist, fährt in die Totale, findet die Personen darin und kehrt zurück. Benenne jede Person, und Churchfront Video speichert auf jeder Kamera, die sie gesehen hat, eine Einstellung von ihr und kann ihr den restlichen Tag über nach Namen folgen.\n\nDie Totale ist die Einstellung der Kamera namens Stage oder Wide, falls es eine gibt. Sonst ist es die aktuelle Richtung der Kamera, ganz herausgezoomt. Eine engere Stage-Einstellung macht Personen im Bild größer und leichter zu finden.\n\nDie Einstellungen gelten dafür, wo die Personen beim Scan standen. Mach ihn also bei der Probe oder beim Soundcheck."
+          }
+        }
+      }
+    },
+    "Each switcher output feeds a screen or a piece of gear. Drag a source or a mix onto a destination to change what it shows, right away. The pencil on a destination names it, sets which outputs feed it (a pair listed together switches together) and notes how it's wired. Outputs that feed encoders and recorders are locked so nobody changes the stream by accident, and ports that only go to the patch bay fold away as spare." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jeder Mischer-Ausgang versorgt einen Bildschirm oder ein Gerät. Zieh eine Quelle oder einen Mix auf ein Ziel, um sofort zu ändern, was es zeigt. Mit dem Stift an einem Ziel gibst du ihm einen Namen, legst fest, welche Ausgänge es versorgen (zusammen genannte schalten gemeinsam), und notierst die Verkabelung. Ausgänge zu Encodern und Rekordern sind gesperrt, damit niemand versehentlich den Stream ändert. Anschlüsse, die nur zum Steckfeld gehen, werden als frei eingeklappt."
+          }
+        }
+      }
+    },
+    "Edit %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bearbeiten"
+          }
+        }
+      }
+    },
+    "Encoders and feeds" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encoder und Zuspielungen"
+          }
+        }
+      }
+    },
+    "Enter both the user name and the password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib Benutzername und Passwort ein."
+          }
+        }
+      }
+    },
+    "Every control on the switcher. What you press here goes to air like the hardware panel." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jede Funktion des Mischers. Was du hier drückst, geht wie am Hardware-Pult sofort auf Sendung."
+          }
+        }
+      }
+    },
+    "Everyone watching will see the camera move." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Zuschauenden sehen, wie sich die Kamera bewegt."
+          }
+        }
+      }
+    },
+    "Everything in Setup is saved in one file that people and Claude can edit." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles aus der Einrichtung steht in einer Datei, die Menschen und Claude bearbeiten können."
+          }
+        }
+      }
+    },
+    "Exposure" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belichtung"
+          }
+        }
+      }
+    },
+    "Exposure and saved shots below act on the camera that's on Next." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belichtung und gespeicherte Einstellungen unten wirken auf die Kamera, die auf Nächstes liegt."
+          }
+        }
+      }
+    },
+    "Fade" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fade"
+          }
+        }
+      }
+    },
+    "Fade (Return)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fade (Return)"
+          }
+        }
+      }
+    },
+    "Fade back up from black" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Schwarz wieder aufblenden"
+          }
+        }
+      }
+    },
+    "Fade everything to black" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles auf Schwarz blenden"
+          }
+        }
+      }
+    },
+    "Fade from Live to Next (Return)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von Live zu Nächstes blenden (Return)"
+          }
+        }
+      }
+    },
+    "Fade to Black" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Schwarz blenden"
+          }
+        }
+      }
+    },
+    "Fade to black" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Schwarz blenden"
+          }
+        }
+      }
+    },
+    "Faded to black" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Schwarz geblendet"
+          }
+        }
+      }
+    },
+    "Fading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fade läuft"
+          }
+        }
+      }
+    },
+    "Fill and key sources" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fill- und Key-Quellen"
+          }
+        }
+      }
+    },
+    "Focus" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fokus"
+          }
+        }
+      }
+    },
+    "Focus the Camera on Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera auf Nächstes fokussieren"
+          }
+        }
+      }
+    },
+    "Follow by Name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach Namen verfolgen"
+          }
+        }
+      }
+    },
+    "Follow by name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach Namen verfolgen"
+          }
+        }
+      }
+    },
+    "Follow someone labelled in the stage scan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einer im Bühnen-Scan benannten Person folgen"
+          }
+        }
+      }
+    },
+    "Follow speed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folgetempo"
+          }
+        }
+      }
+    },
+    "Follow the person in the middle of the shot. Or click someone on the Next picture. Moving the joystick stops tracking." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Person in der Bildmitte folgen. Oder klick jemanden im Bild Nächstes an. Den Joystick zu bewegen beendet die Verfolgung."
+          }
+        }
+      }
+    },
+    "Following" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folgt"
+          }
+        }
+      }
+    },
+    "Forget this name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diesen Namen vergessen"
+          }
+        }
+      }
+    },
+    "Frame each person" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jede Person einrahmen"
+          }
+        }
+      }
+    },
+    "Frame: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einrahmen: %@"
+          }
+        }
+      }
+    },
+    "Full" : {
+      "comment" : "Shot size: full length",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganz"
+          }
+        }
+      }
+    },
+    "Full Switcher" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganzer Mischer"
+          }
+        }
+      }
+    },
+    "Full length" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganze Figur"
+          }
+        }
+      }
+    },
+    "Full switcher" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganzer Mischer"
+          }
+        }
+      }
+    },
+    "Gain" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gain"
+          }
+        }
+      }
+    },
+    "Gain, shutter, iris and white balance, as the camera has them now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gain, Shutter, Iris und Weißabgleich, wie die Kamera sie gerade hat."
+          }
+        }
+      }
+    },
+    "Get Claude for Mac" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude für Mac holen"
+          }
+        }
+      }
+    },
+    "Graphics" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grafik"
+          }
+        }
+      }
+    },
+    "Help me set up Churchfront Video for our church. Find our ATEM switcher and PTZ cameras on the network, check with me which camera is which, and set them up." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hilf mir, Churchfront Video für unsere Gemeinde einzurichten. Finde unseren ATEM-Bildmischer und die PTZ-Kameras im Netzwerk, kläre mit mir, welche Kamera welche ist, und richte sie ein."
+          }
+        }
+      }
+    },
+    "Hide exposure" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belichtung ausblenden"
+          }
+        }
+      }
+    },
+    "How Churchfront Video is talking to the switcher and cameras right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie Churchfront Video gerade mit Mischer und Kameras spricht."
+          }
+        }
+      }
+    },
+    "How auto tracking follows a person." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie die automatische Verfolgung einer Person folgt."
+          }
+        }
+      }
+    },
+    "How quickly tracking cameras follow. Raise it if the camera falls behind, lower it if it overshoots." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie schnell verfolgende Kameras nachziehen. Höher, wenn die Kamera hinterherhinkt, niedriger, wenn sie überschießt."
+          }
+        }
+      }
+    },
+    "I've installed it" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ist installiert"
+          }
+        }
+      }
+    },
+    "IP address" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP-Adresse"
+          }
+        }
+      }
+    },
+    "In black" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schwarz"
+          }
+        }
+      }
+    },
+    "Input %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eingang %lld"
+          }
+        }
+      }
+    },
+    "Install the Claude desktop app first. It's free." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installiere zuerst die Claude-Desktop-App. Sie ist kostenlos."
+          }
+        }
+      }
+    },
+    "Iris" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Iris"
+          }
+        }
+      }
+    },
+    "Key" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key"
+          }
+        }
+      }
+    },
+    "Key buttons" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key-Tasten"
+          }
+        }
+      }
+    },
+    "Keys" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keys"
+          }
+        }
+      }
+    },
+    "Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in Churchfront Screens, add an NDI output to that screen) so the tile and the Next and Live monitors show it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Tasten 1 bis 9 und 0 wählen die Kacheln in dieser Reihenfolge. Lass den Namen leer, dann gilt der Name der Kamera oder des Mischers. Solange keine hinzugefügt sind, zeigt die Leiste alle Kameras. Für Grafik oder Liedtexte wähl die NDI-Quelle mit demselben Bild (in Churchfront Screens dem Bildschirm einen NDI-Ausgang geben), damit die Kachel und die Monitore Nächstes und Live es zeigen."
+          }
+        }
+      }
+    },
+    "Keys, T-bar, macros, aux" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keys, T-Bar, Macros, Aux"
+          }
+        }
+      }
+    },
+    "Label" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschriftung"
+          }
+        }
+      }
+    },
+    "Label, such as Lobby: stream" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschriftung, etwa Foyer: Stream"
+          }
+        }
+      }
+    },
+    "Language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprache"
+          }
+        }
+      }
+    },
+    "Left out: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgelassen: %@"
+          }
+        }
+      }
+    },
+    "Let Claude set up and run Churchfront Video for you, in plain words." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lass Claude Churchfront Video für dich einrichten und bedienen, in einfachen Worten."
+          }
+        }
+      }
+    },
+    "Let the camera set gain, shutter and iris itself" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gain, Shutter und Iris von der Kamera selbst einstellen lassen"
+          }
+        }
+      }
+    },
+    "Live" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live"
+          }
+        }
+      }
+    },
+    "Live now. Click to go to Operate." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerade live. Klicken wechselt zu Bedienen."
+          }
+        }
+      }
+    },
+    "Live on it now: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerade live darauf: %@"
+          }
+        }
+      }
+    },
+    "Live · %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live · %@"
+          }
+        }
+      }
+    },
+    "Lock these again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wieder sperren"
+          }
+        }
+      }
+    },
+    "Locked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesperrt"
+          }
+        }
+      }
+    },
+    "Locked. Unlock Encoders and feeds to change it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesperrt. Entsperre Encoder und Zuspielungen, um es zu ändern."
+          }
+        }
+      }
+    },
+    "Longer mix" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Längerer Mix"
+          }
+        }
+      }
+    },
+    "Look again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut suchen"
+          }
+        }
+      }
+    },
+    "Looking for someone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sucht jemanden"
+          }
+        }
+      }
+    },
+    "Lost sight, holding" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus dem Blick, hält"
+          }
+        }
+      }
+    },
+    "Lost them, looking" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verloren, sucht"
+          }
+        }
+      }
+    },
+    "Lower if the camera overshoots, higher if it falls behind." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niedriger, wenn die Kamera überschießt, höher, wenn sie hinterherhinkt."
+          }
+        }
+      }
+    },
+    "M/E %lld Key %lld: %@" : {
+      "shouldTranslate" : false
+    },
+    "Macros" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macros"
+          }
+        }
+      }
+    },
+    "Match %@ (%@)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie %1$@ (%2$@)"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Match %1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "Media and color" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Medien und Farben"
+          }
+        }
+      }
+    },
+    "Missing %@ at %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ fehlt bei %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Missing %1$@ at %2$@"
+          }
+        }
+      }
+    },
+    "Mix length in seconds and frames" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mix-Dauer in Sekunden und Frames"
+          }
+        }
+      }
+    },
+    "Mixed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemischt"
+          }
+        }
+      }
+    },
+    "Mixes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mixe"
+          }
+        }
+      }
+    },
+    "Mixes and switcher inputs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mixe und Mischer-Eingänge"
+          }
+        }
+      }
+    },
+    "Model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modell"
+          }
+        }
+      }
+    },
+    "Move Churchfront Video to your Applications folder and open it from there first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leg Churchfront Video zuerst in deinen Programme-Ordner und öffne es von dort."
+          }
+        }
+      }
+    },
+    "Move Churchfront Video to your Applications folder and open it from there, then come back here to connect Claude." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leg Churchfront Video in deinen Programme-Ordner, öffne es von dort und komm dann hierher zurück, um Claude zu verbinden."
+          }
+        }
+      }
+    },
+    "Move earlier" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach vorne"
+          }
+        }
+      }
+    },
+    "Move earlier in the row" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In der Leiste nach vorne"
+          }
+        }
+      }
+    },
+    "Move it on Live" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live bewegen"
+          }
+        }
+      }
+    },
+    "Move later" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach hinten"
+          }
+        }
+      }
+    },
+    "Move later in the row" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In der Leiste nach hinten"
+          }
+        }
+      }
+    },
+    "Move the live camera?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Live-Kamera bewegen?"
+          }
+        }
+      }
+    },
+    "Moves each camera marked \"Will go wide and come back\". Cameras on Live don't move." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewegt jede Kamera, bei der „Fährt in die Totale und zurück“ steht. Kameras, die live sind, bewegen sich nicht."
+          }
+        }
+      }
+    },
+    "NDI isn't installed on this Mac (install NDI Tools)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NDI ist auf diesem Mac nicht installiert (NDI Tools installieren)"
+          }
+        }
+      }
+    },
+    "Name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        }
+      }
+    },
+    "Name %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ benennen"
+          }
+        }
+      }
+    },
+    "Name on screen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name auf dem Bildschirm"
+          }
+        }
+      }
+    },
+    "Name or role" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name oder Rolle"
+          }
+        }
+      }
+    },
+    "Name people and save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personen benennen und speichern"
+          }
+        }
+      }
+    },
+    "Name the screens first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benenne zuerst die Bildschirme."
+          }
+        }
+      }
+    },
+    "Name this output" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diesen Ausgang benennen"
+          }
+        }
+      }
+    },
+    "Name what this mix is for" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benennen, wofür dieser Mix ist"
+          }
+        }
+      }
+    },
+    "New routing button" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Routing-Taste"
+          }
+        }
+      }
+    },
+    "Newest first. Only commands from this Mac show here; the switcher's own panel and other software aren't listed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neueste zuerst. Hier stehen nur Befehle von diesem Mac; das Pult des Mischers und andere Software sind nicht aufgeführt."
+          }
+        }
+      }
+    },
+    "Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächstes"
+          }
+        }
+      }
+    },
+    "Next transition takes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächste Transition:"
+          }
+        }
+      }
+    },
+    "Next · %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächstes · %@"
+          }
+        }
+      }
+    },
+    "No NDI sources found yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine NDI-Quellen gefunden"
+          }
+        }
+      }
+    },
+    "No buttons yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Tasten."
+          }
+        }
+      }
+    },
+    "No camera is free to scan right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerade ist keine Kamera für einen Scan frei."
+          }
+        }
+      }
+    },
+    "No camera on Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Kamera auf Nächstes"
+          }
+        }
+      }
+    },
+    "No cameras set up yet. Add them in Setup (⌘,)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Kameras eingerichtet. Füge sie in der Einrichtung hinzu (⌘,)."
+          }
+        }
+      }
+    },
+    "No cameras set up yet. Add them in Setup." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Kameras eingerichtet. Füge sie in der Einrichtung hinzu."
+          }
+        }
+      }
+    },
+    "No cameras yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Kameras."
+          }
+        }
+      }
+    },
+    "No exposure shots yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Belichtungs-Einstellungen."
+          }
+        }
+      }
+    },
+    "No input" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Eingang"
+          }
+        }
+      }
+    },
+    "No key buttons yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Key-Tasten."
+          }
+        }
+      }
+    },
+    "No one called %@ in the last stage scan. It has: %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im letzten Bühnen-Scan heißt niemand %1$@. Darin sind: %2$@."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No one called %1$@ in the last stage scan. It has: %2$@."
+          }
+        }
+      }
+    },
+    "No one has been labelled yet. Run a stage scan first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch niemand ist benannt. Mach zuerst einen Bühnen-Scan."
+          }
+        }
+      }
+    },
+    "No one is in the picture, or the picture isn't coming in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niemand ist im Bild, oder das Bild kommt nicht an."
+          }
+        }
+      }
+    },
+    "No one is in the picture." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niemand ist im Bild."
+          }
+        }
+      }
+    },
+    "No picture" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Bild"
+          }
+        }
+      }
+    },
+    "No picture, just the name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Bild, nur der Name"
+          }
+        }
+      }
+    },
+    "No preview" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Vorschau"
+          }
+        }
+      }
+    },
+    "No shots saved in Churchfront Video yet. Save one from the main window, or add one here from the camera as it is now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Churchfront Video sind noch keine Einstellungen gespeichert. Speichere eine im Hauptfenster oder füge hier eine aus dem aktuellen Kamerabild hinzu."
+          }
+        }
+      }
+    },
+    "No sources set up yet. Add them in Setup (⌘,)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Quellen eingerichtet. Füge sie in der Einrichtung hinzu (⌘,)."
+          }
+        }
+      }
+    },
+    "Not answering" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antwortet nicht"
+          }
+        }
+      }
+    },
+    "Not available for this camera" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für diese Kamera nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Not set up" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht eingerichtet"
+          }
+        }
+      }
+    },
+    "Not valid JSON: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein gültiges JSON: %@"
+          }
+        }
+      }
+    },
+    "Nothing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts"
+          }
+        }
+      }
+    },
+    "Nothing added yet, so the row shows every camera." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch nichts hinzugefügt, deshalb zeigt die Leiste alle Kameras."
+          }
+        }
+      }
+    },
+    "Nothing sent yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch nichts gesendet."
+          }
+        }
+      }
+    },
+    "Now click where %@ should go." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klick jetzt an, wohin %@ soll."
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "Off" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus"
+          }
+        }
+      }
+    },
+    "Off for encoders, recorders and patch bay feeds: they move to Encoders and feeds, and Claude needs to be told to change them." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus für Encoder, Rekorder und Steckfeld-Zuspielungen: Sie wandern zu Encoder und Zuspielungen, und Claude muss ausdrücklich gebeten werden, sie zu ändern."
+          }
+        }
+      }
+    },
+    "Offline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline"
+          }
+        }
+      }
+    },
+    "On" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An"
+          }
+        }
+      }
+    },
+    "On Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Nächstes"
+          }
+        }
+      }
+    },
+    "On Next. Click to go to Operate." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Nächstes. Klicken wechselt zu Bedienen."
+          }
+        }
+      }
+    },
+    "On Operate, under Track, choose Follow by name. This lasts until Churchfront Video quits or the next scan is saved." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Bedienen unter Verfolgen „Nach Namen verfolgen“ wählen. Das gilt, bis Churchfront Video beendet oder der nächste Scan gespeichert wird."
+          }
+        }
+      }
+    },
+    "On air" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Sendung"
+          }
+        }
+      }
+    },
+    "On and off buttons under Fade and Cut, such as lower thirds." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein-/Aus-Tasten unter Fade und Cut, etwa für Bauchbinden."
+          }
+        }
+      }
+    },
+    "On camera" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In der Kamera"
+          }
+        }
+      }
+    },
+    "One of these may carry the live stream. Unlock to change them." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einer davon könnte den Livestream führen. Zum Ändern entsperren."
+          }
+        }
+      }
+    },
+    "Online" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Online"
+          }
+        }
+      }
+    },
+    "Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the setup file. One login for every Canon camera. macOS may ask for this Mac's password the first time Churchfront Video uses it after an update." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur nötig, um Presets zu löschen oder zu ändern, die in den Kameras selbst gespeichert sind. Wird im Schlüsselbund dieses Macs gespeichert, nicht in der Einrichtungsdatei. Ein Login für alle Canon-Kameras. macOS fragt eventuell nach dem Passwort dieses Macs, wenn Churchfront Video ihn nach einem Update zum ersten Mal benutzt."
+          }
+        }
+      }
+    },
+    "Only this person's outline was found, so how tight the shot is was estimated. Try the shot and adjust." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von dieser Person wurde nur der Umriss gefunden, deshalb ist die Größe der Einstellung geschätzt. Probier sie aus und pass sie an."
+          }
+        }
+      }
+    },
+    "Open the Routing page" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routing-Seite öffnen"
+          }
+        }
+      }
+    },
+    "Operate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bedienen"
+          }
+        }
+      }
+    },
+    "Operator routing buttons" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routing-Tasten für die Bedienung"
+          }
+        }
+      }
+    },
+    "Or click a person on Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oder eine Person in Nächstes anklicken"
+          }
+        }
+      }
+    },
+    "Pan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pan"
+          }
+        }
+      }
+    },
+    "Pan, tilt and zoom, where the camera is pointing now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pan, Tilt und Zoom, so wie die Kamera gerade ausgerichtet ist."
+          }
+        }
+      }
+    },
+    "Password" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwort"
+          }
+        }
+      }
+    },
+    "People, labels, shots" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personen, Namen, Einstellungen"
+          }
+        }
+      }
+    },
+    "Picture" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild"
+          }
+        }
+      }
+    },
+    "Picture for %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild für %@"
+          }
+        }
+      }
+    },
+    "Picture stopped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild angehalten"
+          }
+        }
+      }
+    },
+    "Port" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Port"
+          }
+        }
+      }
+    },
+    "Ports that only go to patch bay tie lines" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anschlüsse, die nur zu Steckfeld-Leitungen gehen"
+          }
+        }
+      }
+    },
+    "Position" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Position"
+          }
+        }
+      }
+    },
+    "Preset %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preset %lld"
+          }
+        }
+      }
+    },
+    "Presets" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Presets"
+          }
+        }
+      }
+    },
+    "Preview" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview"
+          }
+        }
+      }
+    },
+    "Preview in the top bar" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschau in der Leiste oben"
+          }
+        }
+      }
+    },
+    "Preview picture" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschaubild"
+          }
+        }
+      }
+    },
+    "Program" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Program"
+          }
+        }
+      }
+    },
+    "Pulpit" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanzel"
+          }
+        }
+      }
+    },
+    "Put %@ on (%@)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ einschalten (%2$@)"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Put %1$@ on (%2$@)"
+          }
+        }
+      }
+    },
+    "Put %@ on Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ auf Nächstes legen"
+          }
+        }
+      }
+    },
+    "Put a camera on Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leg eine Kamera auf Nächstes"
+          }
+        }
+      }
+    },
+    "Put a camera on Next to frame it" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leg eine Kamera auf Nächstes, um sie auszurichten"
+          }
+        }
+      }
+    },
+    "Put back the last thing changed here" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die letzte Änderung hier zurücknehmen"
+          }
+        }
+      }
+    },
+    "Quits and opens Churchfront Video again. Cameras it is moving are stopped first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beendet Churchfront Video und öffnet es wieder. Kameras, die es gerade bewegt, werden vorher gestoppt."
+          }
+        }
+      }
+    },
+    "Read from the camera" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus der Kamera gelesen"
+          }
+        }
+      }
+    },
+    "Recall" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrufen"
+          }
+        }
+      }
+    },
+    "Record" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme"
+          }
+        }
+      }
+    },
+    "Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nimmt auf"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Remove %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ entfernen"
+          }
+        }
+      }
+    },
+    "Remove this button" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Taste entfernen"
+          }
+        }
+      }
+    },
+    "Removed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernt."
+          }
+        }
+      }
+    },
+    "Rename exposure shot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belichtungs-Einstellung umbenennen"
+          }
+        }
+      }
+    },
+    "Rename shot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellung umbenennen"
+          }
+        }
+      }
+    },
+    "Rename…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umbenennen …"
+          }
+        }
+      }
+    },
+    "Replaces the shots from the last scan. Shots you made yourself are kept." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ersetzt die Einstellungen aus dem letzten Scan. Selbst angelegte Einstellungen bleiben."
+          }
+        }
+      }
+    },
+    "Reset" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zurücksetzen"
+          }
+        }
+      }
+    },
+    "Restart now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt neu starten"
+          }
+        }
+      }
+    },
+    "Routing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routing"
+          }
+        }
+      }
+    },
+    "Run from Operate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird in Bedienen gesteuert"
+          }
+        }
+      }
+    },
+    "Run now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt ausführen"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichern"
+          }
+        }
+      }
+    },
+    "Save %@'s exposure" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belichtung von %@ sichern"
+          }
+        }
+      }
+    },
+    "Save %@'s exposure now (gain, shutter, iris and white balance) as a shot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuelle Belichtung von %@ (Gain, Shutter, Iris und Weißabgleich) als Einstellung sichern"
+          }
+        }
+      }
+    },
+    "Save a shot on %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellung auf %@ sichern"
+          }
+        }
+      }
+    },
+    "Save button" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taste sichern"
+          }
+        }
+      }
+    },
+    "Save exposure" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belichtung sichern"
+          }
+        }
+      }
+    },
+    "Save shots and names" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen und Namen sichern"
+          }
+        }
+      }
+    },
+    "Save the current routing as a button…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuelles Routing als Taste sichern …"
+          }
+        }
+      }
+    },
+    "Save where %@ is now as a new shot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuelle Ausrichtung von %@ als neue Einstellung sichern"
+          }
+        }
+      }
+    },
+    "Saved %lld shots for %lld people." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@shots@ für %#@people@ gesichert."
+          },
+          "substitutions" : {
+            "people" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg Person"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg Personen"
+                    }
+                  }
+                }
+              }
+            },
+            "shots" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg Einstellung"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg Einstellungen"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved %#@shots@ for %#@people@."
+          },
+          "substitutions" : {
+            "people" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg person"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg people"
+                    }
+                  }
+                }
+              }
+            },
+            "shots" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg shot"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg shots"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Saved (type to replace)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gespeichert (zum Ersetzen tippen)"
+          }
+        }
+      }
+    },
+    "Saved in the Keychain." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Schlüsselbund gespeichert."
+          }
+        }
+      }
+    },
+    "Saved, but Claude's settings didn't read back as expected." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gespeichert, aber Claudes Einstellungen ließen sich nicht wie erwartet zurücklesen."
+          }
+        }
+      }
+    },
+    "Scan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan"
+          }
+        }
+      }
+    },
+    "Scan again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut scannen"
+          }
+        }
+      }
+    },
+    "Scan the stage" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bühne scannen"
+          }
+        }
+      }
+    },
+    "Scanning…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scannt …"
+          }
+        }
+      }
+    },
+    "Screens" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildschirme"
+          }
+        }
+      }
+    },
+    "Screens and buttons" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildschirme und Tasten"
+          }
+        }
+      }
+    },
+    "Screens it sets, to what they show now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildschirme, die sie schaltet, auf das, was sie gerade zeigen"
+          }
+        }
+      }
+    },
+    "Send %@ to this shot to check it" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ zum Prüfen auf diese Einstellung fahren"
+          }
+        }
+      }
+    },
+    "Sends this to %@ now. Check it isn't live first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schickt dies sofort an %@. Prüf vorher, dass sie nicht live ist."
+          }
+        }
+      }
+    },
+    "Settings…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen …"
+          }
+        }
+      }
+    },
+    "Setup" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einrichtung"
+          }
+        }
+      }
+    },
+    "Setup file" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einrichtungsdatei"
+          }
+        }
+      }
+    },
+    "Shorter mix" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kürzerer Mix"
+          }
+        }
+      }
+    },
+    "Shots" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen"
+          }
+        }
+      }
+    },
+    "Shoulders up" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab Schultern"
+          }
+        }
+      }
+    },
+    "Show gain, shutter, iris and white balance for the camera on Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gain, Shutter, Iris und Weißabgleich der Kamera auf Nächstes zeigen"
+          }
+        }
+      }
+    },
+    "Show in Finder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Finder zeigen"
+          }
+        }
+      }
+    },
+    "Show to operators" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Bedienung zeigen"
+          }
+        }
+      }
+    },
+    "Shutter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shutter"
+          }
+        }
+      }
+    },
+    "Some VISCA cameras number their presets from 1 instead of 0" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manche VISCA-Kameras zählen ihre Presets ab 1 statt ab 0"
+          }
+        }
+      }
+    },
+    "Sources" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quellen"
+          }
+        }
+      }
+    },
+    "Sources, keys, cameras" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quellen, Keys, Kameras"
+          }
+        }
+      }
+    },
+    "Space" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leertaste"
+          }
+        }
+      }
+    },
+    "Spare inputs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Freie Eingänge"
+          }
+        }
+      }
+    },
+    "Spare outputs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Freie Ausgänge"
+          }
+        }
+      }
+    },
+    "Speed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempo"
+          }
+        }
+      }
+    },
+    "Stage Scan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bühnen-Scan"
+          }
+        }
+      }
+    },
+    "Stage scan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bühnen-Scan"
+          }
+        }
+      }
+    },
+    "Status" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        }
+      }
+    },
+    "Stop All Tracking" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Verfolgungen beenden"
+          }
+        }
+      }
+    },
+    "Stop auto tracking" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatische Verfolgung beenden"
+          }
+        }
+      }
+    },
+    "Stop following. Moving the joystick or recalling a shot also stops it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht mehr folgen. Auch den Joystick zu bewegen oder eine Einstellung abzurufen beendet das."
+          }
+        }
+      }
+    },
+    "Stop the macro" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macro stoppen"
+          }
+        }
+      }
+    },
+    "Stored on the camera" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In der Kamera gespeichert"
+          }
+        }
+      }
+    },
+    "Stream" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stream"
+          }
+        }
+      }
+    },
+    "Streaming" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Streamt"
+          }
+        }
+      }
+    },
+    "Such as 192.168.1.240" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwa 192.168.1.240"
+          }
+        }
+      }
+    },
+    "Such as Converter 1 → Lobby TV" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwa Konverter 1 → Foyer-TV"
+          }
+        }
+      }
+    },
+    "Such as Live stream" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwa Livestream"
+          }
+        }
+      }
+    },
+    "Such as Lobby TVs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwa Foyer-TVs"
+          }
+        }
+      }
+    },
+    "Switch to Next instantly (Space)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sofort zu Nächstes schalten (Leertaste)"
+          }
+        }
+      }
+    },
+    "Switcher" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildmischer"
+          }
+        }
+      }
+    },
+    "Switcher input" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mischer-Eingang"
+          }
+        }
+      }
+    },
+    "Switcher input %lld: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mischer-Eingang %1$lld: %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Switcher input %1$lld: %2$@"
+          }
+        }
+      }
+    },
+    "Switcher outputs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mischer-Ausgänge"
+          }
+        }
+      }
+    },
+    "System" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        }
+      }
+    },
+    "System follows the language set for this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System folgt der Sprache, die für diesen Mac eingestellt ist."
+          }
+        }
+      }
+    },
+    "Take %@ off (%@)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ausschalten (%2$@)"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Take %1$@ off (%2$@)"
+          }
+        }
+      }
+    },
+    "Take this tile out of the row" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Kachel aus der Leiste nehmen"
+          }
+        }
+      }
+    },
+    "The Keychain didn't accept it. Try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Schlüsselbund hat es nicht angenommen. Versuch es noch einmal."
+          }
+        }
+      }
+    },
+    "The PTZ cameras, the switcher input each one feeds, and their saved shots." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die PTZ-Kameras, der Mischer-Eingang jeder Kamera und ihre gespeicherten Einstellungen."
+          }
+        }
+      }
+    },
+    "The booth screen: pick, frame, take (⌘1)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Bildschirm für die Regie: wählen, ausrichten, schalten (⌘1)"
+          }
+        }
+      }
+    },
+    "The camera didn't report its settings, so the shot wasn't saved. Check that it's answering and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Kamera hat ihre Werte nicht gemeldet, deshalb wurde die Einstellung nicht gesichert. Prüf, ob sie antwortet, und versuch es noch einmal."
+          }
+        }
+      }
+    },
+    "The camera's own picture" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das eigene Bild der Kamera"
+          }
+        }
+      }
+    },
+    "The file has a problem, so Churchfront Video is still using the last good setup: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei hat einen Fehler, deshalb nutzt Churchfront Video weiter die letzte funktionierende Einrichtung: %@"
+          }
+        }
+      }
+    },
+    "The file is plain JSON. You, the system owner or Claude can edit it directly; Churchfront Video picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei ist einfaches JSON. Du, die verantwortliche Person oder Claude könnt sie direkt bearbeiten; Churchfront Video übernimmt Änderungen innerhalb einer Sekunde. Daneben liegt eine Kopie der letzten Einrichtung, die fehlerfrei geladen wurde."
+          }
+        }
+      }
+    },
+    "The last scan found no one. Check the notes above, then scan again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der letzte Scan hat niemanden gefunden. Sieh dir die Hinweise oben an und scanne dann erneut."
+          }
+        }
+      }
+    },
+    "The operator runs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Bedienung steuert"
+          }
+        }
+      }
+    },
+    "The output stays; it goes back to Outputs not named yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Ausgang bleibt; er wandert zurück zu den noch nicht benannten Ausgängen."
+          }
+        }
+      }
+    },
+    "The same outputs as the Routing page, by number. Routing shows them by the screen each one feeds." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieselben Ausgänge wie auf der Routing-Seite, nach Nummer. Das Routing zeigt sie nach dem Bildschirm, den jeder versorgt."
+          }
+        }
+      }
+    },
+    "The setup file couldn't be read, so nothing from it is loaded: %@\nFix it in Setup (⌘,), or connect here to start again. The file is kept under another name before anything is saved over it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Einrichtungsdatei konnte nicht gelesen werden, deshalb ist nichts daraus geladen: %@\nKorrigiere sie in der Einrichtung (⌘,) oder verbinde dich hier, um neu anzufangen. Bevor etwas darüber gespeichert wird, wird die Datei unter anderem Namen aufbewahrt."
+          }
+        }
+      }
+    },
+    "The setup file has a mistake in it, so Churchfront Video is using the last good setup. Details are in Setup (⌘,)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Einrichtungsdatei enthält einen Fehler, deshalb nutzt Churchfront Video die letzte funktionierende Einrichtung. Details in der Einrichtung (⌘,)."
+          }
+        }
+      }
+    },
+    "The switcher hasn't reported its outputs yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Mischer hat seine Ausgänge noch nicht gemeldet."
+          }
+        }
+      }
+    },
+    "The switcher input this camera is plugged into" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Mischer-Eingang, an dem diese Kamera hängt"
+          }
+        }
+      }
+    },
+    "The tiles the operator can put on Next, left to right." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Kacheln, die die Bedienung auf Nächstes legen kann, von links nach rechts."
+          }
+        }
+      }
+    },
+    "This removes it from the camera itself, for every controller that uses it. It can't be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das löscht es aus der Kamera selbst, für jede Steuerung, die es nutzt. Das lässt sich nicht rückgängig machen."
+          }
+        }
+      }
+    },
+    "Tilt" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilt"
+          }
+        }
+      }
+    },
+    "Tilt to follow as well as pan. Off: pan only." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Folgen auch tilten, nicht nur pannen. Aus: nur Pan."
+          }
+        }
+      }
+    },
+    "Track" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verfolgen"
+          }
+        }
+      }
+    },
+    "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verfolgen (unter dem Joystick) lässt eine Canon-Kamera anhand ihres Vorschaubilds einer Person folgen. Sie rahmt sie ab Schultern, ab Hüfte oder als ganze Figur ein: Augen nahe dem oberen Drittel, Kopfraum passend zur Einstellung, Blickraum auf der Seite, in die die Person schaut oder geht, und sanfte, weiche Bewegungen. Wer von Hand zoomt, behält die Verfolgung, und die neue Größe wird gehalten. Joystick, eine Einstellung oder ein Preset geben die Kamera wieder frei."
+          }
+        }
+      }
+    },
+    "Track the Camera on Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera auf Nächstes verfolgen lassen"
+          }
+        }
+      }
+    },
+    "Tracking" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verfolgung"
+          }
+        }
+      }
+    },
+    "Tracking was stopped." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Verfolgung wurde beendet."
+          }
+        }
+      }
+    },
+    "Transition" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transition"
+          }
+        }
+      }
+    },
+    "Try the shot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellung testen"
+          }
+        }
+      }
+    },
+    "Tungsten" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kunstlicht"
+          }
+        }
+      }
+    },
+    "Type a name or a role under each person. The letter is Churchfront Video's guess at the same person on another camera: naming one fills in the others with that letter. Fix any it got wrong, and leave a person blank to skip them." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tipp unter jede Person einen Namen oder eine Rolle. Der Buchstabe ist Churchfront Videos Vermutung, dass es dieselbe Person auf einer anderen Kamera ist: Wer eine benennt, füllt die anderen mit demselben Buchstaben aus. Korrigier, was nicht stimmt, und lass eine Person leer, um sie zu überspringen."
+          }
+        }
+      }
+    },
+    "Undo" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Widerrufen"
+          }
+        }
+      }
+    },
+    "Unknown until connected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unbekannt, bis verbunden"
+          }
+        }
+      }
+    },
+    "Unlocked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entsperrt"
+          }
+        }
+      }
+    },
+    "Update to now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf jetzt aktualisieren"
+          }
+        }
+      }
+    },
+    "Update to the camera's exposure now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf die aktuelle Belichtung der Kamera aktualisieren"
+          }
+        }
+      }
+    },
+    "Update to where the camera is now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf die aktuelle Ausrichtung der Kamera aktualisieren"
+          }
+        }
+      }
+    },
+    "Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in Churchfront Screens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upstream-Keys schalten hart ein und aus; DSKs blenden mit ihrer eigenen Dauer. Wähl eine NDI-Vorschau mit Alpha (in Churchfront Screens den Bauchbinden-Bildschirm per NDI mit Alpha senden), um den Key über den Bildern Nächstes und Live zu sehen."
+          }
+        }
+      }
+    },
+    "User name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzername"
+          }
+        }
+      }
+    },
+    "Waist" : {
+      "comment" : "Shot size: waist up",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hüfte"
+          }
+        }
+      }
+    },
+    "Waist up" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab Hüfte"
+          }
+        }
+      }
+    },
+    "Waiting for %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warte auf %@"
+          }
+        }
+      }
+    },
+    "Waiting for control. Another controller has %@, maybe its web page. Close it and this takes over." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warte auf Steuerung. Eine andere Steuerung hat %@, vielleicht ihre Webseite. Schließ sie, dann übernimmt diese hier."
+          }
+        }
+      }
+    },
+    "Warmer (more orange)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wärmer (oranger)"
+          }
+        }
+      }
+    },
+    "What M/E %lld is for" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wofür M/E %lld ist"
+          }
+        }
+      }
+    },
+    "What this is for" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wofür das ist"
+          }
+        }
+      }
+    },
+    "Where the ATEM is, and which mix the operator runs." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wo der ATEM ist und welchen Mix die Bedienung steuert."
+          }
+        }
+      }
+    },
+    "White" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiß"
+          }
+        }
+      }
+    },
+    "White balance. Pick auto, daylight, tungsten, a color temperature, or match another camera." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weißabgleich. Wähl Auto, Tageslicht, Kunstlicht, eine Farbtemperatur oder übernimm den einer anderen Kamera."
+          }
+        }
+      }
+    },
+    "Will go wide and come back" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fährt in die Totale und zurück"
+          }
+        }
+      }
+    },
+    "Wiring note" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verkabelungsnotiz"
+          }
+        }
+      }
+    },
+    "With everyone in place, find each person, name them, and save a shot of them on every camera." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn alle an ihrem Platz sind: jede Person finden, benennen und auf jeder Kamera eine Einstellung von ihr sichern."
+          }
+        }
+      }
+    },
+    "Wrong value at %@: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falscher Wert bei %1$@: %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Wrong value at %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Zoom" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom"
+          }
+        }
+      }
+    },
+    "Zoom to hold the shot size as people move nearer or farther." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoomen, um die Größe der Einstellung zu halten, wenn Personen näher kommen oder weggehen."
+          }
+        }
+      }
+    },
+    "input %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eingang %lld"
+          }
+        }
+      }
+    },
+    "it's auto tracking" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sie verfolgt gerade automatisch"
+          }
+        }
+      }
+    },
+    "it's on Live" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sie ist live"
+          }
+        }
+      }
+    },
+    "not sent, switcher offline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nicht gesendet, Mischer offline"
+          }
+        }
+      }
+    },
+    "only Canon cameras report where they point" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nur Canon-Kameras melden, wohin sie zeigen"
+          }
+        }
+      }
+    },
+    "size is a guess" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Größe geschätzt"
+          }
+        }
+      }
+    },
+    "this preset" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dieses Preset"
+          }
+        }
+      }
+    },
+    "this shot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "diese Einstellung"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

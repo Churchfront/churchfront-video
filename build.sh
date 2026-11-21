@@ -13,6 +13,11 @@ cp "$BIN" "$APP/Contents/MacOS/CueVideo"
 cp "$(dirname "$BIN")/cuevideo-mcp" "$APP/Contents/MacOS/cuevideo-mcp"
 cp Resources/Figtree-VariableFont_wght.ttf "$APP/Contents/Resources/"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+# Translations (docs/localization.md). The app's own words go straight into Contents/Resources,
+# so SwiftUI finds them in the main bundle; the engine's stay in their own bundle beside them.
+BUNDLES="$(dirname "$BIN")"
+cp -R "$BUNDLES/CueVideo_CueVideo.bundle/Contents/Resources/"*.lproj "$APP/Contents/Resources/"
+cp -R "$BUNDLES/CueVideo_CueATEM.bundle" "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -26,6 +31,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>0.1.1</string>
   <key>CFBundleVersion</key><string>2</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>de</string></array>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>

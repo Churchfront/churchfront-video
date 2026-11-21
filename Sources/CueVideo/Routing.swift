@@ -54,7 +54,7 @@ struct RouteButtonView: View {
         Button { route.run(atem) } label: {
             VStack(spacing: 1) {
                 Text(route.label).font(.sans(12, .semibold)).lineLimit(2).multilineTextAlignment(.center).minimumScaleFactor(0.8)
-                Text(on ? "ON" : RoutingText.summary(route, store, atem.state)).font(.sans(9, .bold)).tracking(0.5)
+                Text(on ? String(localized: "On").uppercased() : RoutingText.summary(route, store, atem.state)).font(.sans(9, .bold)).tracking(0.5)
                     .lineLimit(1).minimumScaleFactor(0.7).opacity(0.75)
             }
             .foregroundStyle(on ? T.onAction : T.ink)
@@ -73,7 +73,7 @@ enum RoutingText {
     /// What a screen shows: one source, or "mixed" when its linked auxes disagree.
     static func showing(_ sc: ScreenOutput, _ s: ATEMState, _ store: ConfigStore) -> String {
         let now = Set(sc.aux.map { s.aux[$0 - 1] })
-        guard now.count == 1, let one = now.first else { return "Mixed" }
+        guard now.count == 1, let one = now.first else { return String(localized: "Mixed") }
         return store.routeLabel(one, s)
     }
 
@@ -199,7 +199,7 @@ struct ScreenEditButton: View {
 
     var editor: some View {
         VStack(alignment: .leading, spacing: T.s3) {
-            Text(named ? "Edit \(screen.name)" : "Name \(auxLabel)").font(.sans(14, .bold))
+            Text(named ? String(localized: "Edit \(screen.name)") : String(localized: "Name \(auxLabel)")).font(.sans(14, .bold))
             field("Name") { TextField("Such as Lobby TVs", text: $name).textFieldStyle(CueFieldStyle()).onSubmit(save) }
             field("Aux outputs") {
                 TextField("4, 5", text: $auxText).textFieldStyle(CueFieldStyle()).onSubmit(save)
@@ -231,7 +231,7 @@ struct ScreenEditButton: View {
         .foregroundStyle(T.ink)
     }
 
-    private func field<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
+    private func field<C: View>(_ label: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(.sans(11, .semibold)).foregroundStyle(T.inkMuted)
             content()
@@ -278,7 +278,7 @@ struct NewRouteButton: View {
             Text("Screens it sets, to what they show now").font(.sans(12)).foregroundStyle(T.inkMuted)
             ForEach(store.config.screens) { sc in
                 Toggle(isOn: Binding(get: { picked.contains(sc.id) }, set: { v in if v { picked.insert(sc.id) } else { picked.remove(sc.id) } })) {
-                    Text("\(sc.name) ← \(RoutingText.showing(sc, s, store))").font(.sans(12))
+                    Text(verbatim: "\(sc.name) ← \(RoutingText.showing(sc, s, store))").font(.sans(12))
                 }
                 .toggleStyle(.checkbox)
             }

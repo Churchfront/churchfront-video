@@ -15,7 +15,7 @@ struct SwitcherWindow: View {
             PageHeader(title: "Full switcher", purpose: "Every control on the switcher. What you press here goes to air like the hardware panel.") {
                 if !atem.state.product.isEmpty { Text(atem.state.product).font(.sans(12)).foregroundStyle(T.inkMuted) }
                 if atem.state.meCount > 1 {
-                    Segments(items: (0..<atem.state.meCount).map { ("M/E \($0 + 1)", $0) }, selection: $me)
+                    Segments(items: (0..<atem.state.meCount).map { (.verbatim("M/E \($0 + 1)"), $0) }, selection: $me)
                 }
             }
             SurfaceView(me: me)
@@ -30,7 +30,7 @@ struct SwitcherWindow: View {
 enum SetupPage: String, CaseIterable, Identifiable {
     case switcher, sources, keys, cameras, tracking, assistant, file
     var id: String { rawValue }
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .switcher: return "Switcher"
         case .sources: return "Sources"
@@ -41,7 +41,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .file: return "Setup file"
         }
     }
-    var purpose: String {
+    var purpose: LocalizedStringKey {
         switch self {
         case .switcher: return "Where the ATEM is, and which mix the operator runs."
         case .sources: return "The tiles the operator can put on Next, left to right."
@@ -52,7 +52,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .file: return "Everything in Setup is saved in one file that people and Claude can edit."
         }
     }
-    var help: String? {
+    var help: LocalizedStringKey? {
         switch self {
         case .switcher: return nil
         case .sources: return "Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in Churchfront Screens, add an NDI output to that screen) so the tile and the Next and Live monitors show it."
@@ -93,7 +93,7 @@ struct SetupTab: View {
         .onChange(of: store.config.atemHost) { _, h in host = h }
     }
 
-    private func labeled<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
+    private func labeled<C: View>(_ label: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {
         HStack(alignment: .center, spacing: T.s3) {
             Text(label).font(.sans(12, .semibold)).foregroundStyle(T.inkMuted).frame(width: 130, alignment: .leading)
             content()
@@ -104,6 +104,14 @@ struct SetupTab: View {
     // MARK: Switcher
 
     var switcher: some View {
+        VStack(alignment: .leading, spacing: T.s4) {
+            switcherCard
+            LanguageCard()
+        }
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+
+    var switcherCard: some View {
         Card(title: "ATEM switcher") {
             labeled("Address") {
                 TextField("IP address", text: $host).textFieldStyle(CueFieldStyle()).frame(width: 200)
@@ -113,12 +121,12 @@ struct SetupTab: View {
                 LinkPill()
             }
             labeled("Model") {
-                Text(atem.state.product.isEmpty ? "Unknown until connected" : "\(atem.state.product), protocol \(atem.state.version)")
+                Text(atem.state.product.isEmpty ? String(localized: "Unknown until connected") : String(localized: "\(atem.state.product), protocol \(atem.state.version)"))
                     .font(.sans(13)).foregroundStyle(atem.state.product.isEmpty ? T.inkSubtle : T.ink)
             }
             if atem.state.meCount > 1 {
                 labeled("The operator runs") {
-                    Segments(items: (1...atem.state.meCount).map { ("M/E \($0)", $0) },
+                    Segments(items: (1...atem.state.meCount).map { (.verbatim("M/E \($0)"), $0) },
                              selection: Binding(get: { store.config.me }, set: { v in store.update { $0.me = v } }))
                     Text("Live on it now: \(store.label(atem.state.program[store.config.me - 1], atem.state))")
                         .font(.sans(12)).foregroundStyle(T.inkMuted)
@@ -143,8 +151,8 @@ struct SetupTab: View {
             }
             ForEach(Array(chosen.enumerated()), id: \.element.input) { i, s in
                 HStack(spacing: T.s3) {
-                    Text(i < 10 ? "\((i + 1) % 10)" : "").font(.sans(13, .bold)).foregroundStyle(T.inkSubtle).frame(width: 30, alignment: .leading)
-                    Text(atem.state.inputs[s.input]?.long ?? "Input \(s.input)").font(.sans(13)).lineLimit(1).frame(width: 200, alignment: .leading)
+                    Text(verbatim: i < 10 ? "\((i + 1) % 10)" : "").font(.sans(13, .bold)).foregroundStyle(T.inkSubtle).frame(width: 30, alignment: .leading)
+                    Text(atem.state.inputs[s.input]?.long ?? String(localized: "Input \(s.input)")).font(.sans(13)).lineLimit(1).frame(width: 200, alignment: .leading)
                     TextField(store.label(s.input, atem.state), text: Binding(
                         get: { s.label ?? "" },
                         set: { v in store.update { c in
@@ -169,7 +177,7 @@ struct SetupTab: View {
             }
             MenuField(text: "Add a source", width: 180, icon: "plus") {
                 ForEach(available) { s in
-                    Button("\(s.long) (\(s.short))") { store.update { $0.sources.append(VolunteerSource(input: s.id)) } }
+                    Button(String("\(s.long) (\(s.short))")) { store.update { $0.sources.append(VolunteerSource(input: s.id)) } }
                 }
             }
             .disabled(available.isEmpty)
@@ -180,7 +188,7 @@ struct SetupTab: View {
 
     var keyButtons: some View {
         let s = atem.state
-        func name(_ i: Int?) -> String { i.map { s.inputs[$0]?.long ?? "input \($0)" } ?? "?" }
+        func name(_ i: Int?) -> String { i.map { s.inputs[$0]?.long ?? String(localized: "input \($0)") } ?? "?" }
         return Card {
             HStack(spacing: T.s3) {
                 Col("Button label", 180); Col("Key", 110); Col("Fill and key sources", 260); Col("Preview picture")
@@ -331,19 +339,19 @@ struct CameraLoginRow: View {
         VStack(alignment: .leading, spacing: T.s2) {
             HStack(spacing: T.s2) {
                 TextField("User name", text: $user).textFieldStyle(CueFieldStyle()).frame(width: 160)
-                SecureField(saved ? "Saved (type to replace)" : "Password", text: $password).textFieldStyle(CueFieldStyle()).frame(width: 200)
+                SecureField(saved ? String(localized: "Saved (type to replace)") : String(localized: "Password"), text: $password).textFieldStyle(CueFieldStyle()).frame(width: 200)
                 Button("Save") {
                     let u = user.trimmingCharacters(in: .whitespaces)
-                    guard !u.isEmpty, !password.isEmpty else { note = "Enter both the user name and the password."; return }
+                    guard !u.isEmpty, !password.isEmpty else { note = String(localized: "Enter both the user name and the password."); return }
                     if CameraLogin.save(user: u, password: password) {
-                        password = ""; saved = true; note = "Saved in the Keychain."
+                        password = ""; saved = true; note = String(localized: "Saved in the Keychain.")
                     } else {
-                        note = "The Keychain didn't accept it. Try again."
+                        note = String(localized: "The Keychain didn't accept it. Try again.")
                     }
                 }
                 .buttonStyle(CueButton(kind: .primary))
                 if saved {
-                    Button("Remove") { CameraLogin.clear(); saved = false; user = ""; password = ""; note = "Removed." }
+                    Button("Remove") { CameraLogin.clear(); saved = false; user = ""; password = ""; note = String(localized: "Removed.") }
                         .buttonStyle(CueButton(kind: .danger))
                 }
                 if let note { Text(note).font(.sans(12)).foregroundStyle(T.inkMuted) }
@@ -361,16 +369,16 @@ struct CameraRow: View {
     var body: some View {
         HStack(spacing: T.s2) {
             Circle().fill(ptz.online.contains(camera.id) ? T.success : T.lineStrong).frame(width: 8, height: 8)
-                .frame(width: 10).help(ptz.online.contains(camera.id) ? "Answering" : "Not answering")
+                .frame(width: 10).help(ptz.online.contains(camera.id) ? String(localized: "Answering") : String(localized: "Not answering"))
             TextField("Name", text: $camera.name).textFieldStyle(CueFieldStyle()).frame(width: 120)
             TextField("IP address", text: $camera.host).textFieldStyle(CueFieldStyle()).frame(width: 140)
-            MenuField(text: camera.proto.label, width: 170) {
+            MenuField(text: .verbatim(camera.proto.label), width: 170) {
                 ForEach(VISCAProtocol.allCases) { p in
                     Button(p.label) { camera.proto = p; camera.port = p.defaultPort }
                 }
             }
             TextField("Port", value: $camera.port, format: .number.grouping(.never)).textFieldStyle(CueFieldStyle()).frame(width: 64)
-            MenuField(text: camera.atemInput.map { atem.state.inputs[$0]?.long ?? "Input \($0)" } ?? "No input", width: 170) {
+            MenuField(text: .verbatim(camera.atemInput.map { atem.state.inputs[$0]?.long ?? String(localized: "Input \($0)") } ?? String(localized: "No input")), width: 170) {
                 Button("No input") { camera.atemInput = nil }
                 ForEach(atem.state.busSources.filter(\.isExternal)) { s in Button(s.long) { camera.atemInput = s.id } }
             }
@@ -409,7 +417,7 @@ struct ShotEditor: View {
                 }
                 ForEach($camera.shots) { $s in
                     HStack(spacing: T.s2) {
-                        Text(s.kind == .exposure ? "Exposure" : "Position").font(.sans(11, .semibold))
+                        Text(s.kind == .exposure ? String(localized: "Exposure") : String(localized: "Position")).font(.sans(11, .semibold))
                             .foregroundStyle(s.kind == .exposure ? T.warning : T.accentStrong).frame(width: 60, alignment: .leading)
                         TextField("Name", text: $s.name).textFieldStyle(CueFieldStyle()).frame(width: 140)
                         if s.kind == .position {
@@ -418,7 +426,7 @@ struct ShotEditor: View {
                             number("Gain", exposure($s, \.gain)); number("Shutter", exposure($s, \.shutter)); number("Iris", exposure($s, \.iris))
                         }
                         Button("Recall") { ptz.go(to: s, camera: camera.id) }
-                            .help("Sends this to \(camera.name) now. Check it isn't live first.")
+                            .help(String(localized: "Sends this to \(camera.name) now. Check it isn't live first."))
                         Button("Update to now") { ptz.saveShot("", camera: camera.id, kind: s.kind, replacing: s.id) }
                         Button { move(s.id, -1) } label: { Image(systemName: "chevron.up") }.buttonStyle(.borderless)
                         Button { move(s.id, 1) } label: { Image(systemName: "chevron.down") }.buttonStyle(.borderless)
@@ -435,9 +443,9 @@ struct ShotEditor: View {
                     Text("Stored on the camera").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle).padding(.top, T.s2)
                     ForEach(presets.keys.sorted(), id: \.self) { n in
                         HStack(spacing: T.s2) {
-                            Text("\(n)").font(.sans(12)).foregroundStyle(T.inkSubtle).frame(width: 24, alignment: .trailing)
+                            Text(verbatim: "\(n)").font(.sans(12)).foregroundStyle(T.inkSubtle).frame(width: 24, alignment: .trailing)
                             Text(presets[n] ?? "").font(.sans(12)).frame(width: 160, alignment: .leading)
-                            Text((ptz.exposurePresets[camera.id]?.contains(n) ?? false) ? "Exposure" : "Position")
+                            Text((ptz.exposurePresets[camera.id]?.contains(n) ?? false) ? String(localized: "Exposure") : String(localized: "Position"))
                                 .font(.sans(11)).foregroundStyle(T.inkMuted).frame(width: 70, alignment: .leading)
                             Button("Recall") { ptz.recall(n, camera: camera.id) }
                             Button("Delete from camera…") { deletingPreset = n }
@@ -448,15 +456,15 @@ struct ShotEditor: View {
             .padding(.top, 6)
             .buttonStyle(CueButton())
         } label: {
-            Text("\(camera.shots.count) saved shot\(camera.shots.count == 1 ? "" : "s"), \(ptz.presetNames(camera).count) on the camera")
+            Text("\(camera.shots.count) saved shots, \(ptz.presetNames(camera).count) on the camera")
                 .font(.sans(12, .semibold)).foregroundStyle(T.inkMuted)
         }
-        .confirmationDialog("Delete \"\(deletingPreset.flatMap { ptz.presetNames(camera)[$0] } ?? "this preset")\" from \(camera.name)?",
+        .confirmationDialog("Delete \"\(deletingPreset.flatMap { ptz.presetNames(camera)[$0] } ?? String(localized: "this preset"))\" from \(camera.name)?",
                             isPresented: Binding(get: { deletingPreset != nil }, set: { if !$0 { deletingPreset = nil } })) {
             Button("Delete from camera", role: .destructive) {
                 if let n = deletingPreset {
                     ptz.deleteCameraPreset(n, camera: camera.id) { why in
-                        if let why { problem = "Couldn't delete that preset from \(camera.name). \(why)" }
+                        if let why { problem = String(localized: "Couldn't delete that preset from \(camera.name). \(why)") }
                     }
                 }
                 deletingPreset = nil
@@ -469,7 +477,7 @@ struct ShotEditor: View {
         }
     }
 
-    func number(_ label: String, _ v: Binding<Int>) -> some View {
+    func number(_ label: LocalizedStringKey, _ v: Binding<Int>) -> some View {
         HStack(spacing: 4) {
             Text(label).font(.sans(11)).foregroundStyle(T.inkSubtle)
             TextField("", value: v, format: .number.grouping(.never)).textFieldStyle(CueFieldStyle()).frame(width: 64)
@@ -485,6 +493,32 @@ struct ShotEditor: View {
     func move(_ id: UUID, _ d: Int) {
         guard let i = camera.shots.firstIndex(where: { $0.id == id }), camera.shots.indices.contains(i + d) else { return }
         camera.shots.swapAt(i, i + d)
+    }
+}
+
+/// Setup > Switcher: the language Churchfront Video is shown in on this Mac. Kept in this
+/// Mac's preferences, not the setup file, so a shared setup doesn't change anyone's language.
+struct LanguageCard: View {
+    @State private var choice = AppLanguage.current
+    @State private var changed = false
+
+    var body: some View {
+        Card(title: "Language") {
+            HStack(spacing: T.s3) {
+                Segments(items: AppLanguage.allCases.map { ($0.name, $0) }, selection: $choice)
+                Text("System follows the language set for this Mac.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+            }
+            if changed {
+                HStack(spacing: T.s3) {
+                    Text("Churchfront Video shows the new language the next time it opens.").font(.sans(12, .semibold)).foregroundStyle(T.warning)
+                    if AppLanguage.canRelaunch {
+                        Button("Restart now") { AppLanguage.relaunch() }.buttonStyle(CueButton(kind: .primary))
+                            .help("Quits and opens Churchfront Video again. Cameras it is moving are stopped first.")
+                    }
+                }
+            }
+        }
+        .onChange(of: choice) { _, v in v.choose(); changed = true }
     }
 }
 
@@ -519,7 +553,7 @@ struct StatusTab: View {
                         ForEach(Array(stride(from: 0, to: ptz.cameras.count, by: 3)), id: \.self) { start in
                             HStack(alignment: .top, spacing: T.s3) {
                                 ForEach(ptz.cameras[start..<min(start + 3, ptz.cameras.count)]) { c in
-                                    Card(title: c.name) { grid(Array(StatusReport.cameraRows(c, booth).dropFirst())) }
+                                    Card(title: .verbatim(c.name)) { grid(Array(StatusReport.cameraRows(c, booth).dropFirst())) }
                                 }
                             }
                         }
@@ -543,6 +577,7 @@ struct StatusTab: View {
         }
     }
 
+    /// The rows stay in English: they are the same as Copy report, which goes to Claude or the system owner.
     func grid(_ rows: [(String, String)]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(rows.indices, id: \.self) { i in
@@ -644,12 +679,12 @@ enum StatusReport {
 /// Picks an NDI source from those on the network (or none). Lists them fresh each time it opens.
 struct NDIPicker: View {
     let selection: String?
-    let none: String
+    let none: LocalizedStringKey
     let set: (String?) -> Void
     @ObservedObject var ndi = NDIMonitor.shared
 
     var body: some View {
-        MenuField(text: selection.map(NDIMonitor.shortName) ?? none, icon: "dot.radiowaves.left.and.right") {
+        MenuField(text: selection.map { .verbatim(NDIMonitor.shortName($0)) } ?? none, icon: "dot.radiowaves.left.and.right") {
             Button(none) { set(nil) }
             Divider()
             if !ndi.hasRuntime {
@@ -658,7 +693,7 @@ struct NDIPicker: View {
                 Text("No NDI sources found yet")
             }
             ForEach(ndi.sources, id: \.self) { n in
-                Button { set(n) } label: { Text(NDIMonitor.shortName(n)) + Text(n == selection ? "  ✓" : "") }
+                Button { set(n) } label: { Text(NDIMonitor.shortName(n)) + Text(verbatim: n == selection ? "  ✓" : "") }
             }
             Divider()
             Button("Look again") { ndi.scan() }
@@ -687,7 +722,7 @@ struct AssistantSetup: View {
                     Button("I've installed it") { state = ClaudeConnect.state() }.buttonStyle(CueButton())
                 }
             case .notConnected, .stalePath:
-                Text(state == .stalePath ? "Claude is connected to another copy of Churchfront Video. Connect it to this one." : "Claude isn't connected yet.")
+                Text(state == .stalePath ? String(localized: "Claude is connected to another copy of Churchfront Video. Connect it to this one.") : String(localized: "Claude isn't connected yet."))
                     .font(.sans(13))
                 Button("Connect Claude") {
                     note = ClaudeConnect.connect()
@@ -699,7 +734,7 @@ struct AssistantSetup: View {
                     .font(.sans(13)).fixedSize(horizontal: false, vertical: true)
                 Text(ClaudeConnect.firstPrompt).font(.sans(13, .semibold)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: T.s2) {
-                    Button(copied ? "Copied" : "Copy this") {
+                    Button(copied ? String(localized: "Copied") : String(localized: "Copy this")) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(ClaudeConnect.firstPrompt, forType: .string)
                         copied = true
