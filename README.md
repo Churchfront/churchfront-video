@@ -141,6 +141,13 @@ live on a service.
 Keys: 1 to 0 put that source-row tile on Next, Shift plus a number cuts it to Live,
 Space cuts, Return fades, arrows move the camera on Next.
 
+## Languages
+
+English and German. The app follows the Mac's language, and Setup > Switcher > Language can
+override it. Every text is in a String Catalog (`Sources/*/Resources/Localizable.xcstrings`);
+`Tools/update-strings.sh` adds new texts to it and `swift test` checks every one is translated.
+How to write texts, translate them or add a language: [docs/localization.md](docs/localization.md).
+
 ## License
 
 Apache License 2.0 (see `LICENSE` and `NOTICE`). The bundled Figtree font is under the SIL Open Font License 1.1 (`Resources/OFL.txt`). The Churchfront name and logo are trademarks of Churchfront LLC and aren't covered by the license. Test with your own gear before using it in a service; it's provided as is.
