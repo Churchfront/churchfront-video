@@ -183,7 +183,7 @@ struct NDIVideo: View {
             if !overlay, !feed.live {
                 VStack(spacing: T.s1) {
                     ProgressView().controlSize(.small)
-                    Text(feed.image == nil ? "Waiting for \(NDIMonitor.shortName(source))" : "Picture stopped")
+                    Text(feed.image == nil ? String(localized: "Waiting for \(NDIMonitor.shortName(source))") : String(localized: "Picture stopped"))
                         .font(.sans(11)).foregroundStyle(T.inkMuted).lineLimit(1).minimumScaleFactor(0.7)
                 }
                 .padding(T.s2)

@@ -13,7 +13,7 @@ enum EngineerSection: String, CaseIterable, Identifiable {
     case scan, routing, switcher, setup, status
     var id: String { rawValue }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .scan: return "Stage scan"
         case .routing: return "Routing"
@@ -24,11 +24,11 @@ enum EngineerSection: String, CaseIterable, Identifiable {
     }
     var note: String {
         switch self {
-        case .scan: return "People, labels, shots"
-        case .routing: return "Screens and buttons"
-        case .switcher: return "Keys, T-bar, macros, aux"
-        case .setup: return "Sources, keys, cameras"
-        case .status: return "Connections and log"
+        case .scan: return String(localized: "People, labels, shots")
+        case .routing: return String(localized: "Screens and buttons")
+        case .switcher: return String(localized: "Keys, T-bar, macros, aux")
+        case .setup: return String(localized: "Sources, keys, cameras")
+        case .status: return String(localized: "Connections and log")
         }
     }
     var icon: String {

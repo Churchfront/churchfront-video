@@ -2,9 +2,9 @@ import SwiftUI
 import CueATEM
 
 struct SmallButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let action: () -> Void
-    init(_ title: String, action: @escaping () -> Void) { self.title = title; self.action = action }
+    init(_ title: LocalizedStringKey, action: @escaping () -> Void) { self.title = title; self.action = action }
     var body: some View {
         Button(action: action) {
             LabelText(title, size: 11).frame(maxWidth: .infinity).frame(height: 30)

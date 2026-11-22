@@ -27,7 +27,7 @@ struct StageScanWindow: View {
                         HStack(spacing: T.s2) {
                             Circle().fill(why == nil ? T.success : T.lineStrong).frame(width: 8, height: 8)
                             Text(c.name).font(.sans(13, .semibold)).frame(width: 90, alignment: .leading).lineLimit(1)
-                            Text(why.map { "Left out: \($0)" } ?? "Will go wide and come back").font(.sans(12))
+                            Text(why.map { String(localized: "Left out: \($0)") } ?? String(localized: "Will go wide and come back")).font(.sans(12))
                                 .foregroundStyle(why == nil ? T.inkMuted : T.warning).fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -35,11 +35,11 @@ struct StageScanWindow: View {
                 step(2, "Scan") {
                     HStack(spacing: T.s3) {
                         Text("Frame each person").font(.sans(12)).foregroundStyle(T.inkMuted)
-                        Segments(items: ShotSize.allCases.map { ($0.name, $0) }, selection: $scan.size)
+                        Segments(items: ShotSize.allCases.map { (.verbatim($0.label), $0) }, selection: $scan.size)
                     }
                     HStack(spacing: T.s3) {
                         Button { saved = []; Task { await scan.scan() } } label: {
-                            Text(scan.running ? "Scanning…" : (scan.people.isEmpty ? "Scan the stage" : "Scan again"))
+                            Text(scan.running ? String(localized: "Scanning…") : (scan.people.isEmpty ? String(localized: "Scan the stage") : String(localized: "Scan again")))
                         }
                         .buttonStyle(CueButton(kind: .primary))
                         .disabled(scan.running || ready == 0)
@@ -50,7 +50,7 @@ struct StageScanWindow: View {
                         } else if ready == 0 {
                             Text("No camera is free to scan right now.").font(.sans(12)).foregroundStyle(T.warning)
                         } else {
-                            Text("\(ready) camera\(ready == 1 ? "" : "s") will move.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                            Text("\(ready) cameras will move.").font(.sans(12)).foregroundStyle(T.inkSubtle)
                         }
                     }
                     ForEach(scan.notes, id: \.self) { n in
@@ -60,8 +60,8 @@ struct StageScanWindow: View {
             }
             step(3, "Name people and save") {
                 if scan.people.isEmpty {
-                    Text(scan.scannedAt == nil ? "After a scan, each person each camera saw appears here with a box for their name."
-                                               : "The last scan found no one. Check the notes above, then scan again.")
+                    Text(scan.scannedAt == nil ? String(localized: "After a scan, each person each camera saw appears here with a box for their name.")
+                                               : String(localized: "The last scan found no one. Check the notes above, then scan again."))
                         .font(.sans(13)).foregroundStyle(T.inkMuted)
                 } else {
                     Text("Type a name or a role under each person. The letter is Churchfront Video's guess at the same person on another camera: naming one fills in the others with that letter. Fix any it got wrong, and leave a person blank to skip them.")
@@ -94,7 +94,7 @@ struct StageScanWindow: View {
         }
     }
 
-    private func step<C: View>(_ n: Int, _ title: String, @ViewBuilder _ content: () -> C) -> some View {
+    private func step<C: View>(_ n: Int, _ title: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: T.s3) {
             StepLabel(n: n, text: title)
             content()
@@ -133,7 +133,7 @@ private struct PersonCard: View {
                 Button("Try the shot") { ptz.go(to: PTZShot(name: "", person.shot), camera: camera.id) }
                     .buttonStyle(CueButton(kind: .quiet))
                     .disabled(scan.running || scan.blocked(camera) != nil)
-                    .help(scan.blocked(camera).map { "\(camera.name) can't move now: \($0)." } ?? "Send \(camera.name) to this shot to check it")
+                    .help(scan.blocked(camera).map { String(localized: "\(camera.name) can't move now: \($0).") } ?? String(localized: "Send \(camera.name) to this shot to check it"))
                 if person.rough {
                     Text("size is a guess").font(.sans(10)).foregroundStyle(T.warning)
                         .help("Only this person's outline was found, so how tight the shot is was estimated. Try the shot and adjust.")

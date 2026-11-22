@@ -67,7 +67,21 @@ struct RoutingSchematic: View {
     // MARK: Model
 
     enum Group: String { case mixes = "Mixes", cameras = "Cameras", graphics = "Graphics", ndi = "NDI", spareIn = "Spare inputs", inside = "Media and color"
-        case screens = "Screens", feeds = "Encoders and feeds", spareOut = "Spare outputs" }
+        case screens = "Screens", feeds = "Encoders and feeds", spareOut = "Spare outputs"
+        var title: LocalizedStringKey {
+            switch self {
+            case .mixes: return "Mixes"
+            case .cameras: return "Cameras"
+            case .graphics: return "Graphics"
+            case .ndi: return .verbatim("NDI")
+            case .spareIn: return "Spare inputs"
+            case .inside: return "Media and color"
+            case .screens: return "Screens"
+            case .feeds: return "Encoders and feeds"
+            case .spareOut: return "Spare outputs"
+            }
+        }
+    }
 
     struct Head { let group: Group; let y: CGFloat; let count: Int; let foldable: Bool; let open: Bool }
     struct Src { let id: Int; let frame: CGRect; let pic: Bool }
@@ -261,13 +275,13 @@ struct RoutingSchematic: View {
             .frame(height: height)
             .onPreferenceChange(SchematicHeight.self) { height = $0 }
             HStack(spacing: T.s3) {
-                Text(selected.map { "Now click where \(store.routeLabel($0, atem.state)) should go." }
-                     ?? (message.isEmpty ? "Drag a source or a mix onto a destination, or click one and then the other. It changes right away." : message))
+                Text(selected.map { String(localized: "Now click where \(store.routeLabel($0, atem.state)) should go.") }
+                     ?? (message.isEmpty ? String(localized: "Drag a source or a mix onto a destination, or click one and then the other. It changes right away.") : message))
                     .font(.sans(12, message.isEmpty || selected != nil ? .regular : .semibold))
                     .foregroundStyle(selected != nil ? T.accent : (message.isEmpty ? T.inkSubtle : T.success))
                 HelpButton(text: "Each switcher output feeds a screen or a piece of gear. Drag a source or a mix onto a destination to change what it shows, right away. The pencil on a destination names it, sets which outputs feed it (a pair listed together switches together) and notes how it's wired. Outputs that feed encoders and recorders are locked so nobody changes the stream by accident, and ports that only go to the patch bay fold away as spare.")
                 Spacer()
-                Button("Undo") { if let u = undo.popLast() { u.back(); message = "\(u.what) is back to what it was." } }
+                Button("Undo") { if let u = undo.popLast() { u.back(); message = String(localized: "\(u.what) is back to what it was.") } }
                     .buttonStyle(CueButton()).disabled(undo.isEmpty).help("Put back the last thing changed here")
             }
         }
@@ -280,16 +294,16 @@ struct RoutingSchematic: View {
         let right = [Group.screens, .feeds, .spareOut].contains(h.group)
         return HStack(spacing: 6) {
             if h.foldable { Image(systemName: h.open ? "chevron.down" : "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(T.inkSubtle) }
-            Text(h.group.rawValue).panelLabel()
-            if h.foldable { Text("\(h.count)").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle) }
+            Text(h.group.title).panelLabel()
+            if h.foldable { Text(verbatim: "\(h.count)").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle) }
             if h.group == .feeds {
                 Spacer(minLength: 4)
                 Button { feedsUnlocked.toggle() } label: {
-                    Label(feedsUnlocked ? "Unlocked" : "Locked", systemImage: feedsUnlocked ? "lock.open" : "lock.fill")
+                    Label(feedsUnlocked ? String(localized: "Unlocked") : String(localized: "Locked"), systemImage: feedsUnlocked ? "lock.open" : "lock.fill")
                         .font(.sans(11, .semibold)).foregroundStyle(feedsUnlocked ? T.inkMuted : T.warning).fixedSize()
                 }
                 .buttonStyle(.plain)
-                .help(feedsUnlocked ? "Lock these again" : "One of these may carry the live stream. Unlock to change them.")
+                .help(feedsUnlocked ? String(localized: "Lock these again") : String(localized: "One of these may carry the live stream. Unlock to change them."))
             }
         }
         .frame(width: sizes(w).side, height: headH - 4, alignment: .leading)
@@ -302,11 +316,11 @@ struct RoutingSchematic: View {
             default: break
             }
         }
-        .help(h.group == .spareIn || h.group == .spareOut ? "Ports that only go to patch bay tie lines" : "")
+        .help(h.group == .spareIn || h.group == .spareOut ? String(localized: "Ports that only go to patch bay tie lines") : "")
         .position(x: (right ? w - sizes(w).side / 2 : sizes(w).side / 2), y: h.y + (headH - 4) / 2)
     }
 
-    private func column(_ title: String, _ note: String) -> some View {
+    private func column(_ title: LocalizedStringKey, _ note: LocalizedStringKey) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: T.s2) {
             Text(title).font(.sans(17, .bold))
             Text(note).font(.sans(12)).foregroundStyle(T.inkSubtle).lineLimit(1)
@@ -333,11 +347,11 @@ struct RoutingSchematic: View {
             if s.pic {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(store.label(s.id, atem.state)).font(.sans(21, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
-                    ForEach(tallies(s.id, short: false), id: \.0) { t in Tag(text: t.0, color: t.1, ink: t.2, size: 12) }
+                    ForEach(tallies(s.id, short: false), id: \.0) { t in Tag(text: .verbatim(t.0), color: t.1, ink: t.2, size: 12) }
                 }
             } else {
                 Text(store.label(s.id, atem.state)).font(.sans(17, .semibold)).lineLimit(1).minimumScaleFactor(0.7)
-                ForEach(tallies(s.id, short: true), id: \.0) { t in Tag(text: t.0, color: t.1, ink: t.2, size: 11) }
+                ForEach(tallies(s.id, short: true), id: \.0) { t in Tag(text: .verbatim(t.0), color: t.1, ink: t.2, size: 11) }
             }
             Spacer(minLength: 0)
             if (1...999).contains(s.id) { port("IN \(s.id)") }
@@ -350,8 +364,8 @@ struct RoutingSchematic: View {
         .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
         .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(on ? T.accent : (c ?? T.line), lineWidth: on ? 3 : (c == nil ? 1 : 2)))
         .draggable(s.id, self, L, w)
-        .help(((1...999).contains(s.id) ? "Switcher input \(s.id): \(atem.state.inputs[s.id]?.long ?? "")\n" : "")
-              + "Drag onto a destination or a mix, or click this and then click where it should go")
+        .help(((1...999).contains(s.id) ? String(localized: "Switcher input \(s.id): \(atem.state.inputs[s.id]?.long ?? "")") + "\n" : "")
+              + String(localized: "Drag onto a destination or a mix, or click this and then click where it should go"))
     }
 
     /// Whether a source is Live or Next on the mix in focus.
@@ -372,13 +386,13 @@ struct RoutingSchematic: View {
         var out: [(String, Color, Color)] = []
         for me in s.program.keys.sorted() {
             let name = short ? "M/E \(me + 1)" : shortMix(me)
-            if s.program[me] == id { out.append(("Live · \(name)", T.program, .white)) }
-            else if s.preview[me] == id { out.append(("Next · \(name)", T.preview, T.onAction)) }
+            if s.program[me] == id { out.append((String(localized: "Live · \(name)"), T.program, .white)) }
+            else if s.preview[me] == id { out.append((String(localized: "Next · \(name)"), T.preview, T.onAction)) }
         }
         return out
     }
 
-    private func slot(_ tag: String, _ color: Color, _ ink: Color, _ input: Int?, pic: Bool, _ r: CGRect) -> some View {
+    private func slot(_ tag: LocalizedStringKey, _ color: Color, _ ink: Color, _ input: Int?, pic: Bool, _ r: CGRect) -> some View {
         ZStack(alignment: .topLeading) {
             if pic { SourcePicture(input: input, named: false) } else { T.surfaceSunken }
             HStack(spacing: 5) {
@@ -390,7 +404,7 @@ struct RoutingSchematic: View {
         }
         .frame(width: r.width, height: r.height)
         .clipShape(Rectangle())
-        .overlay(Rectangle().stroke(color, lineWidth: tag == "Live" ? 2.5 : 1.5))
+        .overlay(Rectangle().stroke(color, lineWidth: color == T.program ? 2.5 : 1.5))
     }
 
     private func mixCard(_ m: Mix, _ c: Color, target: Bool, _ L: Layout, _ w: CGFloat) -> some View {
@@ -398,9 +412,9 @@ struct RoutingSchematic: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(shortMix(m.me)).font(.sans(19, .bold)).lineLimit(1)
-                Text("M/E \(m.me + 1)").font(.sans(13)).foregroundStyle(T.inkSubtle)
+                Text(verbatim: "M/E \(m.me + 1)").font(.sans(13)).foregroundStyle(T.inkSubtle)
                 Spacer(minLength: 0)
-                Text(mine ? "Run from Operate" : "Drop a source to put it live")
+                Text(mine ? String(localized: "Run from Operate") : String(localized: "Drop a source to put it live"))
                     .font(.sans(13)).foregroundStyle(T.inkSubtle).lineLimit(1).minimumScaleFactor(0.8)
                 MixNameButton(me: m.me)
             }
@@ -419,13 +433,13 @@ struct RoutingSchematic: View {
             if let sel = selected, !isMix(sel), !mine { putLive(sel, m.me) } else { selected = selected == m.output ? nil : m.output }
         }
         .draggable(m.output, self, L, w)
-        .help(mine ? "\(store.mixName(m.me)): what Operate cuts and fades. Drag it onto a destination to send it there."
-                   : "\(store.mixName(m.me)): drop a source here to put it live, or drag this onto a destination")
+        .help(mine ? String(localized: "\(store.mixName(m.me)): what Operate cuts and fades. Drag it onto a destination to send it there.")
+                   : String(localized: "\(store.mixName(m.me)): drop a source here to put it live, or drag this onto a destination"))
     }
 
     private func destRow(_ d: Dst, _ c: Color?, target: Bool, _ w: CGFloat) -> some View {
         // A mix by its short name ("Live stream"); the M/E number is on its card.
-        var label = d.mixed ? "Mixed" : (d.source == nil ? "" : store.routeLabel(d.source, atem.state))
+        var label = d.mixed ? String(localized: "Mixed") : (d.source == nil ? "" : store.routeLabel(d.source, atem.state))
         if let src = d.source, isMix(src), src % 10 == 0 {
             let me = (src - 10000) / 10 - 1
             if store.config.mixNames.indices.contains(me), !store.config.mixNames[me].isEmpty { label = store.config.mixNames[me] }
@@ -456,8 +470,8 @@ struct RoutingSchematic: View {
         .contentShape(Rectangle())
         .onHover { hover = $0 ? d.source : (hover == d.source ? nil : hover) }
         .onTapGesture { if let s = selected { route(s, d) } }
-        .help("\(d.screen.name), switcher output \(d.screen.aux.map(String.init).joined(separator: ", "))"
-              + ((d.screen.note ?? "").isEmpty ? "" : "\n\(d.screen.note!)") + (d.locked ? "\nLocked. Unlock Encoders and feeds to change it." : ""))
+        .help(String(localized: "\(d.screen.name), switcher output \(d.screen.aux.map(String.init).joined(separator: ", "))")
+              + ((d.screen.note ?? "").isEmpty ? "" : "\n\(d.screen.note!)") + (d.locked ? "\n" + String(localized: "Locked. Unlock Encoders and feeds to change it.") : ""))
     }
 
     // MARK: Changing things
@@ -481,13 +495,13 @@ struct RoutingSchematic: View {
     private func route(_ source: Int, _ d: Dst) {
         let s = atem.state, sc = d.screen
         selected = nil
-        guard !d.locked else { message = "\(sc.name) is locked. Unlock Encoders and feeds to change it."; return }
+        guard !d.locked else { message = String(localized: "\(sc.name) is locked. Unlock Encoders and feeds to change it."); return }
         let was = sc.aux.compactMap { a in s.aux[a - 1].map { (a, $0) } }
         guard was.contains(where: { $0.1 != source }) || was.count < sc.aux.count else { return }
         let atem = atem
         push(sc.name) { for (a, v) in was { atem.setAux(a - 1, v) } }
         for a in sc.aux { atem.setAux(a - 1, source) }
-        message = "\(sc.name) now shows \(store.routeLabel(source, s))."
+        message = String(localized: "\(sc.name) now shows \(store.routeLabel(source, s)).")
     }
 
     private func putLive(_ source: Int, _ me: Int) {
@@ -497,7 +511,7 @@ struct RoutingSchematic: View {
         let atem = atem
         push(store.mixName(me)) { atem.setProgram(was, me: me) }
         atem.setProgram(source, me: me)
-        message = "\(store.label(source, s)) is now live on \(store.mixName(me))."
+        message = String(localized: "\(store.label(source, s)) is now live on \(store.mixName(me)).")
     }
 
     private func push(_ what: String, _ back: @escaping () -> Void) {

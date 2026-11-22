@@ -83,7 +83,7 @@ private struct CanonCameraVideo: View {
     }
 
     var body: some View {
-        TrackedPicture(camera: camera, image: feed.image, live: feed.live, waiting: "Connecting", onPick: onPick)
+        TrackedPicture(camera: camera, image: feed.image, live: feed.live, waiting: String(localized: "Connecting"), onPick: onPick)
             .onAppear { CanonFeedHub.shared.retain(camera) }
             .onDisappear { CanonFeedHub.shared.release(camera) }
     }
@@ -104,7 +104,7 @@ private struct NDICameraVideo: View {
 
     var body: some View {
         TrackedPicture(camera: camera, image: feed.image, live: feed.live,
-                       waiting: "Waiting for \(NDIMonitor.shortName(source))", onPick: onPick)
+                       waiting: String(localized: "Waiting for \(NDIMonitor.shortName(source))"), onPick: onPick)
             .onAppear { NDIFeedHub.shared.retain(source) }
             .onDisappear { NDIFeedHub.shared.release(source) }
     }
@@ -139,7 +139,7 @@ private struct TrackedPicture: View {
                 if !live {
                     VStack(spacing: T.s1) {
                         ProgressView().controlSize(.small)
-                        Text(image == nil ? waiting : "Picture stopped").font(.sans(11)).foregroundStyle(T.inkMuted)
+                        Text(image == nil ? waiting : String(localized: "Picture stopped")).font(.sans(11)).foregroundStyle(T.inkMuted)
                             .lineLimit(1).minimumScaleFactor(0.7)
                     }
                     .padding(T.s2)

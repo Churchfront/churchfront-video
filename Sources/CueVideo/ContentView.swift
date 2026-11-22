@@ -57,10 +57,10 @@ struct TopBar: View {
             LinkPill()
             let down = ptz.cameras.filter { !$0.host.isEmpty && !ptz.online.contains($0.id) }
             let waiting = ptz.cameras.filter { ptz.online.contains($0.id) && !ptz.hasControl($0) }
-            let problem = (down.isEmpty ? [] : ["\(down.map(\.name).joined(separator: ", ")) not answering"])
-                + (waiting.isEmpty ? [] : ["\(waiting.map(\.name).joined(separator: ", ")) waiting for control"])
+            let problem = (down.isEmpty ? [] : [String(localized: "\(down.map(\.name).joined(separator: ", ")) not answering")])
+                + (waiting.isEmpty ? [] : [String(localized: "\(waiting.map(\.name).joined(separator: ", ")) waiting for control")])
             if !problem.isEmpty {
-                Text(problem.joined(separator: " · ")).font(.sans(12, .semibold)).foregroundStyle(T.warning).lineLimit(1)
+                Text(verbatim: problem.joined(separator: " · ")).font(.sans(12, .semibold)).foregroundStyle(T.warning).lineLimit(1)
                     .help("Canon cameras take commands from one controller at a time. A logged-in session, like the camera's own web page, outranks Churchfront Video.")
             }
             if atem.state.ftbBlack[booth.me] ?? false {
@@ -93,14 +93,14 @@ struct PageTabs: View {
         HStack(spacing: T.s4) {
             tab("Operate", "slider.horizontal.3", "The booth screen: pick, frame, take (⌘1)", on: booth.view == .operate) { booth.view = .operate }
             ForEach(EngineerSection.allCases) { s in
-                tab(s.title, s.icon, s.note + ". Space, Return and the number keys do nothing here, so they can't cut or fade.",
+                tab(s.title, s.icon, "\(s.note). Space, Return and the number keys do nothing here, so they can't cut or fade.",
                     on: booth.view == .engineer && booth.section == s) { booth.show(s) }
             }
         }
         .fixedSize()
     }
 
-    private func tab(_ title: String, _ icon: String, _ help: String, on: Bool, _ go: @escaping () -> Void) -> some View {
+    private func tab(_ title: LocalizedStringKey, _ icon: String, _ help: LocalizedStringKey, on: Bool, _ go: @escaping () -> Void) -> some View {
         Button(action: go) {
             HStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 11, weight: .semibold))
@@ -128,7 +128,7 @@ struct TopMonitors: View {
         let s = atem.state
         HStack(alignment: .top, spacing: T.s2) {
             if booth.view != .operate {
-                monitor(s.program[booth.me], caption: store.label(s.program[booth.me], s), tag: ("Live", T.program, .white),
+                monitor(s.program[booth.me], caption: store.label(s.program[booth.me], s), tag: ("Live", T.program, .white), live: true,
                         help: "Live now. Click to go to Operate.") { booth.view = .operate }
                 monitor(s.preview[booth.me], caption: store.label(s.preview[booth.me], s), tag: ("Next", T.preview, T.onAction),
                         help: "On Next. Click to go to Operate.") { booth.view = .operate }
@@ -138,18 +138,19 @@ struct TopMonitors: View {
                 let now = Set(sc.aux.map { s.aux[$0 - 1] })
                 let src: Int? = now.count == 1 ? (now.first ?? nil) : nil
                 monitor(src, caption: sc.name, tag: nil,
-                        help: "\(sc.name) is showing \(now.count > 1 ? "different pictures on its outputs" : store.routeLabel(src, s)). Click to open Routing.") { booth.show(.routing) }
+                        help: now.count > 1 ? "\(sc.name) is showing different pictures on its outputs. Click to open Routing."
+                            : "\(sc.name) is showing \(store.routeLabel(src, s)). Click to open Routing.") { booth.show(.routing) }
             }
         }
     }
 
-    private func monitor(_ input: Int?, caption: String, tag: (String, Color, Color)?, help: String, _ go: @escaping () -> Void) -> some View {
+    private func monitor(_ input: Int?, caption: String, tag: (LocalizedStringKey, Color, Color)?, live: Bool = false, help: LocalizedStringKey, _ go: @escaping () -> Void) -> some View {
         Button(action: go) {
             VStack(spacing: 2) {
                 ZStack(alignment: .topLeading) {
                     SourcePicture(input: input, named: false)
                     if !sourceHasPicture(input, atem.state, ptz, store) {
-                        Text(input == nil ? "Mixed" : store.routeLabel(input, atem.state)).font(.sans(9, .semibold)).foregroundStyle(T.inkMuted)
+                        Text(input == nil ? String(localized: "Mixed") : store.routeLabel(input, atem.state)).font(.sans(9, .semibold)).foregroundStyle(T.inkMuted)
                             .lineLimit(tag == nil ? 2 : 1).multilineTextAlignment(.center).minimumScaleFactor(0.7).padding(3)
                             .padding(.top, tag == nil ? 0 : 14)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -158,7 +159,7 @@ struct TopMonitors: View {
                 }
                 .frame(width: 71, height: 40)
                 .clipShape(Rectangle())
-                .overlay(Rectangle().stroke(tag?.1 ?? T.line, lineWidth: tag?.0 == "Live" ? 2 : 1))
+                .overlay(Rectangle().stroke(tag?.1 ?? T.line, lineWidth: live ? 2 : 1))
                 Text(caption).font(.sans(10, .medium)).foregroundStyle(T.inkMuted).lineLimit(1).frame(width: 71)
             }
             .contentShape(Rectangle())
@@ -169,7 +170,7 @@ struct TopMonitors: View {
 }
 
 struct StatusButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let on: Bool
     let color: Color
     let action: () -> Void
@@ -190,7 +191,7 @@ struct StatusButton: View {
 struct LinkPill: View {
     @EnvironmentObject var atem: ATEMClient
     var body: some View {
-        let (text, color): (String, Color) = {
+        let (text, color): (LocalizedStringKey, Color) = {
             switch atem.link {
             case .online: return ("Online", T.success)
             case .connecting: return ("Connecting", T.warning)

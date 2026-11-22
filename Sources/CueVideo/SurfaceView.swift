@@ -3,6 +3,7 @@ import CueATEM
 
 /// The switcher panel: program and preview rows with the transition block beside them,
 /// then keys, macros and aux outputs below. Rows wrap to fit the page, so nothing is cut off.
+/// The panel keys (CUT, AUTO, MIX, KEY 1 …) keep the hardware's own words in every language.
 struct SurfaceView: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
@@ -36,12 +37,12 @@ struct SurfaceView: View {
 
     // MARK: Buses
 
-    func bus(_ label: String, _ selected: Int?, _ color: Color, _ pick: @escaping (Int) -> Void) -> some View {
+    func bus(_ label: LocalizedStringKey, _ selected: Int?, _ color: Color, _ pick: @escaping (Int) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).panelLabel(color)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 76, maximum: 76), spacing: T.s2)], alignment: .leading, spacing: T.s2) {
                 ForEach(st.busSources) { s in
-                    PanelButton(title: s.short, lit: s.id == selected ? color : nil, width: 76, height: 52, titleSize: 14) { pick(s.id) }
+                    PanelButton(title: .verbatim(s.short), lit: s.id == selected ? color : nil, width: 76, height: 52, titleSize: 14) { pick(s.id) }
                         .help(s.long)
                 }
             }
@@ -57,11 +58,11 @@ struct SurfaceView: View {
                     Text("Next transition takes").font(.sans(11)).foregroundStyle(T.inkSubtle)
                     let sel = st.nextSelection[me] ?? 1
                     HStack(spacing: T.s2) {
-                        PanelButton(title: "BKGD", lit: sel & 1 != 0 ? T.warning : nil, width: 62, height: 40, titleSize: 12) {
+                        PanelButton(title: .verbatim("BKGD"), lit: sel & 1 != 0 ? T.warning : nil, width: 62, height: 40, titleSize: 12) {
                             atem.setNextSelection(sel ^ 1, me: me)
                         }
                         ForEach(0..<st.keyerCount, id: \.self) { k in
-                            PanelButton(title: "KEY \(k + 1)", lit: sel & (2 << k) != 0 ? T.warning : nil, width: 62, height: 40, titleSize: 12) {
+                            PanelButton(title: .verbatim("KEY \(k + 1)"), lit: sel & (2 << k) != 0 ? T.warning : nil, width: 62, height: 40, titleSize: 12) {
                                 atem.setNextSelection(sel ^ (2 << k), me: me)
                             }
                         }
@@ -70,7 +71,7 @@ struct SurfaceView: View {
                     HStack(spacing: T.s2) {
                         ForEach(0..<st.keyerCount, id: \.self) { k in
                             let on = st.keyOnAir[me]?[k] ?? false
-                            PanelButton(title: "KEY \(k + 1)", lit: on ? T.program : nil, width: 62, height: 40, titleSize: 12) {
+                            PanelButton(title: .verbatim("KEY \(k + 1)"), lit: on ? T.program : nil, width: 62, height: 40, titleSize: 12) {
                                 atem.setKeyOnAir(k, !on, me: me)
                             }
                         }
@@ -80,13 +81,13 @@ struct SurfaceView: View {
             ForEach(0..<st.dskCount, id: \.self) { d in
                 VStack(spacing: T.s2) {
                     Text("DSK \(d + 1)").font(.sans(11)).foregroundStyle(T.inkSubtle)
-                    PanelButton(title: "TIE", lit: st.dskTie[d] == true ? T.warning : nil, width: 62, height: 34, titleSize: 12) {
+                    PanelButton(title: .verbatim("TIE"), lit: st.dskTie[d] == true ? T.warning : nil, width: 62, height: 34, titleSize: 12) {
                         atem.setDSKTie(d, !(st.dskTie[d] ?? false))
                     }
-                    PanelButton(title: "CUT", lit: st.dskOnAir[d] == true ? T.program : nil, width: 62, height: 34, titleSize: 12) {
+                    PanelButton(title: .verbatim("CUT"), lit: st.dskOnAir[d] == true ? T.program : nil, width: 62, height: 34, titleSize: 12) {
                         atem.setDSKOnAir(d, !(st.dskOnAir[d] ?? false))
                     }
-                    PanelButton(title: "AUTO", lit: st.dskInTransition[d] == true ? T.program : nil, width: 62, height: 34, titleSize: 12,
+                    PanelButton(title: .verbatim("AUTO"), lit: st.dskInTransition[d] == true ? T.program : nil, width: 62, height: 34, titleSize: 12,
                                 blink: st.dskInTransition[d] == true) {
                         atem.dskAuto(d)
                     }
@@ -101,7 +102,7 @@ struct SurfaceView: View {
         VStack(alignment: .leading, spacing: T.s2) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110, maximum: 150), spacing: T.s2)], alignment: .leading, spacing: T.s2) {
                 ForEach(st.macros.keys.sorted(), id: \.self) { i in
-                    PanelButton(title: st.macros[i] ?? "", subtitle: "\(i + 1)", lit: st.macroRunning == i ? T.warning : nil,
+                    PanelButton(title: .verbatim(st.macros[i] ?? ""), subtitle: .verbatim("\(i + 1)"), lit: st.macroRunning == i ? T.warning : nil,
                                 width: 110, height: 40, titleSize: 12, blink: st.macroRunning == i) { atem.runMacro(i) }
                 }
             }
@@ -119,7 +120,7 @@ struct SurfaceView: View {
                         Text("Aux \(a + 1)").font(.sans(11, .bold)).foregroundStyle(T.inkMuted)
                         if let name = store.screen(aux: a + 1)?.name { Text(name).font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1) }
                     }
-                    MenuField(text: st.inputs[st.aux[a] ?? 0]?.long ?? "Input \(st.aux[a] ?? 0)") {
+                    MenuField(text: .verbatim(st.inputs[st.aux[a] ?? 0]?.long ?? String(localized: "Input \(st.aux[a] ?? 0)"))) {
                         ForEach(st.auxSources) { s in Button(s.long) { atem.setAux(a, s.id) } }
                     }
                 }
@@ -135,21 +136,21 @@ struct SurfaceView: View {
         return HStack(alignment: .top, spacing: T.s4) {
             VStack(spacing: T.s2) {
                 ForEach([(0, "MIX"), (1, "DIP"), (2, "WIPE"), (3, "DVE")], id: \.0) { id, name in
-                    PanelButton(title: name, lit: (st.style[me] ?? 0) == id ? T.warning : nil, width: 62, height: 32, titleSize: 11) {
+                    PanelButton(title: .verbatim(name), lit: (st.style[me] ?? 0) == id ? T.warning : nil, width: 62, height: 32, titleSize: 11) {
                         atem.setStyle(id, me: me)
                     }
                 }
                 HStack(spacing: 2) {
                     IconButton(icon: "minus", help: "Shorter mix") { atem.setMixRate((st.mixRate[me] ?? 30) - 5, me: me) }
-                    Text(rate(st.mixRate[me] ?? 30)).font(.sans(12, .semibold)).frame(width: 34)
+                    Text(verbatim: rate(st.mixRate[me] ?? 30)).font(.sans(12, .semibold)).frame(width: 34)
                     IconButton(icon: "plus", help: "Longer mix") { atem.setMixRate((st.mixRate[me] ?? 30) + 5, me: me) }
                 }
                 .help("Mix length in seconds and frames")
             }
             VStack(spacing: T.s2) {
-                PanelButton(title: "CUT", width: 84, height: 52, titleSize: 15) { atem.cut(me: me) }
-                PanelButton(title: "AUTO", lit: inT ? T.program : nil, width: 84, height: 52, titleSize: 15) { atem.auto(me: me) }
-                PanelButton(title: "FTB", lit: black || (st.ftbInTransition[me] ?? false) ? T.program : nil,
+                PanelButton(title: .verbatim("CUT"), width: 84, height: 52, titleSize: 15) { atem.cut(me: me) }
+                PanelButton(title: .verbatim("AUTO"), lit: inT ? T.program : nil, width: 84, height: 52, titleSize: 15) { atem.auto(me: me) }
+                PanelButton(title: .verbatim("FTB"), lit: black || (st.ftbInTransition[me] ?? false) ? T.program : nil,
                             width: 84, height: 36, titleSize: 12, blink: black) { atem.fadeToBlack(me: me) }
                     .help("Fade to black")
             }

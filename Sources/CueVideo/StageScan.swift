@@ -143,10 +143,10 @@ final class StageScan: ObservableObject {
 
     /// Why a camera can't be scanned right now, or nil if it can.
     func blocked(_ c: PTZCamera) -> String? {
-        if c.proto != .canonXC || c.host.isEmpty { return "only Canon cameras report where they point" }
-        if let i = c.atemInput, (booth.atem.state.tally[i] ?? 0) & 1 != 0 { return "it's on Live" }
-        if AutoTracker.shared.isTracking(c.id) { return "it's auto tracking" }
-        if !booth.ptz.hasControl(c) { return "Churchfront Video doesn't have control of it" }
+        if c.proto != .canonXC || c.host.isEmpty { return String(localized: "only Canon cameras report where they point") }
+        if let i = c.atemInput, (booth.atem.state.tally[i] ?? 0) & 1 != 0 { return String(localized: "it's on Live") }
+        if AutoTracker.shared.isTracking(c.id) { return String(localized: "it's auto tracking") }
+        if !booth.ptz.hasControl(c) { return String(localized: "Churchfront Video doesn't have control of it") }
         return nil
     }
 
@@ -161,9 +161,9 @@ final class StageScan: ObservableObject {
 
         var found: [Person] = []
         for c in cameras ?? booth.ptz.cameras {
-            if let why = blocked(c) { notes.append("\(c.name) was left out: \(why)."); continue }
-            progress = "\(c.name): going wide"
-            guard let start = await CanonState.read(c) else { notes.append("\(c.name) was left out: it didn't answer."); continue }
+            if let why = blocked(c) { notes.append(String(localized: "\(c.name) was left out: \(why).")); continue }
+            progress = String(localized: "\(c.name): going wide")
+            guard let start = await CanonState.read(c) else { notes.append(String(localized: "\(c.name) was left out: it didn't answer.")); continue }
 
             let named = c.shots.first { $0.kind == .position && ["stage", "wide"].contains($0.name.lowercased()) }
             let wide = named?.position ?? PTZPosition(pan: start.position.pan, tilt: start.position.tilt,
@@ -173,14 +173,14 @@ final class StageScan: ObservableObject {
             // Let the preview catch up and focus settle before taking the picture.
             try? await Task.sleep(nanoseconds: 900_000_000)
 
-            progress = "\(c.name): looking for people"
+            progress = String(localized: "\(c.name): looking for people")
             var seen: [TrackedPerson] = []
             var picture: CGImage?
             if blocked(c) == nil, let img = await CanonState.still(c) {
                 picture = img
                 seen = await Task.detached(priority: .userInitiated) { AutoTracker.detect(img) }.value
             } else {
-                notes.append("\(c.name): no picture came in, so no one was found on it.")
+                notes.append(String(localized: "\(c.name): no picture came in, so no one was found on it."))
             }
             let view = (await CanonState.read(c) ?? there ?? start)
 
@@ -193,13 +193,13 @@ final class StageScan: ObservableObject {
                 found.append(Person(id: found.count + 1, camera: c.id, cameraName: c.name, thumb: picture.flatMap { Self.thumb($0, p.box) },
                                     shot: shot, rough: p.scale == nil, look: p.appearance, group: -1))
             }
-            if picture != nil, seen.isEmpty { notes.append("\(c.name) saw no one in its wide shot.") }
+            if picture != nil, seen.isEmpty { notes.append(String(localized: "\(c.name) saw no one in its wide shot.")) }
 
             // Back to where it was, unless it went Live in the meantime: nothing moves on Live.
             if blocked(c) == nil {
                 booth.ptz.go(to: PTZShot(name: "", start.position), camera: c.id)
             } else {
-                notes.append("\(c.name) was left on its wide shot because it's now in use.")
+                notes.append(String(localized: "\(c.name) was left on its wide shot because it's now in use."))
             }
         }
         people = Self.grouped(found)
@@ -273,11 +273,11 @@ final class StageScan: ObservableObject {
                 guard !name.isEmpty else { continue }
                 if let look = p.look { cast[name, default: []].append(look) }
                 guard names.insert(name.lowercased()).inserted else {
-                    said.append("\(p.cameraName) saw two people labelled \(name); only the first got a shot.")
+                    said.append(String(localized: "\(p.cameraName) saw two people labelled \(name); only the first got a shot."))
                     continue
                 }
                 if shots.contains(where: { $0.kind == .position && $0.name.lowercased() == name.lowercased() }) {
-                    said.append("\(p.cameraName) already has your own shot called \(name), so it was kept.")
+                    said.append(String(localized: "\(p.cameraName) already has your own shot called \(name), so it was kept."))
                     continue
                 }
                 var shot = PTZShot(name: name, p.shot)
@@ -288,7 +288,7 @@ final class StageScan: ObservableObject {
             if ptz.cameras[ci].shots != shots { ptz.cameras[ci].shots = shots }
         }
         StageCast.shared.set(cast)
-        said.insert("Saved \(saved) shot\(saved == 1 ? "" : "s") for \(cast.count) \(cast.count == 1 ? "person" : "people").", at: 0)
+        said.insert(String(localized: "Saved \(saved) shots for \(cast.count) people."), at: 0)
         return said
     }
 
