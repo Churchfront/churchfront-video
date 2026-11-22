@@ -166,7 +166,13 @@ struct BusMonitor: View {
         }
         .overlay(alignment: .topTrailing) {
             if let camera, let s = tracker.sessions[camera.id] {
-                TrackingBadge(phase: s.phase) { tracker.stop(camera.id) }.padding(T.s3)
+                VStack(alignment: .trailing, spacing: T.s2) {
+                    TrackingBadge(phase: s.phase) { tracker.stop(camera.id) }
+                    // The Frame panel only reaches the camera on Next, so once a tracking
+                    // camera is taken Live its follow speed is nudged from here.
+                    if title == "Live" { TrackSpeedStepper(onVideo: true) }
+                }
+                .padding(T.s3)
             }
         }
         .overlay(alignment: .bottomLeading) {
@@ -624,7 +630,9 @@ struct ExposureControls: View {
 /// Every camera's positions in one grid: a row per camera, its position shots and presets
 /// across (exposure shots stay out of it). Tap one to send that camera there. The camera's
 /// name puts it on Next. The + at the end of a row saves where that camera is now. Right-click a shot to update,
-/// rename or delete it. A camera on Live asks before it moves.
+/// rename or delete it. Hold a shot, then drag it along its row to put the shots in another order.
+/// A camera with more shots than fit across scrolls sideways, and the grid scrolls up and down.
+/// A camera on Live asks before it moves.
 struct PresetGrid: View {
     @EnvironmentObject var booth: Booth
     @EnvironmentObject var atem: ATEMClient
@@ -640,7 +648,8 @@ struct PresetGrid: View {
     @State private var problem: String?
     /// The shot each camera was last sent to, lit in the grid.
     @State private var lastUsed: [UUID: String] = [:]
-
+    /// The shot being dragged to a new place in its row.
+    @State private var drag: ShotDrag?
     var cams: [PTZCamera] { ptz.cameras.filter { !$0.host.isEmpty } }
 
     func onLive(_ c: PTZCamera) -> Bool { c.atemInput.map { (atem.state.tally[$0] ?? 0) & 1 != 0 } ?? false }
@@ -695,7 +704,7 @@ struct PresetGrid: View {
 
     func row(_ c: PTZCamera) -> some View {
         let live = onLive(c), next = onNext(c)
-        return HStack(spacing: 6) {
+        return HStack(alignment: .top, spacing: 6) {
             // The camera: tap to put it on Next.
             Button { if let i = c.atemInput { atem.setPreview(i, me: booth.me) } } label: {
                 VStack(alignment: .leading, spacing: 1) {
@@ -712,12 +721,27 @@ struct PresetGrid: View {
             }
             .buttonStyle(PressStyle())
             .help("Put \(c.name) on Next")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(c.shots.filter { $0.kind == .position }) { s in
-                        cell(s.name, nil, used: lastUsed[c.id] == "shot:\(s.id)", live: live) {
+            // A row that fits is shown as it is. One that doesn't scrolls sideways, with room
+            // under the shots for its scroll bar.
+            ViewThatFits(in: .horizontal) {
+                shots(c, live: live)
+                ScrollView(.horizontal) { shots(c, live: live).padding(.bottom, 14) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// One camera's shots on a single line, then the + that saves a new one.
+    func shots(_ c: PTZCamera, live: Bool) -> some View {
+            HStack(spacing: 6) {
+                    // Saved shots first, then the camera's own presets. Each kind is dragged
+                    // within its own run.
+                    let shots = c.shots.filter { $0.kind == .position }
+                    ForEach(Array(shots.enumerated()), id: \.element.id) { i, s in
+                        ShotCell(title: s.name, subtitle: nil, used: lastUsed[c.id] == "shot:\(s.id)", live: live, canDrag: shots.count > 1) {
                             go(c) { ptz.go(to: s, camera: c.id); lastUsed[c.id] = "shot:\(s.id)" }
-                        }
+                        } onLift: { drag = ShotDrag(camera: c.id, preset: false, from: i, count: shots.count) }
+                          onDrag: { drag?.dx = $0 } onDrop: { drop() }
                         .contextMenu {
                             Button("Update to where the camera is now") {
                                 ptz.saveShot("", camera: c.id, kind: s.kind, replacing: s.id) { if !$0 { problem = Self.noReading } }
@@ -726,15 +750,19 @@ struct PresetGrid: View {
                             Divider()
                             Button("Delete…") { deleting = (c.id, s) }
                         }
+                        .modifier(ShotPlace(drag: drag, camera: c.id, preset: false, index: i))
                     }
-                    ForEach(cameraPresets(c).filter { !(ptz.exposurePresets[c.id]?.contains($0) ?? false) }, id: \.self) { n in
-                        cell(ptz.presetNames(c)[n] ?? "Preset \(n)", "ON CAMERA",
-                             used: lastUsed[c.id] == "preset:\(n)", live: live) {
+                    let presets = shownPresets(c)
+                    ForEach(Array(presets.enumerated()), id: \.element) { i, n in
+                        ShotCell(title: ptz.presetNames(c)[n] ?? "Preset \(n)", subtitle: "ON CAMERA",
+                                 used: lastUsed[c.id] == "preset:\(n)", live: live, canDrag: presets.count > 1) {
                             go(c) { ptz.recall(n, camera: c.id); lastUsed[c.id] = "preset:\(n)" }
-                        }
+                        } onLift: { drag = ShotDrag(camera: c.id, preset: true, from: i, count: presets.count) }
+                          onDrag: { drag?.dx = $0 } onDrop: { drop() }
                         .contextMenu {
                             if ptz.canSaveShots(c) { Button("Delete from camera…") { deletingPreset = (c.id, n) } }
                         }
+                        .modifier(ShotPlace(drag: drag, camera: c.id, preset: true, index: i))
                     }
                     if ptz.canSaveShots(c) {
                         Button { newName = ""; savingFor = c.id } label: {
@@ -749,26 +777,35 @@ struct PresetGrid: View {
                             savePopover(c)
                         }
                     }
-                }
             }
-        }
     }
 
-    func cell(_ title: String, _ subtitle: String?, used: Bool, live: Bool, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 1) {
-                Text(title).font(.sans(13, .semibold)).lineLimit(1).minimumScaleFactor(0.75)
-                if let subtitle { Text(subtitle).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
-            }
-            .foregroundStyle(used ? T.onAction : T.ink)
-            .padding(.horizontal, 6)
-            .frame(width: 104, height: 40)
-            .background(RoundedRectangle(cornerRadius: T.rMD).fill(used ? T.accent : T.surfaceRaised))
-            .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(used ? T.accent : T.line))
-            .opacity(live && !used ? 0.75 : 1)
-            .contentShape(Rectangle())
+    /// The camera's own presets in button order (exposure presets live in the exposure panel).
+    func shownPresets(_ c: PTZCamera) -> [Int] {
+        let place = Dictionary(c.presetOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        return cameraPresets(c).filter { !(ptz.exposurePresets[c.id]?.contains($0) ?? false) }
+            .sorted { (place[$0] ?? Int.max, $0) < (place[$1] ?? Int.max, $1) }
+    }
+
+    /// Puts the dragged shot down where it was dropped, and saves the new order.
+    func drop() {
+        defer { drag = nil }
+        guard let d = drag, d.to != d.from, let ci = ptz.cameras.firstIndex(where: { $0.id == d.camera }) else { return }
+        if d.preset {
+            var list = shownPresets(ptz.cameras[ci])
+            guard list.count == d.count else { return }
+            list.insert(list.remove(at: d.from), at: d.to)
+            ptz.cameras[ci].presetOrder = list
+        } else {
+            // Exposure shots share the list: reorder the position shots within the places they hold.
+            var all = ptz.cameras[ci].shots
+            let slots = all.indices.filter { all[$0].kind == .position }
+            guard slots.count == d.count else { return }
+            var list = slots.map { all[$0] }
+            list.insert(list.remove(at: d.from), at: d.to)
+            for (k, i) in slots.enumerated() { all[i] = list[k] }
+            ptz.cameras[ci].shots = all
         }
-        .buttonStyle(PressStyle())
     }
 
     /// Moves a camera, asking first if it's on Live.
@@ -823,6 +860,107 @@ struct PresetGrid: View {
     /// Presets stored on the camera: the ones it reports, plus any named in Setup. A VISCA
     /// camera can't say which presets it holds, so it shows only the ones given a name.
     func cameraPresets(_ t: PTZCamera) -> [Int] { ptz.presetNames(t).keys.sorted() }
+}
+
+/// A shot being dragged along its row: where it started, and how far it has been carried.
+struct ShotDrag: Equatable {
+    /// A cell plus the gap to the next one.
+    static let stride: CGFloat = 110
+    var camera: UUID
+    /// One of the camera's own presets (they reorder among themselves), or a saved shot.
+    var preset: Bool
+    var from: Int
+    var count: Int
+    var dx: CGFloat = 0
+
+    /// The place it would land if dropped now.
+    var to: Int { min(count - 1, max(0, from + Int((dx / Self.stride).rounded()))) }
+
+    /// How far the cell at `index` sits from its usual place: the dragged one follows the
+    /// mouse (within its run), the ones it passes step aside.
+    func shift(_ index: Int) -> CGFloat {
+        if index == from { return min(CGFloat(count - 1 - from) * Self.stride, max(CGFloat(-from) * Self.stride, dx)) }
+        if from < index, index <= to { return -Self.stride }
+        if to <= index, index < from { return Self.stride }
+        return 0
+    }
+}
+
+/// Moves a shot's cell while a drag in its row is under way.
+struct ShotPlace: ViewModifier {
+    let drag: ShotDrag?
+    let camera: UUID
+    let preset: Bool
+    let index: Int
+
+    func body(content: Content) -> some View {
+        let d = drag.flatMap { $0.camera == camera && $0.preset == preset ? $0 : nil }
+        let mine = d?.from == index
+        content
+            .offset(x: d?.shift(index) ?? 0)
+            .zIndex(mine ? 1 : 0)
+            // The others slide aside; the dragged one stays under the mouse.
+            .animation(mine || d == nil ? nil : .easeOut(duration: 0.15), value: d?.to)
+    }
+}
+
+/// One shot in the grid. A click recalls it. Held for a moment it lifts, and can then be
+/// dragged along its row to a new place.
+struct ShotCell: View {
+    let title: String
+    let subtitle: String?
+    let used: Bool
+    let live: Bool
+    let canDrag: Bool
+    let action: () -> Void
+    let onLift: () -> Void
+    let onDrag: (CGFloat) -> Void
+    let onDrop: () -> Void
+
+    @State private var press: UUID?
+    @State private var lifted = false
+    @State private var strayed = false
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(title).font(.sans(13, .semibold)).lineLimit(1).minimumScaleFactor(0.75)
+            if let subtitle { Text(subtitle).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
+        }
+        .foregroundStyle(used ? T.onAction : T.ink)
+        .padding(.horizontal, 6)
+        .frame(width: 104, height: 40)
+        .background(RoundedRectangle(cornerRadius: T.rMD).fill(used ? T.accent : T.surfaceRaised))
+        .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(lifted ? T.accent : (used ? T.accent : T.line), lineWidth: lifted ? 2 : 1))
+        .opacity(lifted ? 1 : (press != nil && !strayed ? 0.7 : (live && !used ? 0.75 : 1)))
+        .scaleEffect(lifted ? 1.06 : 1)
+        .shadow(color: .black.opacity(lifted ? 0.35 : 0), radius: 6, y: 2)
+        .animation(.easeOut(duration: 0.12), value: lifted)
+        .contentShape(Rectangle())
+        // Measured against the window, since the cell itself moves under the mouse.
+        .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
+            .onChanged { v in
+                if press == nil {
+                    let id = UUID()
+                    press = id; strayed = false
+                    guard canDrag else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        guard press == id, !strayed else { return }
+                        lifted = true
+                        onLift()
+                    }
+                }
+                if lifted { onDrag(v.translation.width) }
+                else if hypot(v.translation.width, v.translation.height) > 8 { strayed = true }
+            }
+            .onEnded { _ in
+                if lifted { onDrop() } else if !strayed { action() }
+                press = nil; lifted = false; strayed = false
+            })
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { action() }
+        .help(canDrag ? "Click to go to this shot. Hold, then drag, to move it along the row." : "Click to go to this shot")
+    }
 }
 
 /// Take it live.
@@ -934,15 +1072,7 @@ struct TrackButton: View {
                     }
                 }
                 // Follow speed, right here so it can be nudged during a service.
-                HStack(spacing: 4) {
-                    Text("Speed").font(.sans(11)).foregroundStyle(T.inkMuted)
-                    Spacer(minLength: 0)
-                    speedButton("minus", -0.25)
-                    Text(String(format: "%.2g×", store.config.trackSpeed)).font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(T.ink).frame(width: 36)
-                    speedButton("plus", 0.25)
-                }
-                .help("How quickly tracking cameras follow. Raise it if the camera falls behind, lower it if it overshoots.")
+                TrackSpeedStepper()
                 Text([TrackingBadge.words(s.phase), s.person, s.phase == .following ? s.size.name : nil].compactMap { $0 }.joined(separator: " · "))
                     .font(.sans(11, .semibold))
                     .foregroundStyle(s.phase == .following ? T.accent : T.warning)
@@ -965,16 +1095,39 @@ struct TrackButton: View {
     }
 }
 
-extension TrackButton {
-    func speedButton(_ icon: String, _ step: Double) -> some View {
+/// Follow speed for tracking cameras, a step at a time. In the Frame panel for the camera on
+/// Next, and over the Live picture while the camera on Live is tracking.
+struct TrackSpeedStepper: View {
+    @EnvironmentObject var store: ConfigStore
+    /// Over a picture: white on a dark pill, sized to itself.
+    var onVideo = false
+
+    var body: some View {
+        let speed = store.config.trackSpeed
+        HStack(spacing: 4) {
+            Text("Speed").font(.sans(11, onVideo ? .semibold : .regular)).foregroundStyle(onVideo ? .white : T.inkMuted)
+            if !onVideo { Spacer(minLength: 0) }
+            button("minus", -0.25, off: speed <= 0.5)
+            Text(String(format: "%.2g×", speed)).font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(onVideo ? .white : T.ink).frame(width: 36)
+            button("plus", 0.25, off: speed >= 4)
+        }
+        .padding(.horizontal, onVideo ? 8 : 0).frame(height: onVideo ? 28 : nil)
+        .background { if onVideo { Capsule().fill(Color.black.opacity(0.6)) } }
+        .help("How quickly tracking cameras follow. Raise it if the camera falls behind, lower it if it overshoots.")
+    }
+
+    func button(_ icon: String, _ step: Double, off: Bool) -> some View {
         Button {
             store.update { $0.trackSpeed = min(4, max(0.5, (($0.trackSpeed + step) * 4).rounded() / 4)) }
         } label: {
-            Image(systemName: icon).font(.system(size: 10, weight: .bold)).foregroundStyle(T.ink)
+            Image(systemName: icon).font(.system(size: 10, weight: .bold)).foregroundStyle(onVideo ? .white : T.ink)
                 .frame(width: 24, height: 20)
-                .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceSunken))
+                .background(RoundedRectangle(cornerRadius: T.rSM).fill(onVideo ? Color.white.opacity(0.18) : T.surfaceSunken))
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
+        .disabled(off).opacity(off ? 0.4 : 1)
     }
 }
 

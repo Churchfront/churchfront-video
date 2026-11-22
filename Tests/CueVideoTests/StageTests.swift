@@ -157,3 +157,77 @@ final class AppearanceTests: XCTestCase {
         XCTAssertNotNil(StageScan.thumb(picture(), CGRect(x: 0.2, y: 0.2, width: 0.2, height: 0.5)))
     }
 }
+
+/// Gestures don't move the camera: the edge alarm goes by head and torso, never an arm.
+final class EdgeAlarmTests: XCTestCase {
+    /// Standing in the middle with an arm stretched out to the side of the frame: the whole
+    /// body's box reaches the edge, the head and torso don't.
+    func testAnOutstretchedArmIsNotNearTheEdge() {
+        let torso = CGRect(x: 0.42, y: 0.2, width: 0.16, height: 0.5)
+        XCTAssertEqual(AutoTracker.edgeUrgency(core: torso, eyeX: 0.5, right: true), 0)
+        let withArm = CGRect(x: 0.42, y: 0.2, width: 0.47, height: 0.5)
+        XCTAssertGreaterThan(AutoTracker.edgeUrgency(core: withArm, eyeX: 0.5, right: true), 0)
+    }
+
+    func testATorsoNearTheEdgeStillAlarms() {
+        let torso = CGRect(x: 0.78, y: 0.2, width: 0.16, height: 0.5)
+        XCTAssertGreaterThan(AutoTracker.edgeUrgency(core: torso, eyeX: 0.86, right: true), 0.5)
+        XCTAssertEqual(AutoTracker.edgeUrgency(core: torso, eyeX: 0.86, right: false), 0)
+    }
+
+    /// Walking right: the full lead, with them left of the middle and room ahead on the right.
+    func testWalkingGetsTheFullLeadAhead() {
+        XCTAssertEqual(AutoTracker.leadTarget(walkVX: 0.3, facing: 1, leadRoom: 0.11), -0.11, accuracy: 1e-9)
+        XCTAssertEqual(AutoTracker.leadTarget(walkVX: -0.3, facing: 1, leadRoom: 0.11), 0.11, accuracy: 1e-9)
+    }
+
+    /// Standing at a music stand and turning to each side of the room only nudges the mark,
+    /// so the shot doesn't swing a fifth of the frame every time they look the other way.
+    func testStandingAndTurningOnlyNudges() {
+        let left = AutoTracker.leadTarget(walkVX: 0, facing: -1, leadRoom: 0.11)
+        let right = AutoTracker.leadTarget(walkVX: 0, facing: 1, leadRoom: 0.11)
+        XCTAssertLessThan(abs(left - right), 0.08)
+        XCTAssertEqual(AutoTracker.leadTarget(walkVX: 0, facing: 0, leadRoom: 0.11), 0)
+    }
+
+    /// Looking to one side with the shoulders still square to the camera is not a body turn.
+    func testAHeadTurnAloneIsNotABodyTurn() {
+        XCTAssertEqual(AutoTracker.bodyTurn(facing: 1, span: 1.7, square: 1.8), 0)
+    }
+
+    /// Shoulders narrowed and the head the same way: turned that way.
+    func testNarrowShouldersAndHeadTogetherAreABodyTurn() {
+        XCTAssertEqual(AutoTracker.bodyTurn(facing: -1, span: 1.0, square: 1.8), -1)
+        // Narrow shoulders with no clear head direction (straight on, or away): unclear.
+        XCTAssertEqual(AutoTracker.bodyTurn(facing: 0, span: 1.0, square: 1.8), 0)
+        XCTAssertEqual(AutoTracker.bodyTurn(facing: 1, span: nil, square: 1.8), 0)
+    }
+
+    /// A move the way they're turned is confirmed sooner; against it, or square on, the usual wait.
+    func testWalksTheWayTheyAreTurnedConfirmSooner() {
+        XCTAssertEqual(AutoTracker.walkConfirm(direction: 1, bodyTurn: 1), 0.25)
+        XCTAssertEqual(AutoTracker.walkConfirm(direction: -1, bodyTurn: 1), 0.5)
+        XCTAssertEqual(AutoTracker.walkConfirm(direction: 1, bodyTurn: 0), 0.5)
+    }
+}
+
+/// Dragging a shot along its row: where it lands and which cells step aside.
+final class ShotDragTests: XCTestCase {
+    func testCarriedTwoPlacesRightTheOnesPassedStepLeft() {
+        var d = ShotDrag(camera: UUID(), preset: false, from: 1, count: 5)
+        d.dx = ShotDrag.stride * 2.1
+        XCTAssertEqual(d.to, 3)
+        XCTAssertEqual([0, 2, 3, 4].map(d.shift), [0, -ShotDrag.stride, -ShotDrag.stride, 0])
+    }
+
+    func testItStaysWithinItsRow() {
+        var d = ShotDrag(camera: UUID(), preset: true, from: 1, count: 3)
+        d.dx = -900
+        XCTAssertEqual(d.to, 0)
+        XCTAssertEqual(d.shift(1), -ShotDrag.stride)
+        XCTAssertEqual(d.shift(0), ShotDrag.stride)
+        d.dx = 900
+        XCTAssertEqual(d.to, 2)
+        XCTAssertEqual(d.shift(1), ShotDrag.stride)
+    }
+}
