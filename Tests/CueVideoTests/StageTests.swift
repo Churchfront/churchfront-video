@@ -209,25 +209,36 @@ final class EdgeAlarmTests: XCTestCase {
         XCTAssertEqual(AutoTracker.walkConfirm(direction: -1, bodyTurn: 1), 0.5)
         XCTAssertEqual(AutoTracker.walkConfirm(direction: 1, bodyTurn: 0), 0.5)
     }
-}
 
-/// Dragging a shot along its row: where it lands and which cells step aside.
-final class ShotDragTests: XCTestCase {
-    func testCarriedTwoPlacesRightTheOnesPassedStepLeft() {
-        var d = ShotDrag(camera: UUID(), preset: false, from: 1, count: 5)
-        d.dx = ShotDrag.stride * 2.1
-        XCTAssertEqual(d.to, 3)
-        XCTAssertEqual([0, 2, 3, 4].map(d.shift), [0, -ShotDrag.stride, -ShotDrag.stride, 0])
+    /// Sureness of a walk builds over the rise time, and a moment's dip only dents it, so the
+    /// camera doesn't drop speed every time the measured speed wobbles.
+    func testABriefDipDoesNotEndAWalk() {
+        var w = 0.0
+        for _ in 0..<8 { w = AutoTracker.walkWeight(w, moving: 1, dt: 0.07, rise: 0.5) }
+        XCTAssertEqual(w, 1, accuracy: 1e-9)
+        w = AutoTracker.walkWeight(w, moving: 0, dt: 0.07, rise: 0.5)
+        XCTAssertGreaterThan(w, 0.8)
+        // Moving the other way first fades the old walk to nothing, never flips straight over.
+        for _ in 0..<20 { w = AutoTracker.walkWeight(w, moving: -1, dt: 0.07, rise: 0.5) }
+        XCTAssertLessThanOrEqual(w, 0)
     }
 
-    func testItStaysWithinItsRow() {
-        var d = ShotDrag(camera: UUID(), preset: true, from: 1, count: 3)
-        d.dx = -900
-        XCTAssertEqual(d.to, 0)
-        XCTAssertEqual(d.shift(1), -ShotDrag.stride)
-        XCTAssertEqual(d.shift(0), ShotDrag.stride)
-        d.dx = 900
-        XCTAssertEqual(d.to, 2)
-        XCTAssertEqual(d.shift(1), ShotDrag.stride)
+    /// Asked to go from slow to fast at once, the camera eases up over several frames.
+    func testSpeedUpsAreEased() {
+        var r = 0.1
+        r = AutoTracker.easeRate(from: r, to: 0.8, dt: 0.07, urgent: false, speed: 0.5)
+        XCTAssertLessThan(r, 0.25)
+        for _ in 0..<15 { r = AutoTracker.easeRate(from: r, to: 0.8, dt: 0.07, urgent: false, speed: 0.5) }
+        XCTAssertEqual(r, 0.8, accuracy: 0.05)
+    }
+
+    /// Zoomed in tight, a small correction still moves the camera at its slowest speed;
+    /// settled, the same small amount is no move at all.
+    func testSmallCorrectionsStillMoveWhenCorrecting() {
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: 8, correcting: true), 20)
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: -8, correcting: true), -20)
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: 8, correcting: false), 0)
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: 0.4, correcting: true), 0)
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: 1234, correcting: false), 1230)
     }
 }

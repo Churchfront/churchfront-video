@@ -38,7 +38,7 @@ struct VolunteerView: View {
                     }
                     HStack(alignment: .top, spacing: T.s4) {
                         if showExposure { ExposurePanel() }
-                        PresetGrid().frame(maxWidth: .infinity, alignment: .leading)
+                        ShotDeck().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -431,7 +431,7 @@ struct ExposureShots: View {
                         item(s.name, nil, used: lastUsed == "shot:\(s.id)") { ptz.go(to: s, camera: camera.id); lastUsed = "shot:\(s.id)" }
                             .contextMenu {
                                 Button("Update to the camera's exposure now") {
-                                    ptz.saveShot("", camera: camera.id, kind: .exposure, replacing: s.id) { if !$0 { problem = PresetGrid.noReading } }
+                                    ptz.saveShot("", camera: camera.id, kind: .exposure, replacing: s.id) { if !$0 { problem = ShotDeck.noReading } }
                                 }
                                 Button("Rename…") { newName = s.name; renaming = s }
                                 Divider()
@@ -507,7 +507,7 @@ struct ExposureShots: View {
 
     func save() {
         let name = newName.trimmingCharacters(in: .whitespaces)
-        ptz.saveShot(name, camera: camera.id, kind: .exposure) { if !$0 { problem = PresetGrid.noReading } }
+        ptz.saveShot(name, camera: camera.id, kind: .exposure) { if !$0 { problem = ShotDeck.noReading } }
         saving = false
     }
 }
@@ -627,342 +627,6 @@ struct ExposureControls: View {
     }
 }
 
-/// Every camera's positions in one grid: a row per camera, its position shots and presets
-/// across (exposure shots stay out of it). Tap one to send that camera there. The camera's
-/// name puts it on Next. The + at the end of a row saves where that camera is now. Right-click a shot to update,
-/// rename or delete it. Hold a shot, then drag it along its row to put the shots in another order.
-/// A camera with more shots than fit across scrolls sideways, and the grid scrolls up and down.
-/// A camera on Live asks before it moves.
-struct PresetGrid: View {
-    @EnvironmentObject var booth: Booth
-    @EnvironmentObject var atem: ATEMClient
-    @EnvironmentObject var ptz: PTZController
-    @EnvironmentObject var store: ConfigStore
-
-    @State private var savingFor: UUID?
-    @State private var newName = ""
-    @State private var renaming: (camera: UUID, shot: PTZShot)?
-    @State private var deleting: (camera: UUID, shot: PTZShot)?
-    @State private var deletingPreset: (camera: UUID, n: Int)?
-    @State private var liveMove: (camera: UUID, run: () -> Void)?
-    @State private var problem: String?
-    /// The shot each camera was last sent to, lit in the grid.
-    @State private var lastUsed: [UUID: String] = [:]
-    /// The shot being dragged to a new place in its row.
-    @State private var drag: ShotDrag?
-    var cams: [PTZCamera] { ptz.cameras.filter { !$0.host.isEmpty } }
-
-    func onLive(_ c: PTZCamera) -> Bool { c.atemInput.map { (atem.state.tally[$0] ?? 0) & 1 != 0 } ?? false }
-    func onNext(_ c: PTZCamera) -> Bool { c.atemInput == atem.state.preview[booth.me] }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Shots").panelLabel().frame(height: 16)
-            if cams.isEmpty {
-                Text("No cameras set up yet. Add them in Setup (⌘,).").font(.sans(12)).foregroundStyle(T.inkSubtle)
-            }
-            ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(cams) { c in row(c) }
-                }
-            }
-        }
-        .alert("Rename shot", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-            TextField("Pulpit", text: $newName)
-            Button("Save") { rename() }
-            Button("Cancel", role: .cancel) { renaming = nil }
-        }
-        .confirmationDialog("Delete \(deleting?.shot.name ?? "this shot")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("Delete", role: .destructive) {
-                if let d = deleting, let i = ptz.cameras.firstIndex(where: { $0.id == d.camera }) {
-                    ptz.cameras[i].shots.removeAll { $0.id == d.shot.id }
-                }
-                deleting = nil
-            }
-        }
-        .confirmationDialog(presetQuestion, isPresented: Binding(get: { deletingPreset != nil }, set: { if !$0 { deletingPreset = nil } })) {
-            Button("Delete from camera", role: .destructive) {
-                if let d = deletingPreset {
-                    ptz.deleteCameraPreset(d.n, camera: d.camera) { why in
-                        if let why { problem = "Couldn't delete that preset. \(why)" }
-                    }
-                }
-                deletingPreset = nil
-            }
-        } message: {
-            Text("This removes it from the camera itself, for every controller that uses it. It can't be undone.")
-        }
-        .confirmationDialog(liveQuestion, isPresented: Binding(get: { liveMove != nil }, set: { if !$0 { liveMove = nil } })) {
-            Button("Move it on Live", role: .destructive) { liveMove?.run(); liveMove = nil }
-        } message: {
-            Text("Everyone watching will see the camera move.")
-        }
-        .alert(problem ?? "", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
-            Button("OK", role: .cancel) {}
-        }
-    }
-
-    func row(_ c: PTZCamera) -> some View {
-        let live = onLive(c), next = onNext(c)
-        return HStack(alignment: .top, spacing: 6) {
-            // The camera: tap to put it on Next.
-            Button { if let i = c.atemInput { atem.setPreview(i, me: booth.me) } } label: {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(c.name).font(.sans(13, .bold)).lineLimit(1)
-                    Text(live ? "LIVE" : (next ? "NEXT" : " ")).font(.sans(9, .bold)).tracking(0.8)
-                        .foregroundStyle(live ? T.program : T.preview)
-                }
-                .foregroundStyle(T.ink)
-                .padding(.horizontal, 8)
-                .frame(width: 82, height: 40, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
-                .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(live ? T.program : (next ? T.preview : T.line), lineWidth: live || next ? 2 : 1))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(PressStyle())
-            .help("Put \(c.name) on Next")
-            // A row that fits is shown as it is. One that doesn't scrolls sideways, with room
-            // under the shots for its scroll bar.
-            ViewThatFits(in: .horizontal) {
-                shots(c, live: live)
-                ScrollView(.horizontal) { shots(c, live: live).padding(.bottom, 14) }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    /// One camera's shots on a single line, then the + that saves a new one.
-    func shots(_ c: PTZCamera, live: Bool) -> some View {
-            HStack(spacing: 6) {
-                    // Saved shots first, then the camera's own presets. Each kind is dragged
-                    // within its own run.
-                    let shots = c.shots.filter { $0.kind == .position }
-                    ForEach(Array(shots.enumerated()), id: \.element.id) { i, s in
-                        ShotCell(title: s.name, subtitle: nil, used: lastUsed[c.id] == "shot:\(s.id)", live: live, canDrag: shots.count > 1) {
-                            go(c) { ptz.go(to: s, camera: c.id); lastUsed[c.id] = "shot:\(s.id)" }
-                        } onLift: { drag = ShotDrag(camera: c.id, preset: false, from: i, count: shots.count) }
-                          onDrag: { drag?.dx = $0 } onDrop: { drop() }
-                        .contextMenu {
-                            Button("Update to where the camera is now") {
-                                ptz.saveShot("", camera: c.id, kind: s.kind, replacing: s.id) { if !$0 { problem = Self.noReading } }
-                            }
-                            Button("Rename…") { newName = s.name; renaming = (c.id, s) }
-                            Divider()
-                            Button("Delete…") { deleting = (c.id, s) }
-                        }
-                        .modifier(ShotPlace(drag: drag, camera: c.id, preset: false, index: i))
-                    }
-                    let presets = shownPresets(c)
-                    ForEach(Array(presets.enumerated()), id: \.element) { i, n in
-                        ShotCell(title: ptz.presetNames(c)[n] ?? "Preset \(n)", subtitle: "ON CAMERA",
-                                 used: lastUsed[c.id] == "preset:\(n)", live: live, canDrag: presets.count > 1) {
-                            go(c) { ptz.recall(n, camera: c.id); lastUsed[c.id] = "preset:\(n)" }
-                        } onLift: { drag = ShotDrag(camera: c.id, preset: true, from: i, count: presets.count) }
-                          onDrag: { drag?.dx = $0 } onDrop: { drop() }
-                        .contextMenu {
-                            if ptz.canSaveShots(c) { Button("Delete from camera…") { deletingPreset = (c.id, n) } }
-                        }
-                        .modifier(ShotPlace(drag: drag, camera: c.id, preset: true, index: i))
-                    }
-                    if ptz.canSaveShots(c) {
-                        Button { newName = ""; savingFor = c.id } label: {
-                            Image(systemName: "plus").font(.system(size: 13, weight: .bold)).foregroundStyle(T.accentStrong)
-                                .frame(width: 40, height: 40)
-                                .background(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(PressStyle())
-                        .help("Save where \(c.name) is now as a new shot")
-                        .popover(isPresented: Binding(get: { savingFor == c.id }, set: { if !$0 { savingFor = nil } }), arrowEdge: .top) {
-                            savePopover(c)
-                        }
-                    }
-            }
-    }
-
-    /// The camera's own presets in button order (exposure presets live in the exposure panel).
-    func shownPresets(_ c: PTZCamera) -> [Int] {
-        let place = Dictionary(c.presetOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
-        return cameraPresets(c).filter { !(ptz.exposurePresets[c.id]?.contains($0) ?? false) }
-            .sorted { (place[$0] ?? Int.max, $0) < (place[$1] ?? Int.max, $1) }
-    }
-
-    /// Puts the dragged shot down where it was dropped, and saves the new order.
-    func drop() {
-        defer { drag = nil }
-        guard let d = drag, d.to != d.from, let ci = ptz.cameras.firstIndex(where: { $0.id == d.camera }) else { return }
-        if d.preset {
-            var list = shownPresets(ptz.cameras[ci])
-            guard list.count == d.count else { return }
-            list.insert(list.remove(at: d.from), at: d.to)
-            ptz.cameras[ci].presetOrder = list
-        } else {
-            // Exposure shots share the list: reorder the position shots within the places they hold.
-            var all = ptz.cameras[ci].shots
-            let slots = all.indices.filter { all[$0].kind == .position }
-            guard slots.count == d.count else { return }
-            var list = slots.map { all[$0] }
-            list.insert(list.remove(at: d.from), at: d.to)
-            for (k, i) in slots.enumerated() { all[i] = list[k] }
-            ptz.cameras[ci].shots = all
-        }
-    }
-
-    /// Moves a camera, asking first if it's on Live.
-    func go(_ c: PTZCamera, _ run: @escaping () -> Void) {
-        if onLive(c) { liveMove = (c.id, run) } else { run() }
-    }
-
-    static let noReading = "The camera didn't report its settings, so the shot wasn't saved. Check that it's answering and try again."
-
-    var liveQuestion: String {
-        guard let id = liveMove?.camera, let c = ptz.cameras.first(where: { $0.id == id }) else { return "Move the live camera?" }
-        return "\(c.name) is on Live. Move it anyway?"
-    }
-
-    var presetQuestion: String {
-        guard let d = deletingPreset, let c = ptz.cameras.first(where: { $0.id == d.camera }) else { return "Delete this preset?" }
-        return "Delete \"\(ptz.presetNames(c)[d.n] ?? "Preset \(d.n)")\" from \(c.name)?"
-    }
-
-    func savePopover(_ t: PTZCamera) -> some View {
-        VStack(alignment: .leading, spacing: T.s3) {
-            Text("Save a shot on \(t.name)").font(.sans(14, .bold))
-            Text("Pan, tilt and zoom, where the camera is pointing now.")
-                .font(.sans(12)).foregroundStyle(T.inkMuted)
-            TextField("Pulpit", text: $newName)
-                .textFieldStyle(.roundedBorder).onSubmit { save(t) }
-            HStack {
-                Spacer()
-                Button("Cancel") { savingFor = nil }.keyboardShortcut(.cancelAction)
-                Button("Save") { save(t) }.keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(T.s4)
-        .frame(width: 300)
-    }
-
-    func save(_ t: PTZCamera) {
-        let name = newName.trimmingCharacters(in: .whitespaces)
-        ptz.saveShot(name, camera: t.id, kind: .position) { if !$0 { problem = Self.noReading } }
-        savingFor = nil
-    }
-
-    func rename() {
-        let name = newName.trimmingCharacters(in: .whitespaces)
-        if let r = renaming, !name.isEmpty,
-           let i = ptz.cameras.firstIndex(where: { $0.id == r.camera }), let j = ptz.cameras[i].shots.firstIndex(where: { $0.id == r.shot.id }) {
-            ptz.cameras[i].shots[j].name = name
-        }
-        renaming = nil
-    }
-
-    /// Presets stored on the camera: the ones it reports, plus any named in Setup. A VISCA
-    /// camera can't say which presets it holds, so it shows only the ones given a name.
-    func cameraPresets(_ t: PTZCamera) -> [Int] { ptz.presetNames(t).keys.sorted() }
-}
-
-/// A shot being dragged along its row: where it started, and how far it has been carried.
-struct ShotDrag: Equatable {
-    /// A cell plus the gap to the next one.
-    static let stride: CGFloat = 110
-    var camera: UUID
-    /// One of the camera's own presets (they reorder among themselves), or a saved shot.
-    var preset: Bool
-    var from: Int
-    var count: Int
-    var dx: CGFloat = 0
-
-    /// The place it would land if dropped now.
-    var to: Int { min(count - 1, max(0, from + Int((dx / Self.stride).rounded()))) }
-
-    /// How far the cell at `index` sits from its usual place: the dragged one follows the
-    /// mouse (within its run), the ones it passes step aside.
-    func shift(_ index: Int) -> CGFloat {
-        if index == from { return min(CGFloat(count - 1 - from) * Self.stride, max(CGFloat(-from) * Self.stride, dx)) }
-        if from < index, index <= to { return -Self.stride }
-        if to <= index, index < from { return Self.stride }
-        return 0
-    }
-}
-
-/// Moves a shot's cell while a drag in its row is under way.
-struct ShotPlace: ViewModifier {
-    let drag: ShotDrag?
-    let camera: UUID
-    let preset: Bool
-    let index: Int
-
-    func body(content: Content) -> some View {
-        let d = drag.flatMap { $0.camera == camera && $0.preset == preset ? $0 : nil }
-        let mine = d?.from == index
-        content
-            .offset(x: d?.shift(index) ?? 0)
-            .zIndex(mine ? 1 : 0)
-            // The others slide aside; the dragged one stays under the mouse.
-            .animation(mine || d == nil ? nil : .easeOut(duration: 0.15), value: d?.to)
-    }
-}
-
-/// One shot in the grid. A click recalls it. Held for a moment it lifts, and can then be
-/// dragged along its row to a new place.
-struct ShotCell: View {
-    let title: String
-    let subtitle: String?
-    let used: Bool
-    let live: Bool
-    let canDrag: Bool
-    let action: () -> Void
-    let onLift: () -> Void
-    let onDrag: (CGFloat) -> Void
-    let onDrop: () -> Void
-
-    @State private var press: UUID?
-    @State private var lifted = false
-    @State private var strayed = false
-
-    var body: some View {
-        VStack(spacing: 1) {
-            Text(title).font(.sans(13, .semibold)).lineLimit(1).minimumScaleFactor(0.75)
-            if let subtitle { Text(subtitle).font(.sans(8, .bold)).tracking(0.5).opacity(0.7) }
-        }
-        .foregroundStyle(used ? T.onAction : T.ink)
-        .padding(.horizontal, 6)
-        .frame(width: 104, height: 40)
-        .background(RoundedRectangle(cornerRadius: T.rMD).fill(used ? T.accent : T.surfaceRaised))
-        .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(lifted ? T.accent : (used ? T.accent : T.line), lineWidth: lifted ? 2 : 1))
-        .opacity(lifted ? 1 : (press != nil && !strayed ? 0.7 : (live && !used ? 0.75 : 1)))
-        .scaleEffect(lifted ? 1.06 : 1)
-        .shadow(color: .black.opacity(lifted ? 0.35 : 0), radius: 6, y: 2)
-        .animation(.easeOut(duration: 0.12), value: lifted)
-        .contentShape(Rectangle())
-        // Measured against the window, since the cell itself moves under the mouse.
-        .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
-            .onChanged { v in
-                if press == nil {
-                    let id = UUID()
-                    press = id; strayed = false
-                    guard canDrag else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        guard press == id, !strayed else { return }
-                        lifted = true
-                        onLift()
-                    }
-                }
-                if lifted { onDrag(v.translation.width) }
-                else if hypot(v.translation.width, v.translation.height) > 8 { strayed = true }
-            }
-            .onEnded { _ in
-                if lifted { onDrop() } else if !strayed { action() }
-                press = nil; lifted = false; strayed = false
-            })
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction { action() }
-        .help(canDrag ? "Click to go to this shot. Hold, then drag, to move it along the row." : "Click to go to this shot")
-    }
-}
-
 /// Take it live.
 struct TakePanel: View {
     @EnvironmentObject var booth: Booth
@@ -1073,6 +737,7 @@ struct TrackButton: View {
                 }
                 // Follow speed, right here so it can be nudged during a service.
                 TrackSpeedStepper()
+                HeadroomStepper(size: s.size)
                 Text([TrackingBadge.words(s.phase), s.person, s.phase == .following ? s.size.name : nil].compactMap { $0 }.joined(separator: " · "))
                     .font(.sans(11, .semibold))
                     .foregroundStyle(s.phase == .following ? T.accent : T.warning)
@@ -1109,7 +774,7 @@ struct TrackSpeedStepper: View {
             if !onVideo { Spacer(minLength: 0) }
             button("minus", -0.25, off: speed <= 0.5)
             Text(String(format: "%.2g×", speed)).font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(onVideo ? .white : T.ink).frame(width: 36)
+                .foregroundStyle(onVideo ? .white : T.ink).frame(width: onVideo ? 36 : 26)
             button("plus", 0.25, off: speed >= 4)
         }
         .padding(.horizontal, onVideo ? 8 : 0).frame(height: onVideo ? 28 : nil)
@@ -1122,8 +787,59 @@ struct TrackSpeedStepper: View {
             store.update { $0.trackSpeed = min(4, max(0.5, (($0.trackSpeed + step) * 4).rounded() / 4)) }
         } label: {
             Image(systemName: icon).font(.system(size: 10, weight: .bold)).foregroundStyle(onVideo ? .white : T.ink)
-                .frame(width: 24, height: 20)
+                .frame(width: onVideo ? 24 : 22, height: 20)
                 .background(RoundedRectangle(cornerRadius: T.rSM).fill(onVideo ? Color.white.opacity(0.18) : T.surfaceSunken))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle())
+        .disabled(off).opacity(off ? 0.4 : 1)
+    }
+}
+
+/// Headroom for a follow-shot size, a step at a time: moves where the eyes sit in the frame.
+/// Shown as steps from the standard ("Std", "+1", "−2"). Changes every camera framing this size.
+struct HeadroomStepper: View {
+    @EnvironmentObject var store: ConfigStore
+    let size: ShotSize
+
+    static let step = 0.02
+    static let range = 0.1...0.45
+
+    /// Steps above (more room) or below (less) the standard eye line.
+    static func steps(eyeLine: Double, standard: Double) -> Int { Int(((eyeLine - standard) / step).rounded()) }
+    static func label(_ n: Int) -> String { n == 0 ? "Std" : (n > 0 ? "+\(n)" : "\u{2212}\(-n)") }
+
+    var body: some View {
+        let eye = size.eyeLine, std = size.standard.eyeLine ?? eye
+        HStack(spacing: 4) {
+            Text("Headroom").font(.sans(11)).foregroundStyle(T.inkMuted).lineLimit(1).fixedSize()
+            Spacer(minLength: 0)
+            button("minus", -1, off: eye <= Self.range.lowerBound + 0.001)
+            Text(Self.label(Self.steps(eyeLine: eye, standard: std))).font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(T.ink).frame(width: 26)
+            button("plus", 1, off: eye >= Self.range.upperBound - 0.001)
+        }
+        .help("Space above the head on the \(size.name.lowercased()) shot. Minus gives less, plus gives more.")
+        .contextMenu { Button("Back to standard") { set(std) } }
+    }
+
+    func set(_ v: Double) {
+        store.update { c in
+            var r = c.framing[size.rawValue] ?? FramingRule()
+            let std = size.standard.eyeLine ?? v
+            r.eyeLine = abs(v - std) < 0.001 ? nil : v
+            c.framing[size.rawValue] = r == FramingRule() ? nil : r
+        }
+    }
+
+    func button(_ icon: String, _ dir: Double, off: Bool) -> some View {
+        Button {
+            let v = min(Self.range.upperBound, max(Self.range.lowerBound, size.eyeLine + dir * Self.step))
+            set((v * 100).rounded() / 100)
+        } label: {
+            Image(systemName: icon).font(.system(size: 10, weight: .bold)).foregroundStyle(T.ink)
+                .frame(width: 22, height: 20)
+                .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceSunken))
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
