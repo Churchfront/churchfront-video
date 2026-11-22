@@ -52,7 +52,7 @@ struct TopBar: View {
     var body: some View {
         HStack(spacing: T.s3) {
             Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 26, height: 26).padding(.leading, 68)
-                .help("CueVideo")
+                .help("Churchfront Video")
             PageTabs()
             LinkPill()
             let down = ptz.cameras.filter { !$0.host.isEmpty && !ptz.online.contains($0.id) }
@@ -61,7 +61,7 @@ struct TopBar: View {
                 + (waiting.isEmpty ? [] : ["\(waiting.map(\.name).joined(separator: ", ")) waiting for control"])
             if !problem.isEmpty {
                 Text(problem.joined(separator: " · ")).font(.sans(12, .semibold)).foregroundStyle(T.warning).lineLimit(1)
-                    .help("Canon cameras take commands from one controller at a time. A logged-in session, like the camera's own web page, outranks CueVideo.")
+                    .help("Canon cameras take commands from one controller at a time. A logged-in session, like the camera's own web page, outranks Churchfront Video.")
             }
             if atem.state.ftbBlack[booth.me] ?? false {
                 Text("Faded to black").font(.sans(12, .bold)).foregroundStyle(T.warning).lineLimit(1)
@@ -219,7 +219,7 @@ struct ConfigBanner: View {
     @EnvironmentObject var store: ConfigStore
     var body: some View {
         if store.fileError != nil {
-            Text("The setup file has a mistake in it, so CueVideo is using the last good setup. Details are in Setup (⌘,).")
+            Text("The setup file has a mistake in it, so Churchfront Video is using the last good setup. Details are in Setup (⌘,).")
                 .font(.sans(13, .semibold)).foregroundStyle(T.onAction)
                 .padding(.horizontal, T.s4).padding(.vertical, T.s2)
                 .background(Capsule().fill(T.warning)).padding(.top, T.s3)
@@ -236,10 +236,10 @@ struct ConnectView: View {
         VStack(spacing: T.s4) {
             Spacer()
             Text("Connect to your ATEM").font(.sans(26, .bold))
-            Text("CueVideo talks to the switcher directly over your network. No Blackmagic software needed.\nFind the switcher's IP address in ATEM Setup under Network.")
+            Text("Churchfront Video talks to the switcher directly over your network. No Blackmagic software needed.\nFind the switcher's IP address in ATEM Setup under Network.")
                 .font(.sans(14)).foregroundStyle(T.inkMuted).multilineTextAlignment(.center)
             HStack {
-                TextField("192.168.10.240", text: $host)
+                TextField("Such as 192.168.1.240", text: $host)
                     .textFieldStyle(.plain).font(.sans(16))
                     .padding(.horizontal, T.s3).frame(width: 260, height: 40)
                     .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))

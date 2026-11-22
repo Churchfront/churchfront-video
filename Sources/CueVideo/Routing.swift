@@ -205,7 +205,7 @@ struct ScreenEditButton: View {
                 TextField("4, 5", text: $auxText).textFieldStyle(CueFieldStyle()).onSubmit(save)
                 Text("Counted from 1. Several, such as 4, 5, switch together.").font(.sans(11)).foregroundStyle(T.inkSubtle)
             }
-            field("Wiring note") { TextField("Such as VCV 104 → TV 103", text: $note).textFieldStyle(CueFieldStyle()).onSubmit(save) }
+            field("Wiring note") { TextField("Such as Converter 1 → Lobby TV", text: $note).textFieldStyle(CueFieldStyle()).onSubmit(save) }
             if named {
                 Toggle("Preview in the top bar", isOn: Binding(get: { store.pinnedScreens.contains { $0.id == screen.id } },
                                                                set: { store.setPinned(screen.id, $0) }))

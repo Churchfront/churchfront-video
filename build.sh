@@ -1,11 +1,12 @@
 #!/bin/zsh
-# Builds CueVideo.app (release) next to this script.
+# Builds "Churchfront Video.app" (release) next to this script.
+# The executable inside, the bundle ID and the MCP binary keep their CueVideo names on purpose.
 set -e
 cd "$(dirname "$0")"
 MODE=${1:-release}
 swift build -c $MODE
 BIN="$(swift build -c $MODE --show-bin-path)/CueVideo"
-APP="CueVideo.app"
+APP="Churchfront Video.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/CueVideo"
@@ -17,19 +18,19 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>CueVideo</string>
-  <key>CFBundleDisplayName</key><string>CueVideo</string>
+  <key>CFBundleName</key><string>Churchfront Video</string>
+  <key>CFBundleDisplayName</key><string>Churchfront Video</string>
   <key>CFBundleIdentifier</key><string>com.churchfront.cuevideo</string>
   <key>CFBundleExecutable</key><string>CueVideo</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>0.1.1</string>
+  <key>CFBundleVersion</key><string>2</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
-  <key>NSLocalNetworkUsageDescription</key><string>CueVideo controls your ATEM switcher and PTZ cameras and shows NDI video from your network.</string>
-  <key>NSBonjourServices</key><array><string>_ndi._tcp</string></array>
+  <key>NSLocalNetworkUsageDescription</key><string>Churchfront Video controls your ATEM switcher and PTZ cameras and shows NDI video from your network.</string>
+  <key>NSBonjourServices</key><array><string>_ndi._tcp</string><string>_blackmagic._tcp</string><string>_http._tcp</string></array>
 </dict>
 </plist>
 PLIST

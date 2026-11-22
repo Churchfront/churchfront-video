@@ -39,11 +39,11 @@ enum ControlTools {
 
     static let definitions: [[String: Any]] = [
         // Status and setup
-        tool("get_status", "Everything CueVideo knows right now: switcher connection, what's Live and Next on each M/E, keys, DSKs, aux, macros, recording and streaming, every source, the volunteer source row and key buttons, and each camera's connection, control, exposure, saved shots and on-camera presets."),
-        tool("get_config", "The setup as saved in CueVideo's config file (JSON): switcher address, volunteer M/E, source row, key buttons, cameras and their saved shots."),
+        tool("get_status", "Everything Churchfront Video knows right now: switcher connection, what's Live and Next on each M/E, keys, DSKs, aux, macros, recording and streaming, every source, the volunteer source row and key buttons, and each camera's connection, control, exposure, saved shots and on-camera presets."),
+        tool("get_config", "The setup as saved in Churchfront Video's config file (JSON): switcher address, volunteer M/E, source row, key buttons, cameras and their saved shots."),
         tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 4, ptzSpeed 0.25 to 2 (manual camera control speed), trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources. pictures ({input number: NDI source name}, a live picture for a switcher input that is not in sources, such as a stage display). Routing: mixNames (what each M/E is for, from M/E 1), screens ([{name, aux: [numbers from 1], note, volunteer, pinned (a small preview in the top bar)}]), routes (volunteer routing buttons: [{label, set: [{aux, source}]}], source as an input number; M/E 1 program is 10010, M/E 2 program 10020); each one given replaces that whole field. Read get_config first and send back the edited field.",
              ["config": ["type": "object", "description": "Fields to replace, in the config file's format."]], required: ["config"]),
-        tool("show_window", "Show a view of CueVideo's window on screen: operator (the booth screen, also called main), or a page of the Engineer view: scan (stage scan), routing, switcher (the full switcher), setup or status.", ["window": choice("Which view or page.", ["operator", "main", "scan", "routing", "switcher", "setup", "status"])], required: ["window"]),
+        tool("show_window", "Show a view of Churchfront Video's window on screen: operator (the booth screen, also called main), or a page of the Engineer view: scan (stage scan), routing, switcher (the full switcher), setup or status.", ["window": choice("Which view or page.", ["operator", "main", "scan", "routing", "switcher", "setup", "status"])], required: ["window"]),
 
         // Volunteer screen
         tool("set_next", "Put a source on Next (preview), like tapping its tile.", ["source": source, "me": me], required: ["source"]),
@@ -70,18 +70,19 @@ enum ControlTools {
              ["screen": any("Screen name, or aux number (from 1)."), "source": any("Input number or name, a mix name (such as Live stream or Side screens), or M/E 1 / M/E 2 (their program). Add 'preview' for an M/E's preview."),
               "allow_hidden": bool("Required as true to change a screen hidden from volunteers.")], required: ["screen", "source"]),
         tool("run_route_button", "Press one of the volunteer routing buttons, by label.", ["button": str("The button's label.")], required: ["button"]),
-        tool("list_ndi_sources", "The NDI sources on the network now, by their exact names, for the ndi field of a volunteer source (a picture for its tile and the Next and Live monitors, such as CueScreens' graphics) or of a key button (a picture with alpha laid over Next and Live when that key is on them, such as CueScreens' lower thirds). Set them with update_config."),
+        tool("find_devices", "Find the switcher and cameras on this Mac's network, for first-time setup: ATEM switchers (they answer on UDP 9910), Canon PTZ cameras (their HTTP control page), and everything announcing itself over Bonjour (NDI sources, which include most PTZOptics and BirdDog cameras, Blackmagic devices, device web pages), each with its IP address. Takes about 4 seconds and changes nothing. Then confirm with the person which is which and save it with update_config (atemHost, cameras with name, host, proto and atemInput)."),
+        tool("list_ndi_sources", "The NDI sources on the network now, by their exact names, for the ndi field of a volunteer source (a picture for its tile and the Next and Live monitors, such as Churchfront Screens' graphics) or of a key button (a picture with alpha laid over Next and Live when that key is on them, such as Churchfront Screens' lower thirds). Set them with update_config."),
         tool("start_tracking", "Auto tracking: make a camera follow a person, by watching its preview picture (a Canon's own, or for other cameras the NDI picture set for their switcher input). It frames them as a broadcast follow shot: shoulders up, waist up or full length (the shot the camera is closest to unless shot is given), eyes near the upper third, lead room on the side they face or walk toward, eased pan and tilt, and slow zooms to hold the size. Picks the person nearest the middle, or nearest x/y if given (0 to 1 across and down the picture), or with person, someone labelled in the last stage scan, by name, wherever they are in the shot. It keeps to that person by what they look like, so it stays with them when people cross and waits for them after losing sight. Waits up to 4 seconds for someone to be found. Any manual pan, tilt, shot or preset stops tracking; a manual zoom keeps it and holds the new size.",
              ["camera": camera, "shot": choice("Follow shot size.", ["shoulders", "waist", "full"]), "x": num("0 (left) to 1 (right) across the picture."), "y": num("0 (top) to 1 (bottom) down the picture."), "person": str("A name given in the last stage scan (get_status lists them)."), "allow_live": allowLive]),
-        tool("scan_stage", "Stage scan, for before a service with everyone in place: each Canon camera that isn't on Live, tracking or out of CueVideo's control goes to a wide shot (its shot named Stage or Wide, else where it points now zoomed all the way out), CueVideo finds the people in it and works out the shot that frames each one from that camera, and the camera goes back. Returns every person each camera saw, with a number, a small picture, the proposed shot, and a letter: the same letter is a guess (by their look) at the same person on another camera. Nothing is saved until label_stage_scan. This moves cameras, so confirm with the person first.",
+        tool("scan_stage", "Stage scan, for before a service with everyone in place: each Canon camera that isn't on Live, tracking or out of Churchfront Video's control goes to a wide shot (its shot named Stage or Wide, else where it points now zoomed all the way out), Churchfront Video finds the people in it and works out the shot that frames each one from that camera, and the camera goes back. Returns every person each camera saw, with a number, a small picture, the proposed shot, and a letter: the same letter is a guess (by their look) at the same person on another camera. Nothing is saved until label_stage_scan. This moves cameras, so confirm with the person first.",
              ["cameras": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to scan. Leave out for all."],
               "shot": choice("How to frame each person. Default waist.", ["shoulders", "waist", "full"]),
               "pictures": bool("Include each person's picture (default true).")]),
-        tool("label_stage_scan", "Name the people from the last scan_stage and save: a shot per labelled person on each camera that saw them (replacing shots from earlier scans, keeping hand-made ones), and their look, so start_tracking can follow them by name until CueVideo quits. Label each number, or a letter to label everyone with that letter at once. Unlabelled people are skipped.",
+        tool("label_stage_scan", "Name the people from the last scan_stage and save: a shot per labelled person on each camera that saw them (replacing shots from earlier scans, keeping hand-made ones), and their look, so start_tracking can follow them by name until Churchfront Video quits. Label each number, or a letter to label everyone with that letter at once. Unlabelled people are skipped.",
              ["labels": ["type": "array", "items": ["type": "object", "properties": ["person": any("A person's number, or a letter for everyone with that letter."), "label": str("A name or role, such as Pastor or Keys.")] as [String: Any]] as [String: Any],
                          "description": "Who is who."]], required: ["labels"]),
         tool("get_framing", "The follow-shot framing rules auto tracking uses for each shot size (shoulders, waist, full), the built-in standard and any changes, plus the tracking response settings. Use with camera_snapshots to judge framing."),
-        tool("set_framing", "Change how a follow shot is framed, live, while CueVideo runs: takes effect on tracking cameras within a frame. All measured as a share of the frame. eye_line: where the eyes sit, down from the top (less = less headroom). size: eyes-to-shoulders drop against frame height (bigger = tighter). lead_room: offset toward where they face or walk. dead_x / dead_y: how far they can drift before the camera moves. reset: true returns this size to the standard.",
+        tool("set_framing", "Change how a follow shot is framed, live, while Churchfront Video runs: takes effect on tracking cameras within a frame. All measured as a share of the frame. eye_line: where the eyes sit, down from the top (less = less headroom). size: eyes-to-shoulders drop against frame height (bigger = tighter). lead_room: offset toward where they face or walk. dead_x / dead_y: how far they can drift before the camera moves. reset: true returns this size to the standard.",
              ["shot": choice("Shot size.", ["shoulders", "waist", "full"]), "eye_line": num("0.1 to 0.5."), "size": num("Shoulders about 0.36, waist 0.21, full 0.095."),
               "lead_room": num("0 to 0.2."), "dead_x": num("0.02 to 0.2."), "dead_y": num("0.02 to 0.2."), "reset": bool("Back to the standard.")], required: ["shot"]),
         tool("set_tracking_tuning", "Change how auto tracking responds, live. correction: pull toward the mark (default 1.2; higher reacts harder, too high wobbles). latency: seconds the preview runs behind (0.45). walk_threshold: speed in frames a second that counts as walking (0.12; higher ignores more small moves). zoom_threshold: how wrong the shot size must look before zooming (0.3, about a third). zoom_wait: seconds it must stay wrong first (1.5). speed: overall follow speed 0.5 to 4. reset: true returns all to defaults.",
@@ -95,20 +96,20 @@ enum ControlTools {
              ["camera": camera, "gain": int("Tenths of a dB."), "shutter": int("Shutter speed denominator."), "iris": int("f-number times 100."),
               "white_balance": any("auto, daylight, tungsten, or kelvin as a number such as 4300."),
               "auto": bool("Auto exposure: the camera sets gain, shutter and iris itself. Not with gain, shutter or iris."), "allow_live": allowLive]),
-        tool("camera_snapshots", "A still picture from each camera CueVideo has a picture for (or the ones named): Canon cameras, and others with an NDI picture set for their switcher input (that one is NDI's small preview, about 640 wide). With color measurements, to compare and match them: average red, green and blue, the color cast (red÷green and blue÷green; balanced is about 1), brightness (0 to 255), and the share of the picture clipped to white or crushed to black. Point the cameras at the same scene to compare fairly. Fix differences with set_exposure or match_exposure.",
+        tool("camera_snapshots", "A still picture from each camera Churchfront Video has a picture for (or the ones named): Canon cameras, and others with an NDI picture set for their switcher input (that one is NDI's small preview, about 640 wide). With color measurements, to compare and match them: average red, green and blue, the color cast (red÷green and blue÷green; balanced is about 1), brightness (0 to 255), and the share of the picture clipped to white or crushed to black. Point the cameras at the same scene to compare fairly. Fix differences with set_exposure or match_exposure.",
              ["cameras": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to look at. Leave out for all."],
               "pictures": bool("Include the pictures themselves (default true). False gives only the measurements.")]),
         tool("match_exposure", "Make cameras match one camera's exposure: copies gain, shutter, iris and white balance (or only the settings named) from one camera to the others, each value snapped to the nearest the other camera accepts (models differ). Leave out to for every other camera. Cameras on Live are skipped unless allow_live is true.",
              ["from": any("The camera to copy from (name, IP or input)."), "to": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to change. Leave out for all the others."],
               "settings": ["type": "array", "items": ["type": "string", "enum": ["gain", "shutter", "iris", "white_balance"]], "description": "Which settings to copy. Leave out for all four."],
               "allow_live": allowLive], required: ["from"]),
-        tool("recall_shot", "Recall a shot saved in CueVideo: move to its position, or set its exposure.",
+        tool("recall_shot", "Recall a shot saved in Churchfront Video: move to its position, or set its exposure.",
              ["camera": camera, "shot": str("The shot's name."), "allow_live": allowLive], required: ["shot"]),
-        tool("save_shot", "Save the camera as it is now as a CueVideo shot: its position (pan, tilt, zoom, the default) or its exposure (gain, shutter, iris).",
+        tool("save_shot", "Save the camera as it is now as a Churchfront Video shot: its position (pan, tilt, zoom, the default) or its exposure (gain, shutter, iris).",
              ["camera": camera, "name": str("A short name, such as Pulpit."), "kind": choice("What to save. Default position.", ["position", "exposure"]),
               "replace": bool("true to overwrite an existing shot with this name instead of adding another.")], required: ["name"]),
-        tool("rename_shot", "Rename a CueVideo shot.", ["camera": camera, "shot": str("Current name."), "new_name": str("New name.")], required: ["shot", "new_name"]),
-        tool("delete_shot", "Delete a CueVideo shot (from the config file, not the camera).", ["camera": camera, "shot": str("The shot's name.")], required: ["shot"]),
+        tool("rename_shot", "Rename a Churchfront Video shot.", ["camera": camera, "shot": str("Current name."), "new_name": str("New name.")], required: ["shot", "new_name"]),
+        tool("delete_shot", "Delete a Churchfront Video shot (from the config file, not the camera).", ["camera": camera, "shot": str("The shot's name.")], required: ["shot"]),
         tool("recall_camera_preset", "Recall a preset stored on the camera itself.",
              ["camera": camera, "preset": any("Preset number or name."), "allow_live": allowLive], required: ["preset"]),
         tool("delete_camera_preset", "Delete a preset stored on the camera itself, for every controller. Can't be undone. Needs the camera admin login saved in Setup.",
@@ -252,6 +253,11 @@ enum ControlTools {
                 throw fail("No routing button called \(a["button"] ?? ""). Buttons: \(store.config.routes.map(\.label).joined(separator: ", ")).")
             }
             r.run(atem); done(ok("Ran \(r.label): \(RoutingText.detail(r, store, s).replacingOccurrences(of: "\n", with: "; "))"))
+        case "find_devices":
+            DeviceFinder.find { list, nets in
+                done(["networks": nets, "devices": list.map { ["kind": $0.kind, "name": $0.name, "host": $0.host] },
+                      "note": list.isEmpty ? "Nothing answered. Check this Mac is on the same network as the switcher and cameras, and that Churchfront Video is allowed Local Network access (System Settings > Privacy & Security > Local Network)." : "Ask the person to confirm which device is which before saving."])
+            }
         case "list_ndi_sources":
             let ndi = NDIMonitor.shared
             ndi.scan()
@@ -361,7 +367,7 @@ enum ControlTools {
             let auto = a["auto"] as? Bool == true
             if auto {
                 guard !e.hasExposure else { throw fail("Give auto, or gain, shutter and iris, not both.") }
-                guard x.hasAutoMode else { throw fail("\(c.name) has no single auto exposure mode CueVideo can set. That works on VISCA cameras.") }
+                guard x.hasAutoMode else { throw fail("\(c.name) has no single auto exposure mode Churchfront Video can set. That works on VISCA cameras.") }
                 ptz.autoExposure(camera: c.id)
             }
             guard auto || e.hasExposure || e.hasWhiteBalance else { throw fail("Give gain, shutter, iris, white_balance and/or auto.") }
@@ -574,7 +580,7 @@ enum ControlTools {
     }
 
     private static func controlWarning(_ c: PTZCamera) -> String? {
-        ptz.hasControl(c) ? nil : "\(c.name) isn't under CueVideo's control right now (another controller has it), so the camera may have ignored this."
+        ptz.hasControl(c) ? nil : "\(c.name) isn't under Churchfront Video's control right now (another controller has it), so the camera may have ignored this."
     }
 
     private static func configObject() throws -> [String: Any] {

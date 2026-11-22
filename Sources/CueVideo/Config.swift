@@ -57,7 +57,7 @@ struct KeyButton: Codable, Hashable, Identifiable {
 struct ScreenOutput: Codable, Hashable, Identifiable {
     var name: String
     var aux: [Int]
-    /// How it's wired, for the Routing page: "VCV 101 → Novastar LED processor".
+    /// How it's wired, for the Routing page: "Converter 1 → LED processor".
     var note: String?
     /// Shown in the volunteer's screen summary. Off for encoders, recorders and patch bay feeds.
     var volunteer: Bool?
@@ -121,14 +121,14 @@ struct RouteButton: Codable, Hashable, Identifiable {
 /// written by hand.
 ///
 ///     {
-///       "atemHost": "192.168.20.31",
+///       "atemHost": "192.168.1.240",
 ///       "me": 1,
-///       "sources": [ { "input": 9, "label": "Cam 1" }, { "input": 3, "label": "Graphics", "ndi": "CG-MAC (CueScreens Stream)" } ],
-///       "cameras": [ { "name": "Cam 1", "host": "192.168.20.91", "proto": "canonXC", "atemInput": 9 } ],
-///       "keys": [ { "label": "Lower thirds", "me": 1, "keyer": 1, "ndi": "CG-MAC (CueScreens Lower Thirds)" } ],
+///       "sources": [ { "input": 9, "label": "Cam 1" }, { "input": 3, "label": "Graphics", "ndi": "GRAPHICS-MAC (CueScreens Stream)" } ],
+///       "cameras": [ { "name": "Cam 1", "host": "192.168.1.91", "proto": "canonXC", "atemInput": 9 } ],
+///       "keys": [ { "label": "Lower thirds", "me": 1, "keyer": 1, "ndi": "GRAPHICS-MAC (CueScreens Lower Thirds)" } ],
 ///       "trackSpeed": 1, "ptzSpeed": 1, "trackTilt": true, "trackZoom": true,
 ///       "mixNames": [ "Live stream", "Side screens" ],
-///       "screens": [ { "name": "Lobby TVs", "aux": [4, 5], "note": "VCV 104, VCV 105" } ],
+///       "screens": [ { "name": "Lobby TVs", "aux": [4, 5], "note": "Converters 4 and 5" } ],
 ///       "routes": [ { "label": "Lobby: stream", "set": [ { "aux": 4, "source": 10010 }, { "aux": 5, "source": 10010 } ] } ]
 ///     }
 ///
@@ -154,7 +154,7 @@ struct CueConfig: Codable, Equatable {
     /// What each M/E is for, counted from 1: ["Live stream", "Side screens"].
     var mixNames: [String] = []
     /// NDI pictures for switcher inputs that aren't in the volunteer's source row, by input
-    /// number: { "4": "CG-MAC (CueScreens Stage)" }. Shown wherever that input's picture is.
+    /// number: { "4": "GRAPHICS-MAC (CueScreens Stage)" }. Shown wherever that input's picture is.
     var pictures: [String: String] = [:]
     /// The screens and other destinations the aux outputs feed.
     var screens: [ScreenOutput] = []

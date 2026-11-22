@@ -28,7 +28,7 @@ struct SwitcherWindow: View {
 
 /// The parts of Setup, as tabs across the top of the page.
 enum SetupPage: String, CaseIterable, Identifiable {
-    case switcher, sources, keys, cameras, tracking, file
+    case switcher, sources, keys, cameras, tracking, assistant, file
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -37,6 +37,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .keys: return "Key buttons"
         case .cameras: return "Cameras"
         case .tracking: return "Tracking"
+        case .assistant: return "AI assistant"
         case .file: return "Setup file"
         }
     }
@@ -47,17 +48,19 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .keys: return "On and off buttons under Fade and Cut, such as lower thirds."
         case .cameras: return "The PTZ cameras, the switcher input each one feeds, and their saved shots."
         case .tracking: return "How auto tracking follows a person."
+        case .assistant: return "Let Claude set up and run Churchfront Video for you, in plain words."
         case .file: return "Everything in Setup is saved in one file that people and Claude can edit."
         }
     }
     var help: String? {
         switch self {
         case .switcher: return nil
-        case .sources: return "Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in CueScreens, add an NDI output to that screen) so the tile and the Next and Live monitors show it."
-        case .keys: return "Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in CueScreens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures."
+        case .sources: return "Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in Churchfront Screens, add an NDI output to that screen) so the tile and the Next and Live monitors show it."
+        case .keys: return "Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in Churchfront Screens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures."
         case .cameras: return "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it."
         case .tracking: return "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back."
-        case .file: return "The file is plain JSON. You, the system owner or Claude can edit it directly; CueVideo picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it."
+        case .assistant: return "Connecting adds Churchfront Video to the Claude desktop app on this Mac. Claude can then find your switcher and cameras on the network, set them up with you, and run the switcher when you ask. It checks with you before changing anything live. Claude for Mac is free from claude.ai/download."
+        case .file: return "The file is plain JSON. You, the system owner or Claude can edit it directly; Churchfront Video picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it."
         }
     }
 }
@@ -82,6 +85,7 @@ struct SetupTab: View {
             case .keys: keyButtons
             case .cameras: cameras
             case .tracking: tracking
+            case .assistant: AssistantSetup()
             case .file: configFile
             }
         }
@@ -155,7 +159,7 @@ struct SetupTab: View {
                             if let j = c.sources.firstIndex(where: { $0.input == s.input }) { c.sources[j].ndi = v }
                         } }
                         .frame(width: 280)
-                        .help("An NDI source showing what this input carries, such as a CueScreens screen sent to NDI, for its tile and the Next and Live pictures.")
+                        .help("An NDI source showing what this input carries, such as a Churchfront Screens screen sent to NDI, for its tile and the Next and Live pictures.")
                     }
                     Spacer(minLength: 0)
                     IconButton(icon: "chevron.up", help: "Move earlier in the row") { move(s.input, by: -1) }.disabled(i == 0)
@@ -199,7 +203,7 @@ struct SetupTab: View {
                         if let i = c.keys.firstIndex(of: k) { c.keys[i].ndi = v }
                     } }
                     .frame(width: 280)
-                    .help("An NDI source with alpha showing this key, such as CueScreens' lower thirds sent to NDI with alpha. It's laid over the Next and Live pictures when the key is on them.")
+                    .help("An NDI source with alpha showing this key, such as Churchfront Screens' lower thirds sent to NDI with alpha. It's laid over the Next and Live pictures when the key is on them.")
                     Spacer(minLength: 0)
                     IconButton(icon: "trash", help: "Remove this button") { store.update { $0.keys.removeAll { $0 == k } } }
                 }
@@ -258,7 +262,7 @@ struct SetupTab: View {
                 .buttonStyle(CueButton())
             }
             Card(title: "Camera admin login",
-                 help: "Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the setup file. One login for every Canon camera. macOS may ask for this Mac's password the first time CueVideo uses it after an update.") {
+                 help: "Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the setup file. One login for every Canon camera. macOS may ask for this Mac's password the first time Churchfront Video uses it after an update.") {
                 CameraLoginRow()
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -304,7 +308,7 @@ struct SetupTab: View {
                 .buttonStyle(CueButton())
             }
             if let e = store.fileError {
-                Text("The file has a problem, so CueVideo is still using the last good setup: \(e)")
+                Text("The file has a problem, so Churchfront Video is still using the last good setup: \(e)")
                     .font(.sans(12, .semibold)).foregroundStyle(T.danger).fixedSize(horizontal: false, vertical: true)
             }
             if store.readOnly {
@@ -400,7 +404,7 @@ struct ShotEditor: View {
         DisclosureGroup(isExpanded: $open) {
             VStack(alignment: .leading, spacing: 6) {
                 if camera.shots.isEmpty {
-                    Text("No shots saved in CueVideo yet. Save one from the main window, or add one here from the camera as it is now.")
+                    Text("No shots saved in Churchfront Video yet. Save one from the main window, or add one here from the camera as it is now.")
                         .font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
                 ForEach($camera.shots) { $s in
@@ -495,7 +499,7 @@ struct StatusTab: View {
 
     var body: some View {
         Page {
-            PageHeader(title: "Status", purpose: "How CueVideo is talking to the switcher and cameras right now.") {
+            PageHeader(title: "Status", purpose: "How Churchfront Video is talking to the switcher and cameras right now.") {
                 Button("Copy report") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(StatusReport.text(booth), forType: .string)
@@ -625,7 +629,7 @@ enum StatusReport {
 
     /// Everything above as text.
     static func text(_ b: Booth) -> String {
-        var out = "CueVideo status, \(Date().formatted(date: .abbreviated, time: .standard))\n\nSWITCHER\n"
+        var out = "Churchfront Video status, \(Date().formatted(date: .abbreviated, time: .standard))\n\nSWITCHER\n"
         out += switcherRows(b).map { "\($0.0): \($0.1)" }.joined(separator: "\n")
         out += "\n\nCAMERAS\n"
         out += b.ptz.cameras.map { c in cameraRows(c, b).map { "\($0.0): \($0.1)" }.joined(separator: "\n") }.joined(separator: "\n\n")
@@ -660,5 +664,55 @@ struct NDIPicker: View {
             Button("Look again") { ndi.scan() }
         }
         .onAppear { ndi.scan() }
+    }
+}
+
+
+/// Setup > AI assistant: one button that adds Churchfront Video to the Claude desktop app.
+struct AssistantSetup: View {
+    @State private var state = ClaudeConnect.state()
+    @State private var note: String?
+    @State private var copied = false
+
+    var body: some View {
+        Card(title: "Claude") {
+            switch state {
+            case .runFromDownloads:
+                Text("Move Churchfront Video to your Applications folder and open it from there, then come back here to connect Claude.")
+                    .font(.sans(13)).fixedSize(horizontal: false, vertical: true)
+            case .noClaude:
+                Text("Install the Claude desktop app first. It's free.").font(.sans(13))
+                HStack(spacing: T.s2) {
+                    Button("Get Claude for Mac") { NSWorkspace.shared.open(URL(string: "https://claude.ai/download")!) }.buttonStyle(CueButton(kind: .primary))
+                    Button("I've installed it") { state = ClaudeConnect.state() }.buttonStyle(CueButton())
+                }
+            case .notConnected, .stalePath:
+                Text(state == .stalePath ? "Claude is connected to another copy of Churchfront Video. Connect it to this one." : "Claude isn't connected yet.")
+                    .font(.sans(13))
+                Button("Connect Claude") {
+                    note = ClaudeConnect.connect()
+                    state = ClaudeConnect.state()
+                }
+                .buttonStyle(CueButton(kind: .primary))
+            case .connected:
+                Text("Connected. Quit Claude (Claude > Quit) and open it again, then ask it something like:")
+                    .font(.sans(13)).fixedSize(horizontal: false, vertical: true)
+                Text(ClaudeConnect.firstPrompt).font(.sans(13, .semibold)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: T.s2) {
+                    Button(copied ? "Copied" : "Copy this") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(ClaudeConnect.firstPrompt, forType: .string)
+                        copied = true
+                    }
+                    .buttonStyle(CueButton(kind: .primary))
+                    Button("Disconnect") { note = ClaudeConnect.disconnect(); state = ClaudeConnect.state(); copied = false }.buttonStyle(CueButton(kind: .quiet))
+                }
+            }
+            if let note {
+                Text(note).font(.sans(12, .semibold)).foregroundStyle(T.danger).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: 760, alignment: .leading)
+        .onAppear { state = ClaudeConnect.state() }
     }
 }
