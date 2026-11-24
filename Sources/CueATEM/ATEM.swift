@@ -11,6 +11,10 @@ public struct ATEMInput: Identifiable, Hashable {
     public var long: String
     public var short: String
 
+    public init(id: Int, long: String, short: String) {
+        self.id = id; self.long = long; self.short = short
+    }
+
     /// Sources a program or preview bus can take: black, cameras and other
     /// inputs, bars, colors, media players and SuperSource.
     public var isBusSource: Bool {
@@ -129,6 +133,9 @@ public final class ATEMClient: ObservableObject {
     /// The last commands this app sent (or tried to send while offline), newest last,
     /// for the Status window.
     @Published public private(set) var sentLog: [ATEMLogEntry] = []
+    /// Offline mode: no switcher, so a pretend one inside the app takes the commands and
+    /// answers as a switcher would. Nothing goes out on the network.
+    @Published public private(set) var simulated = false
 
     private let queue = DispatchQueue(label: "cuevideo.atem")
     private var conn: NWConnection?
@@ -159,6 +166,7 @@ public final class ATEMClient: ObservableObject {
     public func connect(_ host: String, port: UInt16 = 9910) {
         let h = host.trimmingCharacters(in: .whitespaces)
         self.host = h
+        simulated = false
         link = h.isEmpty ? .idle : .connecting
         queue.async {
             self.target = h
@@ -185,6 +193,68 @@ public final class ATEMClient: ObservableObject {
             self.conn?.cancel(); self.conn = nil
             self.connected = false; self.ready = false
         }
+    }
+
+    /// Offline mode: stops talking to the switcher and runs a pretend one that starts as
+    /// `state` (its inputs, keys, DSKs and aux). `host` stays as it was, so the address in
+    /// the setup isn't lost, and `connect` ends offline mode.
+    public func startOffline(_ state: ATEMState) {
+        link = .idle
+        simulated = true
+        queue.async {
+            self.target = ""
+            self.timer?.cancel(); self.timer = nil
+            self.conn?.cancel(); self.conn = nil
+            self.connected = false; self.ready = false
+            self.inFlight.removeAll()
+            self.s = state
+            Self.retally(&self.s)
+            self.publish()
+        }
+    }
+
+    /// What a switcher would do with a command, for offline mode. Transitions finish at once.
+    static func simulate(_ name: String, _ d: [UInt8], _ s: inout ATEMState) {
+        func u16(_ i: Int) -> Int { i + 1 < d.count ? Int(d[i]) << 8 | Int(d[i + 1]) : 0 }
+        let me = Int(d.first ?? 0)
+        func take() {
+            if (s.nextSelection[me] ?? 1) & 1 != 0, let p = s.preview[me], let q = s.program[me] {
+                s.program[me] = p; s.preview[me] = q
+            }
+            let keys = s.nextSelection[me] ?? 1
+            for k in (s.keyOnAir[me] ?? [:]).keys where keys & (2 << k) != 0 { s.keyOnAir[me]?[k]?.toggle() }
+            for (k, tied) in s.dskTie where tied { s.dskOnAir[k]?.toggle() }
+            s.inTransition[me] = false; s.position[me] = 0
+        }
+        switch name {
+        case "CPgI": s.program[me] = u16(2)
+        case "CPvI": s.preview[me] = u16(2)
+        case "DCut", "DAut": take()
+        case "CTPs": if u16(2) >= 10000 { take() }
+        case "CTTp":
+            let m = d.count > 1 ? Int(d[1]) : 0
+            if d.first == 1, d.count > 2 { s.style[m] = Int(d[2]) }
+            if d.first == 2, d.count > 3 { s.nextSelection[m] = Int(d[3]) }
+        case "CTMx": if d.count > 1 { s.mixRate[me] = Int(d[1]) }
+        case "CKOn": if d.count > 2 { s.keyOnAir[me, default: [:]][Int(d[1])] = d[2] != 0 }
+        case "CDsL": if d.count > 1 { s.dskOnAir[me] = d[1] != 0 }
+        case "CDsT": if d.count > 1 { s.dskTie[me] = d[1] != 0 }
+        case "DDsA": s.dskOnAir[me]?.toggle()
+        case "FtbA": s.ftbBlack[me] = !(s.ftbBlack[me] ?? false)
+        case "CAuS": if d.count > 1 { s.aux[Int(d[1])] = u16(2) }
+        case "StrR": s.streamStatus = d.first == 1 ? 4 : 1
+        case "RcTM": s.recordStatus = d.first == 1 ? 1 : 0
+        default: break
+        }
+        retally(&s)
+    }
+
+    /// Tally from the buses: bit 0 on program, bit 1 on preview.
+    static func retally(_ s: inout ATEMState) {
+        var t: [Int: UInt8] = [:]
+        for (_, i) in s.program { t[i, default: 0] |= 1 }
+        for (_, i) in s.preview { t[i, default: 0] |= 2 }
+        s.tally = t
     }
 
     private func now() -> Double { ProcessInfo.processInfo.systemUptime }
@@ -401,6 +471,9 @@ public final class ATEMClient: ObservableObject {
             DispatchQueue.main.async {
                 self.sentLog.append(entry)
                 if self.sentLog.count > 60 { self.sentLog.removeFirst(self.sentLog.count - 60) }
+                if self.simulated {
+                    self.queue.async { Self.simulate(name, data, &self.s); self.publish() }
+                }
             }
             guard ok else { return }
             let commands = self.command(name, data)

@@ -191,6 +191,7 @@ struct LinkPill: View {
     @EnvironmentObject var atem: ATEMClient
     var body: some View {
         let (text, color): (String, Color) = {
+            if atem.simulated { return ("Offline mode", T.warning) }
             switch atem.link {
             case .online: return ("Online", T.success)
             case .connecting: return ("Connecting", T.warning)
@@ -205,7 +206,17 @@ struct LinkPill: View {
 struct LinkBanner: View {
     @EnvironmentObject var atem: ATEMClient
     var body: some View {
-        if case .offline(let why) = atem.link {
+        if atem.simulated {
+            HStack(spacing: T.s3) {
+                Text("Offline mode: practice only. Nothing goes to the switcher.")
+                Button("Connect to the switcher") { Booth.shared.goOnline() }
+                    .buttonStyle(.plain).underline()
+                    .help("Leave offline mode and reach for the switcher at the address in Setup")
+            }
+            .font(.sans(13, .semibold)).foregroundStyle(T.onAction)
+            .padding(.horizontal, T.s4).padding(.vertical, T.s2)
+            .background(Capsule().fill(T.warning)).padding(.top, T.s3)
+        } else if case .offline(let why) = atem.link {
             Text("\(why). Reconnecting on its own; buttons do nothing until it's back.")
                 .font(.sans(13, .semibold)).foregroundStyle(T.onAction)
                 .padding(.horizontal, T.s4).padding(.vertical, T.s2)
@@ -260,6 +271,17 @@ struct ConnectView: View {
             case .offline(let why): Text(why).foregroundStyle(T.danger)
             default: EmptyView()
             }
+            // No switcher on this network: practice with a pretend one instead.
+            Button { Booth.shared.goOffline() } label: {
+                Text("Open offline").font(.sans(14, .semibold)).foregroundStyle(T.ink)
+                    .padding(.horizontal, T.s5).frame(height: 36)
+                    .background(RoundedRectangle(cornerRadius: T.rMD).stroke(T.lineStrong))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).padding(.top, T.s2)
+            .help("Open the Operate screen with a pretend switcher, to try shots and buttons. Nothing goes to the switcher.")
+            Text("Try the Operate screen, shots and buttons without a switcher.")
+                .font(.sans(12)).foregroundStyle(T.inkSubtle)
             Spacer()
         }
         .font(.sans(14))

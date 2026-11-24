@@ -564,6 +564,7 @@ enum StatusReport {
     static func switcherRows(_ b: Booth) -> [(String, String)] {
         let s = b.atem.state
         let link: String = {
+            if b.atem.simulated { return "Offline mode (pretend switcher)" }
             switch b.atem.link {
             case .online: return "Online"
             case .connecting: return "Connecting"
