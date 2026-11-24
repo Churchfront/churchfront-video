@@ -46,7 +46,8 @@ struct VolunteerView: View {
                 TakePanel().frame(width: 250).frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(T.s4)
-            .frame(height: 290)
+            // Tall enough for the shot deck's four rows of tiles.
+            .frame(height: 380)
             .background(T.surface)
         }
         // The camera controls always drive whatever camera is on Next, so the Live

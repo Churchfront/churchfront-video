@@ -4,10 +4,16 @@ import XCTest
 final class ShotDeckTests: XCTestCase {
     let cell = CGSize(width: 100, height: 80)
 
-    func testDraggingDownARowLandsFiveSlotsOn() {
-        var d = ShotDrag(camera: UUID(), page: 0, from: 1, range: 0...9, cell: cell)
+    func testDraggingDownARowLandsFourSlotsOn() {
+        var d = ShotDrag(camera: UUID(), page: 0, from: 1, range: 0...15, cell: cell)
         d.moved = CGSize(width: 10, height: 75)
-        XCTAssertEqual(d.to, 6)
+        XCTAssertEqual(d.to, 5)
+    }
+
+    func testDraggingReachesTheFourthRow() {
+        var d = ShotDrag(camera: UUID(), page: 0, from: 0, range: 0...15, cell: cell)
+        d.moved = CGSize(width: 300, height: 240)
+        XCTAssertEqual(d.to, 15)
     }
 
     func testADropStaysInsideItsRun() {
@@ -17,13 +23,19 @@ final class ShotDeckTests: XCTestCase {
     }
 
     func testTilesItPassesStepBackAcrossTheRowEnd() {
-        var d = ShotDrag(camera: UUID(), page: 0, from: 2, range: 0...9, cell: cell)
-        d.moved = CGSize(width: 0, height: 80)  // to slot 7
-        XCTAssertEqual(d.to, 7)
-        // Slot 5 (bottom left) steps up to slot 4 (top right).
-        XCTAssertEqual(d.shift(5), CGSize(width: 400, height: -80))
+        var d = ShotDrag(camera: UUID(), page: 0, from: 2, range: 0...15, cell: cell)
+        d.moved = CGSize(width: 0, height: 80)  // to slot 6
+        XCTAssertEqual(d.to, 6)
+        // Slot 4 (second row, left) steps up to slot 3 (top right).
+        XCTAssertEqual(d.shift(4), CGSize(width: 300, height: -80))
         XCTAssertEqual(d.shift(3), CGSize(width: -100, height: 0))
-        XCTAssertEqual(d.shift(8), .zero)
+        XCTAssertEqual(d.shift(7), .zero)
+    }
+
+    func testEveryTileHasItsOwnKey() {
+        XCTAssertEqual(ShotDeckState.letters.count, ShotDeckState.perPage)
+        XCTAssertEqual(Set(ShotDeckState.keyCodes.values), Set(0..<ShotDeckState.perPage))
+        XCTAssertEqual(ShotDeckState.columns * ShotDeckState.rows, ShotDeckState.perPage)
     }
 }
 

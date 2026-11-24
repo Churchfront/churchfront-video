@@ -82,7 +82,7 @@ final class Booth: ObservableObject {
         case 36, 76: atem.auto(me: me); return true
         default: break
         }
-        // Q W E R T / A S D F G: the shot deck's tiles, for the camera on Next. [ and ] turn its page.
+        // Q W E R T Y U I / A S D F G H J K: the shot deck's tiles, for the camera on Next. [ and ] turn its page.
         if !e.modifierFlags.contains(.option), !e.modifierFlags.contains(.control),
            let cam = cameraOnNext, (atem.state.tally[cam.atemInput ?? -1] ?? 0) & 1 == 0 {
             let deck = ShotDeckState.shared
