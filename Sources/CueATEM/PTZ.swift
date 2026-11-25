@@ -239,6 +239,8 @@ protocol PTZLink: AnyObject {
     var onExposure: ((CameraExposure) -> Void)? { get set }
     /// Whether this app holds control of the camera (Canon gives control to one session at a time).
     var onControl: ((Bool) -> Void)? { get set }
+    /// When each pan/tilt drive command went out and when the camera acknowledged it (VISCA).
+    var onDriveTiming: ((DriveTiming) -> Void)? { get set }
     func start()
     func stop()
     /// Speeds from -1 to 1; up is positive tilt. Zero stops that axis.
@@ -256,6 +258,8 @@ protocol PTZLink: AnyObject {
     func readPosition(_ done: @escaping (PTZPosition?) -> Void)
     /// Where the camera is now, in whatever form goTo takes back exactly, for saving a shot.
     func readShotPosition(_ done: @escaping (PTZPosition?) -> Void)
+    /// Only the zoom, as the horizontal angle of view in hundredths of a degree (as readPosition gives it).
+    func readZoom(_ done: @escaping (Int?) -> Void)
     /// Move straight to a saved position.
     func goTo(_ p: PTZPosition)
     /// Delete a preset stored on the camera itself. Calls back with nil when it worked, or why not.
@@ -270,6 +274,19 @@ protocol PTZLink: AnyObject {
 
 extension PTZLink {
     func readShotPosition(_ done: @escaping (PTZPosition?) -> Void) { readPosition(done) }
+    func readZoom(_ done: @escaping (Int?) -> Void) { readPosition { done($0?.zoom) } }
+}
+
+/// One pan/tilt drive command's trip: handed to the link, written to the socket, and
+/// acknowledged by the camera (nil if no acknowledgement came within a second).
+public struct DriveTiming {
+    public let queued: Date
+    public let sent: Date
+    public let ack: Date?
+    /// Drives replaced by this one while it waited for the socket (latest wins).
+    public let dropped: Int
+    public var sendMs: Double { sent.timeIntervalSince(queued) * 1000 }
+    public var ackMs: Double? { ack.map { $0.timeIntervalSince(sent) * 1000 } }
 }
 
 // MARK: - VISCA
@@ -337,6 +354,23 @@ final class VISCALink: PTZLink {
     var onExposure: ((CameraExposure) -> Void)?
     var onControl: ((Bool) -> Void)?
     private var online = false { didSet { if online != oldValue { onState?(online) } } }
+    var onDriveTiming: ((DriveTiming) -> Void)?
+    // Commands. Pan/tilt drives and zoom drives each have one slot: while one is on its way
+    // to the socket, a newer one replaces any waiting (the latest speed is the only one that
+    // matters), and none ever waits for a reply. Only touched on `queue`.
+    private enum Cmd { case drive, zoom, other }
+    private var inFlight: Set<Cmd> = []
+    private var waiting: [Cmd: (bytes: [UInt8], queued: Date, dropped: Int)] = [:]
+    private var lastDrive: [UInt8]?
+    /// Commands written and not yet acknowledged, oldest first. The camera acknowledges a
+    /// connection's commands in the order sent (y0 4z FF, z its socket), then completes
+    /// each (y0 5z FF) or reports an error (y0 6z ee FF).
+    private var unacked: [(cmd: Cmd, queued: Date, sent: Date, dropped: Int)] = []
+    /// What each of the camera's command sockets is running, from its acknowledgement until it completes.
+    private var sockets: [UInt8: Cmd] = [:]
+    private var zoomWaiters: [(Int?) -> Void] = []
+    /// For comparison tests only: CUEVIDEO_VISCA_NAGLE=1 leaves TCP's Nagle delay on, as before.
+    private let nagle = ProcessInfo.processInfo.environment["CUEVIDEO_VISCA_NAGLE"] == "1"
     // Reading the position. Only touched on `queue`.
     private var rx: [UInt8] = []
     /// Who is waiting for the position, and whether they want the camera's own counts (to save
@@ -363,7 +397,7 @@ final class VISCALink: PTZLink {
     }
 
     func start() {
-        rx.removeAll(); pending.removeAll()
+        rx.removeAll(); pending.removeAll(); unacked.removeAll(); sockets.removeAll(); inFlight.removeAll(); waiting.removeAll()
         guard !camera.host.isEmpty, let port = NWEndpoint.Port(rawValue: camera.port) else { return }
         let params: NWParameters
         if camera.proto == .sonyUDP {
@@ -376,6 +410,11 @@ final class VISCALink: PTZLink {
             tcp.keepaliveInterval = 2
             tcp.keepaliveCount = 3
             tcp.connectionTimeout = 5
+            // Each command goes out the moment it's written. With Nagle's delay on, a drive
+            // written while an inquiry's bytes were still unacknowledged at the TCP level
+            // waited for that acknowledgement, which a moving PTZOptics can hold until it
+            // answers the inquiry (about 0.4 s): drives queued behind position reads.
+            tcp.noDelay = !nagle
             params = NWParameters(tls: nil, tcp: tcp)
         }
         let c = NWConnection(host: NWEndpoint.Host(camera.host), port: port, using: params)
@@ -435,11 +474,40 @@ final class VISCALink: PTZLink {
     }
 
     func send(_ visca: [UInt8], inquiry: Bool = false) {
-        guard let conn else { return }
+        if inquiry { write(visca, inquiry: true) { _ in }; return }
+        command(visca, .other)
+    }
+
+    /// A command: a drive or zoom takes its slot (latest wins), anything else goes straight out.
+    private func command(_ visca: [UInt8], _ cmd: Cmd) {
+        let now = Date()
+        if cmd != .other, inFlight.contains(cmd) {
+            waiting[cmd] = (visca, waiting[cmd]?.queued ?? now, waiting[cmd].map { $0.dropped + 1 } ?? 0)
+            return
+        }
+        transmit(visca, cmd, queued: now, dropped: 0)
+    }
+
+    private func transmit(_ visca: [UInt8], _ cmd: Cmd, queued: Date, dropped: Int) {
+        if cmd == .drive { lastDrive = visca }
+        if cmd != .other { inFlight.insert(cmd) }
+        write(visca, inquiry: false) { [weak self] ok in
+            guard let self else { return }
+            if ok { self.unacked.append((cmd, queued, Date(), dropped)); self.expireUnacked() }
+            guard cmd != .other else { return }
+            self.inFlight.remove(cmd)
+            if let next = self.waiting.removeValue(forKey: cmd) { self.transmit(next.bytes, cmd, queued: next.queued, dropped: next.dropped) }
+        }
+    }
+
+    /// Writes to the socket; `done` runs on `queue` once it's gone (false if it couldn't).
+    private func write(_ visca: [UInt8], inquiry: Bool, _ done: @escaping (Bool) -> Void) {
+        guard let conn else { done(false); return }
         if camera.proto == .rawTCP {
             conn.send(content: Data(visca), completion: .contentProcessed { [weak self, weak conn] err in
-                guard let self, let conn, err != nil else { return }
-                self.queue.async { self.reconnect(conn) }
+                guard let self else { return }
+                if err != nil, let conn { self.reconnect(conn) }
+                done(err == nil)
             })
             return
         }
@@ -447,7 +515,17 @@ final class VISCALink: PTZLink {
         let n = UInt16(visca.count)
         let header: [UInt8] = [0x01, inquiry ? 0x10 : 0x00, UInt8(n >> 8), UInt8(n & 0xFF),
                                UInt8(seq >> 24), UInt8((seq >> 16) & 0xFF), UInt8((seq >> 8) & 0xFF), UInt8(seq & 0xFF)]
-        conn.send(content: Data(header + visca), completion: .contentProcessed { _ in })
+        conn.send(content: Data(header + visca), completion: .contentProcessed { err in done(err == nil) })
+    }
+
+    /// Commands with no acknowledgement after a second never get one (the reply was lost, or
+    /// another controller's traffic confused the camera): forget them, so later replies match.
+    private func expireUnacked() {
+        let now = Date()
+        while let first = unacked.first, now.timeIntervalSince(first.sent) > 1 {
+            unacked.removeFirst()
+            if first.cmd == .drive { onDriveTiming?(DriveTiming(queued: first.queued, sent: first.sent, ack: nil, dropped: first.dropped)) }
+        }
     }
 
     func drive(pan: Double, tilt: Double) {
@@ -455,7 +533,7 @@ final class VISCALink: PTZLink {
         let ts = tilt == 0 ? 1 : max(1, min(0x14, Int((tilt * tilt * 20).rounded())))
         let p: UInt8 = pan == 0 ? 0x03 : (pan < 0 ? 0x01 : 0x02)
         let t: UInt8 = tilt == 0 ? 0x03 : (tilt > 0 ? 0x01 : 0x02)
-        send([0x81, 0x01, 0x06, 0x01, UInt8(ps), UInt8(ts), p, t, 0xFF])
+        command([0x81, 0x01, 0x06, 0x01, UInt8(ps), UInt8(ts), p, t, 0xFF], .drive)
     }
 
     func driveRaw(pan: Int, tilt: Int) {
@@ -465,8 +543,8 @@ final class VISCALink: PTZLink {
 
     func zoom(_ v: Double) {
         let p = UInt8(min(7, max(0, Int((abs(v) * 7).rounded()))))
-        if v == 0 { send([0x81, 0x01, 0x04, 0x07, 0x00, 0xFF]) }
-        else { send([0x81, 0x01, 0x04, 0x07, (v > 0 ? 0x20 : 0x30) | p, 0xFF]) }
+        if v == 0 { command([0x81, 0x01, 0x04, 0x07, 0x00, 0xFF], .zoom) }
+        else { command([0x81, 0x01, 0x04, 0x07, (v > 0 ? 0x20 : 0x30) | p, 0xFF], .zoom) }
     }
 
     func autoFocus(_ on: Bool) { send([0x81, 0x01, 0x04, 0x38, on ? 0x02 : 0x03, 0xFF]) }
@@ -498,6 +576,18 @@ final class VISCALink: PTZLink {
         }
     }
 
+    /// Just the zoom: one inquiry, answered on its own or with nil after a second.
+    func readZoom(_ done: @escaping (Int?) -> Void) {
+        zoomWaiters.append(done)
+        guard zoomWaiters.count == 1 else { return }
+        ask(.zoom, [0x81, 0x09, 0x04, 0x47, 0xFF])
+        queue.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, !self.zoomWaiters.isEmpty else { return }
+            let w = self.zoomWaiters; self.zoomWaiters = []
+            for f in w { f(nil) }
+        }
+    }
+
     private func answerPosition(_ counts: PTZPosition?) {
         let w = posWaiters
         posWaiters = []
@@ -507,24 +597,58 @@ final class VISCALink: PTZLink {
 
     private func ask(_ kind: Inq, _ bytes: [UInt8]) {
         let now = Date()
-        // Answers come within a few hundredths of a second. Anything still waiting after 1.5 s
-        // was lost, and would put every later answer against the wrong question.
-        if let first = pending.first, now.timeIntervalSince(first.at) > 1.5 { pending.removeAll() }
+        // Answers come within a tenth of a second at rest and about 0.4 s while a PTZOptics
+        // moves. An inquiry unanswered after 1.5 s never will be; drop just that one, so it
+        // doesn't put later answers against the wrong question.
+        pending.removeAll { now.timeIntervalSince($0.at) > 1.5 }
         pending.append((kind, now))
         send(bytes, inquiry: true)
     }
 
-    /// Replies end in FF. y0 50 … answers the oldest inquiry; y0 60 … refuses it. Everything
-    /// else (acknowledgements and completions of commands) is skipped.
+    /// Replies end in FF and say what they are in their second byte (y0 is the camera):
+    /// 4z acknowledges the oldest unacknowledged command and gives it socket z; 5z with z
+    /// a socket completes that command; 50 answers an inquiry; 6z ee reports error ee, on
+    /// socket z, or with z 0 for an inquiry or a command that got no socket (03: both the
+    /// camera's command sockets were busy, as when Companion drives it too). Each reply is
+    /// matched by its kind, never just by order, and nothing waits on a reply that may not come.
     private func received(_ data: Data) {
         // VISCA over IP puts an 8-byte header in front of each message.
         rx.append(contentsOf: camera.proto == .sonyUDP ? data.dropFirst(8) : data[...])
         while let end = rx.firstIndex(of: 0xFF) {
             let m = Array(rx[...end])
             rx.removeSubrange(...end)
-            guard m.count >= 3, m[1] == 0x50 || m[1] == 0x60, !pending.isEmpty else { continue }
-            // A refusal: of the oldest inquiry, as far as anyone can tell.
-            guard m[1] == 0x50 else { pending.removeFirst(); continue }
+            guard m.count >= 3 else { continue }
+            let type = m[1] & 0xF0, socket = m[1] & 0x0F
+            if type == 0x40 {
+                // Acknowledged: the oldest command still waiting, now running on `socket`.
+                expireUnacked()
+                guard !unacked.isEmpty else { continue }
+                let c = unacked.removeFirst()
+                sockets[socket] = c.cmd
+                if c.cmd == .drive { onDriveTiming?(DriveTiming(queued: c.queued, sent: c.sent, ack: Date(), dropped: c.dropped)) }
+                continue
+            }
+            if type == 0x50, socket != 0 { sockets[socket] = nil; continue }   // a command completed
+            if type == 0x60 {
+                let code = m.count > 3 ? m[2] : 0
+                if socket != 0 { sockets[socket] = nil; continue }             // that command failed
+                if code == 0x03 || (code == 0x02 && unackedIsOlderThanInquiry) {
+                    // A command the camera had no room for. If it was a drive, send the latest
+                    // drive again, so a stop is never lost.
+                    guard !unacked.isEmpty else { continue }
+                    let c = unacked.removeFirst()
+                    if c.cmd == .drive, let d = lastDrive {
+                        queue.asyncAfter(deadline: .now() + 0.03) { [weak self] in
+                            guard let self, self.waiting[.drive] == nil, !self.inFlight.contains(.drive), self.lastDrive == d else { return }
+                            self.transmit(d, .drive, queued: Date(), dropped: 0)
+                        }
+                    }
+                    continue
+                }
+                if !pending.isEmpty { pending.removeFirst() }                   // an inquiry refused
+                continue
+            }
+            guard type == 0x50, !pending.isEmpty else { continue }
             // The camera answers its lens and picture questions in the order asked, but pan
             // and tilt are a separate part of it and can answer before or after them. So an
             // answer goes to the oldest inquiry it has the right shape for.
@@ -537,7 +661,14 @@ final class VISCALink: PTZLink {
             let low = m.count == 7 ? (Int(m[4] & 0x0F) << 4) | Int(m[5] & 0x0F) : Int(m[2])
             switch kind {
             case .panTilt, .zoom:
-                if kind == .panTilt { posPanTilt = (word(2), word(6)) } else { posZoom = word(2) }
+                if kind == .panTilt { posPanTilt = (word(2), word(6)) } else {
+                    posZoom = word(2)
+                    if !zoomWaiters.isEmpty {
+                        let fov = Int((units.fov(zoom: word(2)) * 100).rounded())
+                        let w = zoomWaiters; zoomWaiters = []
+                        for f in w { f(fov) }
+                    }
+                }
                 if let pt = posPanTilt, let z = posZoom, !posWaiters.isEmpty {
                     answerPosition(PTZPosition(pan: pt.0, tilt: pt.1, zoom: z))
                 }
@@ -566,6 +697,12 @@ final class VISCALink: PTZLink {
             }
         }
         if rx.count > 256 { rx.removeAll() }
+    }
+
+    private var unackedIsOlderThanInquiry: Bool {
+        guard let c = unacked.first else { return false }
+        guard let q = pending.first else { return true }
+        return c.sent < q.at
     }
 
     /// Gain, shutter, iris and white balance as they are now, reported through onExposure.
@@ -626,6 +763,7 @@ final class VISCALink: PTZLink {
 /// Canon's control protocol: open a session, claim control, then control.cgi
 /// with pan=left|right|stop, tilt=up|down|stop, zoom=tele|wide|stop, p=<preset>.
 final class CanonLink: PTZLink {
+    var onDriveTiming: ((DriveTiming) -> Void)?
     let camera: PTZCamera
     private let queue: DispatchQueue
     private let http: URLSession
@@ -1053,6 +1191,7 @@ public final class PTZController: ObservableObject {
                     DispatchQueue.main.async { if on { self?.controlled.insert(c.id) } else { self?.controlled.remove(c.id) } }
                 }
                 l.onExposurePresets = { [weak self] s in DispatchQueue.main.async { self?.exposurePresets[c.id] = s } }
+                l.onDriveTiming = { [weak self] t in DispatchQueue.main.async { self?.onDriveTiming?(c.id, t) } }
                 self.links[c.id] = l
                 l.start()
             }
@@ -1083,6 +1222,8 @@ public final class PTZController: ObservableObject {
     /// Called (on main) whenever a person or Claude zooms a camera. Auto tracking keeps
     /// following and takes the new zoom as the shot size to hold.
     public var onManualZoom: ((UUID) -> Void)?
+    /// Each VISCA drive command's send and acknowledgement times, by camera, on main. For tracking's log.
+    public var onDriveTiming: ((UUID, DriveTiming) -> Void)?
 
     private func manual(_ camera: UUID?) {
         guard let id = camera ?? selected else { return }
@@ -1100,6 +1241,16 @@ public final class PTZController: ObservableObject {
     /// horizontal angle of view in hundredths of a degree), on main; nil if it can't say.
     public func readPosition(camera: UUID, _ done: @escaping (PTZPosition?) -> Void) {
         with(camera) { $0.readPosition { p in DispatchQueue.main.async { done(p) } } }
+    }
+
+    /// Only the zoom, as the horizontal angle of view in hundredths of a degree, on main.
+    public func readZoom(camera: UUID, _ done: @escaping (Int?) -> Void) {
+        with(camera) { $0.readZoom { z in DispatchQueue.main.async { done(z) } } }
+    }
+
+    /// Where a camera is in its own counts (what goTo takes back exactly), on main.
+    public func readShotPosition(camera: UUID, _ done: @escaping (PTZPosition?) -> Void) {
+        with(camera) { $0.readShotPosition { p in DispatchQueue.main.async { done(p) } } }
     }
 
     /// Pan and tilt for auto tracking: speeds -1 to 1, sent as given, without counting as a manual move.

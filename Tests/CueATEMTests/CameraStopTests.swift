@@ -209,3 +209,141 @@ final class CameraLoginTests: XCTestCase {
         XCTAssertNil(CameraLogin.savedUser)
     }
 }
+
+// MARK: - VISCA over TCP: drives never wait on inquiries, replies matched by kind
+
+final class VISCATCPTests: XCTestCase {
+    override func tearDown() { UserDefaults.standard.removeObject(forKey: "ptzCameras") }
+
+    private func wait(_ seconds: Double, until: () -> Bool = { false }) {
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end, !until() { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+    }
+
+    private func camera(_ fake: FakeVISCATCPCamera) -> (PTZController, PTZCamera) {
+        var cam = PTZCamera(); cam.host = "127.0.0.1"; cam.port = fake.port; cam.proto = .rawTCP
+        let ptz = PTZController(load: false)
+        ptz.cameras = [cam]
+        return (ptz, cam)
+    }
+
+    /// A moving PTZOptics takes about 0.4 s to answer a position inquiry. A drive sent while
+    /// that answer is outstanding must reach the camera straight away, not after it.
+    func testDriveIsNotHeldBehindASlowInquiry() throws {
+        let fake = try FakeVISCATCPCamera()
+        fake.inquiryDelay = 0.4
+        let (ptz, cam) = camera(fake)
+        wait(3) { fake.connected }
+        ptz.readPosition(camera: cam.id) { _ in }
+        wait(0.05)
+        let asked = Date()
+        ptz.trackDriveRaw(pan: 1000, tilt: 0, camera: cam.id)
+        wait(1) { !fake.drives.isEmpty }
+        let got = try XCTUnwrap(fake.drives.first, "the drive never arrived")
+        XCTAssertLessThan(got.timeIntervalSince(asked), 0.1, "the drive waited for the inquiry's answer")
+    }
+
+    /// Both of the camera's command sockets busy (another controller, such as Companion, is
+    /// driving it): it refuses with 60 03. The drive, here a stop, must be sent again.
+    func testDriveRefusedForBusySocketsIsSentAgain() throws {
+        let fake = try FakeVISCATCPCamera()
+        fake.refuseNextCommands = 1
+        let (ptz, cam) = camera(fake)
+        wait(3) { fake.connected }
+        ptz.trackDriveRaw(pan: 0, tilt: 0, camera: cam.id)
+        wait(1) { fake.drives.count >= 2 }
+        XCTAssertEqual(fake.drives.count, 2, "the refused stop wasn't sent again, so the camera could keep moving")
+    }
+
+    /// Acknowledgements and completions arriving around an inquiry's answer don't get matched
+    /// to it, and each drive's acknowledgement is timed.
+    func testRepliesMatchedByKindAndDrivesTimed() throws {
+        let fake = try FakeVISCATCPCamera()
+        fake.inquiryDelay = 0.15
+        fake.zoom = 0x2000
+        let (ptz, cam) = camera(fake)
+        var timings: [DriveTiming] = []
+        ptz.onDriveTiming = { _, t in timings.append(t) }
+        wait(3) { fake.connected }
+        var fov: Int?
+        ptz.readZoom(camera: cam.id) { fov = $0 }
+        for i in 0..<5 { ptz.trackDriveRaw(pan: 500 + i * 100, tilt: 0, camera: cam.id) }
+        wait(2) { fov != nil && !timings.isEmpty }
+        // Halfway along the 20x zoom range: 58° × (1/20)^0.5, about 12.97°.
+        XCTAssertEqual(fov, 1297, "the zoom answer was matched to the wrong reply")
+        XCTAssertFalse(timings.isEmpty, "no drive timing reported")
+        XCTAssertNotNil(timings.first?.ack, "a drive's acknowledgement wasn't matched")
+        XCTAssertEqual(fake.drives.count + timings.map(\.dropped).reduce(0, +), 5, "drives lost rather than replaced")
+    }
+}
+
+/// A pretend PTZOptics on VISCA over TCP: acknowledges and completes commands, answers
+/// pan/tilt and zoom inquiries after `inquiryDelay`, and can refuse commands as busy.
+final class FakeVISCATCPCamera {
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "fake.visca.tcp")
+    private let lock = NSLock()
+    private var _drives: [Date] = []
+    private var _connected = false
+    private(set) var port: UInt16 = 0
+    var inquiryDelay = 0.0
+    var refuseNextCommands = 0
+    var zoom = 0
+
+    var drives: [Date] { lock.lock(); defer { lock.unlock() }; return _drives }
+    var connected: Bool { lock.lock(); defer { lock.unlock() }; return _connected }
+
+    init() throws {
+        listener = try NWListener(using: .tcp, on: .any)
+        let ready = DispatchSemaphore(value: 0)
+        listener.stateUpdateHandler = { if case .ready = $0 { ready.signal() } }
+        listener.newConnectionHandler = { [weak self] c in
+            guard let self else { return }
+            c.start(queue: self.queue)
+            self.lock.lock(); self._connected = true; self.lock.unlock()
+            self.receive(c, [])
+        }
+        listener.start(queue: queue)
+        guard ready.wait(timeout: .now() + 3) == .success, let p = listener.port?.rawValue else { throw URLError(.cannotConnectToHost) }
+        port = p
+    }
+
+    deinit { listener.cancel() }
+
+    private func receive(_ c: NWConnection, _ held: [UInt8]) {
+        c.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] data, _, done, err in
+            guard let self else { return }
+            var buf = held + (data.map { [UInt8]($0) } ?? [])
+            while let end = buf.firstIndex(of: 0xFF) {
+                let m = Array(buf[...end]); buf.removeSubrange(...end)
+                self.handle(m, c)
+            }
+            if err == nil, !done { self.receive(c, buf) }
+        }
+    }
+
+    private func handle(_ m: [UInt8], _ c: NWConnection) {
+        func reply(_ b: [UInt8], after: Double = 0) {
+            queue.asyncAfter(deadline: .now() + after) { c.send(content: Data(b), completion: .idempotent) }
+        }
+        if m.count >= 3, m[1] == 0x09 {
+            func nib(_ v: Int) -> [UInt8] { (0..<4).map { UInt8((v >> (12 - 4 * $0)) & 0x0F) } }
+            if m[2] == 0x06, m[3] == 0x12 { reply([0x90, 0x50] + nib(100) + nib(0) + [0xFF], after: inquiryDelay) }
+            if m[2] == 0x04, m[3] == 0x47 { reply([0x90, 0x50] + nib(zoom) + [0xFF], after: inquiryDelay) }
+            // Exposure, asked on connecting: AE mode, white balance mode and color temperature
+            // in one byte; shutter, iris and gain in two nibbles.
+            if m[2] == 0x04, [0x39, 0x35, 0x20].contains(m[3]) { reply([0x90, 0x50, 0x00, 0xFF]) }
+            if m[2] == 0x04, [0x4A, 0x4B, 0x4C].contains(m[3]) { reply([0x90, 0x50, 0x00, 0x00, 0x00, 0x02, 0xFF]) }
+            return
+        }
+        lock.lock()
+        let isDrive = m.count == 9 && m[2] == 0x06 && m[3] == 0x01
+        if isDrive { _drives.append(Date()) }
+        let refuse = refuseNextCommands > 0
+        if refuse { refuseNextCommands -= 1 }
+        lock.unlock()
+        if refuse { reply([0x90, 0x60, 0x03, 0xFF]); return }
+        reply([0x90, 0x41, 0xFF])
+        reply([0x90, 0x51, 0xFF], after: 0.01)
+    }
+}

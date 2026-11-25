@@ -13,6 +13,25 @@ Churchfront Video can now show a camera's live picture over RTSP. That's the way
 - **Saved with the camera.** The settings live in each camera's entry in `config.json` (`video`, `rtspMain`, `rtspSub`, `rtspTiles`, `rtspMonitors`), next to its VISCA settings. Claude's `update_config` knows the fields.
 - **Kept apart from control.** Each stream runs on its own thread, away from the main thread, the ATEM connection and VISCA.
 
+## Camera control and tracking (VISCA)
+
+- **Drive commands never wait.** Pan/tilt and zoom drives each have one slot: a newer speed replaces one still on its way to the socket, and none waits for a reply. TCP's Nagle delay is off for VISCA over TCP. With it on, a drive written while an inquiry was unacknowledged at the TCP level was held back (about 20 ms more on Cam 4).
+- **Replies matched by kind and socket.** Acknowledgements (4z), completions (5z), inquiry answers (50) and errors (6z) are each matched for what they are, and anything unanswered expires instead of being waited on. If both of the camera's command sockets are busy (Companion drives these cameras too) and it refuses a drive with 60 03, the latest drive is sent again, so a stop is never lost.
+- **Tracking stops polling VISCA cameras.** A moving PTZOptics takes about 0.4 s to answer a position inquiry, and tracking stamped each answer when it arrived, so its idea of the camera's motion ran late. VISCA cameras' motion now comes from the speeds sent. Zoom is read when tracking starts and once after each zoom stops. Canon cameras are unchanged.
+- **Send and ACK times in `tracking.csv`.** New columns: `drive_out_time` (when the latest drive went onto the socket), `drive_queue_ms`, `drive_ack_ms` and `drives_replaced`.
+- **Measured on Cam 4** (`CUEVIDEO_LAGTEST`, 12 trials, camera returned to its exact position):
+
+  | | Before | After |
+  |---|---|---|
+  | Command to socket | 0.3 ms | 0.3 ms |
+  | Socket to ACK, at rest | 20 ms | 22 ms |
+  | Speed change to ACK, moving, right after a position read | 58 ms | 38 ms |
+  | Command to first moving picture (RTSP sub stream) | 178 ms | 187 ms |
+
+  So the physical command-to-picture lag is about 0.18 s. The 1.1 to 1.4 s the old tracking log implied came from the tracker's motion estimate (late-stamped position reads, and an assumed 0.45 s picture delay), not from commands queuing.
+- **River Run's tracking settings:** tilt on, speed 1, correction 1.2, latency 0.18 s (the measured median).
+- **Not yet checked with a person walking.** Speeds are no longer learned from position reads on VISCA cameras, so how fast the camera really turns for each speed is taken as sent.
+
 ## Stream paths confirmed at River Run (2026-11-25, ffprobe over TCP)
 
 | Camera | Main `/1` | Sub `/2` |

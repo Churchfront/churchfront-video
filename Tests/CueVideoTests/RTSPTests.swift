@@ -157,3 +157,15 @@ final class RTSPTests: XCTestCase {
         XCTAssertEqual(RTSPStatus.offline("No video for 5 seconds").text, "Offline: No video for 5 seconds")
     }
 }
+
+final class TrackMotionTests: XCTestCase {
+    /// The camera's speed is worked out from what was sent, each speed held until the next.
+    func testSentSpeedAveragesWhatWasSent() {
+        let t0 = Date()
+        let log = [(at: t0, pan: 0.0, tilt: 0.0), (at: t0.addingTimeInterval(1), pan: 1000.0, tilt: -200.0)]
+        let v = AutoTracker.sentSpeed(log, from: t0.addingTimeInterval(0.5), to: t0.addingTimeInterval(1.5))
+        XCTAssertEqual(v.pan, 500, accuracy: 0.001)
+        XCTAssertEqual(v.tilt, -100, accuracy: 0.001)
+        XCTAssertEqual(AutoTracker.sentSpeed([], from: t0, to: t0.addingTimeInterval(1)).pan, 0)
+    }
+}

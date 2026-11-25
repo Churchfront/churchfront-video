@@ -220,6 +220,127 @@ enum SelfTest {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { tick(1) }
     }
 
+    /// CUEVIDEO_LAGTEST=camera-ip (a PTZOptics on VISCA over TCP): measures command to picture.
+    /// Each trial starts a slow pan from rest and times it to the socket, to the camera's
+    /// acknowledgement, and to the first picture (RTSP sub stream, or CUEVIDEO_LAGURL) that
+    /// shows it moving. While the camera moves it reads the position (the inquiry a moving
+    /// PTZOptics is slow to answer) and changes speed, timing that drive's acknowledgement.
+    /// The camera goes back exactly where it was at the end. It moves the camera, so check
+    /// it isn't on Live first. CUEVIDEO_LAGTRIALS sets the number of trials (6).
+    static func lagTest(_ host: String) {
+        let env = ProcessInfo.processInfo.environment
+        func log(_ s: String) { print("LAG", s); fflush(stdout) }
+        let ptz = Booth.shared.ptz
+        var cam = PTZCamera(); cam.name = "lag"; cam.host = host; cam.proto = .rawTCP; cam.port = 5678
+        ptz.cameras = [cam]
+        let url = env["CUEVIDEO_LAGURL"] ?? "rtsp://\(host):554/2"
+        RTSPFeedHub.shared.retain(url)
+        let feed = RTSPFeedHub.shared.feed(url)
+        let trials = Int(env["CUEVIDEO_LAGTRIALS"] ?? "") ?? 6
+        var timings: [DriveTiming] = []
+        ptz.onDriveTiming = { _, t in timings.append(t) }
+        func timing(after t: Date) -> DriveTiming? { timings.filter { $0.queued >= t.addingTimeInterval(-0.005) }.min { $0.queued < $1.queued } }
+
+        // A coarse grey copy of a picture: 80 by 45 samples of the green channel.
+        func grid(_ pb: CVPixelBuffer) -> [Double] {
+            CVPixelBufferLockBaseAddress(pb, .readOnly); defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+            guard let base = CVPixelBufferGetBaseAddress(pb) else { return [] }
+            let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb), row = CVPixelBufferGetBytesPerRow(pb)
+            let p = base.assumingMemoryBound(to: UInt8.self)
+            var out: [Double] = []; out.reserveCapacity(3600)
+            for y in 0..<45 { for x in 0..<80 { out.append(Double(p[(y * h / 45) * row + (x * w / 80) * 4 + 1])) } }
+            return out
+        }
+        func diff(_ a: [Double], _ b: [Double]) -> Double {
+            guard a.count == b.count, !a.isEmpty else { return 0 }
+            return zip(a, b).reduce(0) { $0 + abs($1.0 - $1.1) } / Double(a.count)
+        }
+        /// Watches new pictures on a background thread for up to `limit` seconds: returns when
+        /// one differs from `ref` by more than `over`, with the time it arrived.
+        func watch(from ref: [Double], over: Double, limit: Double, _ done: @escaping (Date?) -> Void) {
+            DispatchQueue.global(qos: .userInteractive).async {
+                var seen = feed.latest(after: 0)?.1 ?? 0
+                let end = Date().addingTimeInterval(limit)
+                while Date() < end {
+                    if let (pb, n) = feed.latest(after: seen) {
+                        seen = n
+                        let at = Date()
+                        if diff(grid(pb), ref) > over { DispatchQueue.main.async { done(at) }; return }
+                    }
+                    usleep(1000)
+                }
+                DispatchQueue.main.async { done(nil) }
+            }
+        }
+        func median(_ v: [Double]) -> Double { let s = v.sorted(); return s.isEmpty ? .nan : s[s.count / 2] }
+
+        var home: PTZPosition?
+        var lags: [Double] = [], sends: [Double] = [], acks: [Double] = [], movingAcks: [Double] = []
+        func restoreAndQuit(_ code: Int32) {
+            ptz.trackDriveRaw(pan: 0, tilt: 0, camera: cam.id)
+            if let home { ptz.go(to: PTZShot(name: "home", home), camera: cam.id) }
+            log(String(format: "summary over %d trials (medians): command to socket %.1f ms; socket to ACK at rest %.1f ms; socket to ACK while moving, right after a position read %.1f ms; command to first moving picture %.0f ms",
+                       lags.count, median(sends), median(acks), median(movingAcks), median(lags)))
+            log("moving speed-change ACKs: " + movingAcks.map { String(format: "%.0f", $0) }.joined(separator: ", ") + " ms")
+            log("picture lags: " + lags.map { String(format: "%.0f", $0) }.joined(separator: ", ") + " ms")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { RTSPFeedHub.shared.release(url); exit(code) }
+        }
+        func trial(_ i: Int) {
+            guard i < trials else { restoreAndQuit(0); return }
+            // Settled: learn how much the still picture flickers.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                guard let (pb0, _) = feed.latest(after: 0) else { log("no picture"); restoreAndQuit(1); return }
+                let ref0 = grid(pb0)
+                var noise = 0.0
+                let until = Date().addingTimeInterval(0.6)
+                DispatchQueue.global().async {
+                    var seen: UInt64 = 0
+                    while Date() < until { if let (pb, n) = feed.latest(after: seen) { seen = n; noise = max(noise, diff(grid(pb), ref0)) }; usleep(2000) }
+                    DispatchQueue.main.async {
+                        guard let (pbRef, _) = feed.latest(after: 0) else { restoreAndQuit(1); return }
+                        let ref = grid(pbRef)
+                        let dir = i % 2 == 0 ? 1 : -1
+                        let call = Date()
+                        ptz.trackDriveRaw(pan: 800 * dir, tilt: 0, camera: cam.id)
+                        watch(from: ref, over: noise * 2 + 1.5, limit: 2) { moved in
+                            if let moved { lags.append(moved.timeIntervalSince(call) * 1000) } else { log("trial \(i + 1): no movement seen") }
+                            if let t = timing(after: call) { sends.append(t.sendMs); if let a = t.ackMs { acks.append(a) } }
+                        }
+                        // Moving now: read the position, then change speed straight after.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            ptz.readPosition(camera: cam.id) { _ in }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                                let call2 = Date()
+                                ptz.trackDriveRaw(pan: 1000 * dir, tilt: 0, camera: cam.id)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                                    if let t = timing(after: call2), let a = t.ackMs { movingAcks.append(a + t.sendMs) }
+                                    ptz.trackDriveRaw(pan: 0, tilt: 0, camera: cam.id)
+                                    log(String(format: "trial %d: picture %@ ms, speed change acknowledged %@ ms after it was asked", i + 1,
+                                               lags.count > movingAcks.count - 1 ? String(format: "%.0f", lags.last ?? -1) : "-",
+                                               movingAcks.last.map { String(format: "%.0f", $0) } ?? "never"))
+                                    trial(i + 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Wait for the camera and the picture, note where it points, then start.
+        func ready(_ n: Int) {
+            if feed.live, ptz.online.contains(cam.id) {
+                ptz.readShotPosition(camera: cam.id) { p in
+                    guard let p else { log("couldn't read where the camera points; not moving it"); exit(1) }
+                    home = p
+                    log("camera at pan \(p.pan) tilt \(p.tilt) zoom \(p.zoom); Nagle \(env["CUEVIDEO_VISCA_NAGLE"] == "1" ? "on (old)" : "off (new)")")
+                    trial(0)
+                }
+            } else if n > 80 { log("camera or picture never came up (picture: \(feed.status.text))"); exit(1) }
+            else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { ready(n + 1) } }
+        }
+        ready(0)
+    }
+
     /// CUEVIDEO_FOLLOWTEST=1: puts each linked camera's input on M/E 1 preview (never program),
     /// checks "Follow next" selects that camera, then puts preview back.
     static func followTest() {
