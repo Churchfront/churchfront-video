@@ -27,12 +27,13 @@ enum Snapshots {
                 }
                 results[i] = Result(info: info, image: image)
             }
-            // A camera seen over NDI: take the next frame of its picture (waiting up to 4 s for
-            // the stream to start if nothing is showing it now).
-            if c.proto != .canonXC {
+            // A camera seen over RTSP or NDI: take the next frame of its picture (waiting up to
+            // 4 s for the stream to start if nothing is showing it now).
+            let isCanon: Bool = { if case .canon? = CameraPicture.of(c) { return true }; return false }()
+            if !isCanon {
                 DispatchQueue.main.async {
                     guard let picture = CameraPicture.of(c) else {
-                        results[i] = Result(info: ["camera": c.name, "error": "\(c.name) has no picture in Churchfront Video. Set an NDI picture for its switcher input in Setup."])
+                        results[i] = Result(info: ["camera": c.name, "error": "\(c.name) has no picture in Churchfront Video. Set its picture (RTSP or NDI) in Setup, Cameras."])
                         group.leave(); return
                     }
                     picture.retain()

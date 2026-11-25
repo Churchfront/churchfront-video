@@ -174,6 +174,52 @@ enum SelfTest {
         DispatchQueue.main.asyncAfter(deadline: .now() + 90) { log("timed out"); exit(1) }
     }
 
+    /// CUEVIDEO_RTSPTEST=url,url: opens those RTSP streams at once (as the app shows them),
+    /// prints each one's state every second, then a summary: codec and decoder, picture size
+    /// and frame rate, time to the first picture, decode time, and this app's processor use.
+    /// CUEVIDEO_RTSPSECS sets how long (15 s). Only watches video: sends nothing to the
+    /// switcher or the cameras' controls, so it's safe during a service.
+    static func rtspTest(_ list: String) {
+        func log(_ s: String) { print("RTSP", s); fflush(stdout) }
+        let urls = list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        let secs = Int(ProcessInfo.processInfo.environment["CUEVIDEO_RTSPSECS"] ?? "") ?? 15
+        let began = Date()
+        var firstAt: [String: Double] = [:]
+        var last: [String: String] = [:]
+        func cpu() -> Double {
+            var u = rusage(); getrusage(RUSAGE_SELF, &u)
+            return Double(u.ru_utime.tv_sec + u.ru_stime.tv_sec) + Double(u.ru_utime.tv_usec + u.ru_stime.tv_usec) / 1e6
+        }
+        var cpuAtLive: Double?, liveAt: Date?
+        for u in urls { RTSPFeedHub.shared.retain(u) }
+        func tick(_ n: Int) {
+            let now = Date().timeIntervalSince(began)
+            for u in urls {
+                let f = RTSPFeedHub.shared.feed(u)
+                if f.live, firstAt[u] == nil { firstAt[u] = now }
+                let line = f.status.text
+                if line != last[u] || n % 5 == 0 { log(String(format: "%5.1fs %@  %@", now, u, line)) }
+                last[u] = line
+            }
+            if cpuAtLive == nil, urls.allSatisfy({ firstAt[$0] != nil }) { cpuAtLive = cpu(); liveAt = Date() }
+            if n >= secs {
+                log("--- summary")
+                for u in urls {
+                    let f = RTSPFeedHub.shared.feed(u), st = f.decodeStats
+                    log("\(u): \(f.status.text); \(f.detail.isEmpty ? "no decoder" : f.detail); first picture \(firstAt[u].map { String(format: "%.2f s", $0) } ?? "never"); decode \(String(format: "%.1f", st.ms)) ms avg; \(st.frames) pictures")
+                }
+                if let c = cpuAtLive, let t = liveAt {
+                    log(String(format: "processor while all live: %.0f%% of one core over %.0f s", (cpu() - c) / Date().timeIntervalSince(t) * 100, Date().timeIntervalSince(t)))
+                }
+                for u in urls { RTSPFeedHub.shared.release(u) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { exit(urls.allSatisfy { firstAt[$0] != nil } ? 0 : 1) }
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { tick(n + 1) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { tick(1) }
+    }
+
     /// CUEVIDEO_FOLLOWTEST=1: puts each linked camera's input on M/E 1 preview (never program),
     /// checks "Follow next" selects that camera, then puts preview back.
     static func followTest() {

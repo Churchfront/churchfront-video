@@ -30,6 +30,25 @@ public enum VISCAProtocol: String, Codable, CaseIterable, Identifiable {
     public var canStorePresets: Bool { self != .canonXC }
 }
 
+/// Where Churchfront Video gets a camera's live picture.
+public enum CameraVideoSource: String, Codable, CaseIterable, Identifiable {
+    /// No picture from this camera.
+    case off
+    /// A Canon camera's own motion-JPEG preview over HTTP.
+    case canon
+    /// An NDI stream (the camera's own, or the one set for its switcher input).
+    case ndi
+    /// The camera's RTSP stream (H.264 or H.265), decoded on this Mac. Needs no license.
+    case rtsp
+    public var id: String { rawValue }
+}
+
+/// One of a camera's two RTSP streams: main (full size, `/1` on PTZOptics) or sub (small, `/2`).
+public enum RTSPStream: String, Codable, CaseIterable, Identifiable {
+    case main, sub
+    public var id: String { rawValue }
+}
+
 public struct PTZCamera: Codable, Identifiable, Hashable {
     public var id = UUID()
     public var name = "Camera"
@@ -47,9 +66,22 @@ public struct PTZCamera: Codable, Identifiable, Hashable {
     /// The order the camera's own presets are shown in, by preset number. Ones not listed
     /// come after, by number.
     public var presetOrder: [Int] = []
+    /// Where the camera's picture comes from. Left out: as before RTSP was added (a Canon's
+    /// own preview, otherwise the NDI picture set for its switcher input).
+    public var video: CameraVideoSource?
+    /// With `video` ndi: the NDI source to show. Left out: the one set for its switcher input.
+    public var ndi: String?
+    /// With `video` rtsp: the main and sub stream addresses. Left out: rtsp://host:554/1 and /2
+    /// (PTZOptics). A login goes in the address: rtsp://user:password@host:554/1.
+    public var rtspMain: String?
+    public var rtspSub: String?
+    /// Which stream the small tiles use (sub when left out) and which the Next and Live
+    /// monitors use (main when left out).
+    public var rtspTiles: RTSPStream?
+    public var rtspMonitors: RTSPStream?
     public init() {}
 
-    private enum Keys: String, CodingKey { case id, name, host, port, proto, atemInput, firstPreset, presetNames, shots, presetOrder }
+    private enum Keys: String, CodingKey { case id, name, host, port, proto, atemInput, firstPreset, presetNames, shots, presetOrder, video, ndi, rtspMain, rtspSub, rtspTiles, rtspMonitors }
 
     /// Lenient, so a camera can be written by hand (or by Claude) in the config file:
     /// only `host` is needed, everything else has a sensible default. The port follows
@@ -66,6 +98,23 @@ public struct PTZCamera: Codable, Identifiable, Hashable {
         presetNames = try c.decodeIfPresent([Int: String].self, forKey: .presetNames) ?? [:]
         shots = try c.decodeIfPresent([PTZShot].self, forKey: .shots) ?? []
         presetOrder = try c.decodeIfPresent([Int].self, forKey: .presetOrder) ?? []
+        video = try c.decodeIfPresent(CameraVideoSource.self, forKey: .video)
+        ndi = try c.decodeIfPresent(String.self, forKey: .ndi)
+        rtspMain = try c.decodeIfPresent(String.self, forKey: .rtspMain)
+        rtspSub = try c.decodeIfPresent(String.self, forKey: .rtspSub)
+        rtspTiles = try c.decodeIfPresent(RTSPStream.self, forKey: .rtspTiles)
+        rtspMonitors = try c.decodeIfPresent(RTSPStream.self, forKey: .rtspMonitors)
+    }
+
+    /// The default RTSP address for a stream: rtsp://host:554/1 (main) or /2 (sub), as PTZOptics serves them.
+    public func defaultRTSP(_ stream: RTSPStream) -> String {
+        "rtsp://\(host):554/\(stream == .main ? 1 : 2)"
+    }
+
+    /// The RTSP address for a stream: the one typed in, or the default.
+    public func rtspURL(_ stream: RTSPStream) -> String {
+        let typed = (stream == .main ? rtspMain : rtspSub)?.trimmingCharacters(in: .whitespaces) ?? ""
+        return typed.isEmpty ? defaultRTSP(stream) : typed
     }
 }
 

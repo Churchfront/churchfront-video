@@ -209,7 +209,7 @@ final class AutoTracker: ObservableObject {
     func start(_ camera: PTZCamera, at point: CGPoint? = nil, size: ShotSize? = nil, person: String? = nil, done: ((String?) -> Void)? = nil) {
         stop(camera.id)
         guard let picture = CameraPicture.of(camera) else {
-            done?("Auto tracking needs the camera's picture: a Canon camera, or an NDI picture set for its switcher input in Setup.")
+            done?("Auto tracking needs the camera's picture: set it (RTSP, NDI or a Canon's own preview) in Setup, Cameras.")
             return
         }
         var s = Session(camera: camera.id)

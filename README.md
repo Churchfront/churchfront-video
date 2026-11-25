@@ -93,6 +93,10 @@ Tiles and the Next and Live monitors can show any NDI source, typically a Church
 
 Previews use NDI's low-bandwidth preview stream, so they cost little network or processor time. They need the NDI runtime on this Mac (NDI Tools). In the config file, it's the `ndi` field on a source or key, with the exact name from Setup or Claude's `list_ndi_sources`. The preview shows what Churchfront Screens is drawing, not the switcher's actual output.
 
+## Camera pictures over RTSP
+
+Each camera's picture can come over RTSP (Setup, Cameras, Picture), which works with PTZOptics, OBSBOT and most IP cameras with no NDI license. Churchfront Video speaks RTSP itself (`Sources/CueVideo/RTSPFeed.swift`): it asks for the video over the RTSP connection (TCP), reassembles H.264 or H.265 from RTP, and decodes each picture on the Mac's hardware decoder the moment it arrives. There is no buffering and no third-party library. Tiles, tracking and snapshots use the sub stream. The Next and Live monitors use the main stream. A dropped stream shows Offline with the reason and reconnects on its own (2 s, backing off to 10). In the config file, a camera takes `"video": "rtsp"` and, optionally, `rtspMain`, `rtspSub` (default `rtsp://host:554/1` and `/2`), `rtspTiles` and `rtspMonitors`. `CUEVIDEO_RTSPTEST=url,url` checks streams headlessly and only watches video.
+
 ## Auto tracking
 
 **Track** (under the joystick) makes the Canon camera on Next follow the person nearest the middle of its shot. Click a person on the Next picture to follow them instead. Churchfront Video finds people and their body landmarks (eyes, shoulders, hips, ankles) in the camera's preview picture with Apple's Vision framework. It works out whether the shot is **shoulders up**, **waist up** or **full length**, and frames it the way a broadcast operator would:

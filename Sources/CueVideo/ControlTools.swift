@@ -41,7 +41,7 @@ enum ControlTools {
         // Status and setup
         tool("get_status", "Everything Churchfront Video knows right now: switcher connection, what's Live and Next on each M/E, keys, DSKs, aux, macros, recording and streaming, every source, the volunteer source row and key buttons, and each camera's connection, control, exposure, saved shots and on-camera presets."),
         tool("get_config", "The setup as saved in Churchfront Video's config file (JSON): switcher address, volunteer M/E, source row, key buttons, cameras and their saved shots."),
-        tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 4, ptzSpeed 0.25 to 2 (manual camera control speed), trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources. pictures ({input number: NDI source name}, a live picture for a switcher input that is not in sources, such as a stage display). Routing: mixNames (what each M/E is for, from M/E 1), screens ([{name, aux: [numbers from 1], note, volunteer, pinned (a small preview in the top bar)}]), routes (volunteer routing buttons: [{label, set: [{aux, source}]}], source as an input number; M/E 1 program is 10010, M/E 2 program 10020); each one given replaces that whole field. Read get_config first and send back the edited field.",
+        tool("update_config", "Change the setup. Give any of the top-level fields (atemHost, me, sources, keys, cameras, trackSpeed 0.5 to 4, ptzSpeed 0.25 to 2 (manual camera control speed), trackTilt, trackZoom). Sources and keys take an optional ndi: an NDI source name from list_ndi_sources. Each camera takes video (where its live picture comes from: off, canon, ndi or rtsp; RTSP needs no license and suits PTZOptics, OBSBOT and most IP cameras), ndi (with video ndi), rtspMain and rtspSub (with video rtsp; left out they are rtsp://host:554/1 and /2, the PTZOptics paths; a login goes in the address as rtsp://user:password@host/...), rtspTiles (sub by default) and rtspMonitors (main by default). pictures ({input number: NDI source name}, a live picture for a switcher input that is not in sources, such as a stage display). Routing: mixNames (what each M/E is for, from M/E 1), screens ([{name, aux: [numbers from 1], note, volunteer, pinned (a small preview in the top bar)}]), routes (volunteer routing buttons: [{label, set: [{aux, source}]}], source as an input number; M/E 1 program is 10010, M/E 2 program 10020); each one given replaces that whole field. Read get_config first and send back the edited field.",
              ["config": ["type": "object", "description": "Fields to replace, in the config file's format."]], required: ["config"]),
         tool("show_window", "Show a view of Churchfront Video's window on screen: operator (the booth screen, also called main), or a page of the Engineer view: scan (stage scan), routing, switcher (the full switcher), setup or status.", ["window": choice("Which view or page.", ["operator", "main", "scan", "routing", "switcher", "setup", "status"])], required: ["window"]),
 
@@ -697,6 +697,7 @@ enum ControlTools {
                 "on_live": c.atemInput.map { (s.tally[$0] ?? 0) & 1 != 0 } ?? false,
                 "on_next": c.atemInput.map { (s.tally[$0] ?? 0) & 2 != 0 } ?? false,
                 "shots": shots, "camera_presets": presets,
+                "picture": Self.pictureInfo(c, store),
                 "tracking": AutoTracker.shared.sessions[c.id].map { t -> Any in
                     ["state": t.phase.rawValue, "framing": t.size.rawValue, "picture_is": t.seen?.rawValue ?? "unknown", "person": t.person ?? ""]
                 } ?? false,
@@ -739,6 +740,23 @@ enum ControlTools {
             "stage_scan_names": StageCast.shared.names,
             "config_file": store.url.path,
         ]
+    }
+}
+
+extension ControlTools {
+    /// A camera's picture for Claude: its type and, for RTSP, each stream's address and state.
+    static func pictureInfo(_ c: PTZCamera, _ store: ConfigStore) -> [String: Any] {
+        switch CameraPicture.of(c, store) {
+        case nil: return ["type": "none"]
+        case .canon?: return ["type": "canon", "receiving": CanonFeedHub.shared.isLive(c).map { $0 as Any } ?? "not shown now"]
+        case .ndi(let n)?: return ["type": "ndi", "source": n, "receiving": NDIFeedHub.shared.isLive(n).map { $0 as Any } ?? "not shown now"]
+        case .rtsp?:
+            func stream(_ role: PictureRole) -> [String: Any] {
+                guard case .rtsp(let u)? = CameraPicture.of(c, store, role: role) else { return [:] }
+                return ["url": u, "state": RTSPFeedHub.shared.status(u)?.text ?? "not shown now", "decoder": RTSPFeedHub.shared.detail(u)]
+            }
+            return ["type": "rtsp", "tiles": stream(.tile), "monitors": stream(.monitor)]
+        }
     }
 }
 

@@ -213,8 +213,11 @@ final class ConfigStore: ObservableObject {
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        url = support.appendingPathComponent("CueVideo", isDirectory: true).appendingPathComponent("config.json")
-        readOnly = ProcessInfo.processInfo.environment.keys.contains { $0.hasPrefix("CUEVIDEO_") }
+        // CUEVIDEO_CONFIG=<file>: a self-test reads its setup from there (never writing it).
+        let env = ProcessInfo.processInfo.environment
+        url = env["CUEVIDEO_CONFIG"].map { URL(fileURLWithPath: $0) }
+            ?? support.appendingPathComponent("CueVideo", isDirectory: true).appendingPathComponent("config.json")
+        readOnly = env.keys.contains { $0.hasPrefix("CUEVIDEO_") }
     }
 
     func attach(_ booth: Booth) {
@@ -317,6 +320,9 @@ final class ConfigStore: ObservableObject {
         b.ptz.manualSpeed = config.ptzSpeed
         let me = max(0, config.me - 1)
         if b.me != me { b.me = me }
+        // A self-test with its own setup file shows that file's cameras (it never connects
+        // to that file's switcher; the test names its own).
+        if readOnly, ProcessInfo.processInfo.environment["CUEVIDEO_CONFIG"] != nil, b.ptz.cameras != config.cameras { b.ptz.cameras = config.cameras }
         guard !readOnly else { return }
         if b.atem.host != config.atemHost { b.atem.connect(config.atemHost) }
         if b.ptz.cameras != config.cameras { b.ptz.cameras = config.cameras }

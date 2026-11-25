@@ -57,7 +57,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .switcher: return nil
         case .sources: return "Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in Churchfront Screens, add an NDI output to that screen) so the tile and the Next and Live monitors show it."
         case .keys: return "Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in Churchfront Screens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures."
-        case .cameras: return "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it."
+        case .cameras: return "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it. For the picture, RTSP works with PTZOptics, OBSBOT and most IP cameras with no license: the tiles use the small sub stream and the Next and Live monitors the full-size main stream."
         case .tracking: return "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back."
         case .assistant: return "Connecting adds Churchfront Video to the Claude desktop app on this Mac. Claude can then find your switcher and cameras on the network, set them up with you, and run the switcher when you ask. It checks with you before changing anything live. Claude for Mac is free from claude.ai/download."
         case .file: return "The file is plain JSON. You, the system owner or Claude can edit it directly; Churchfront Video picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it."
@@ -359,6 +359,13 @@ struct CameraRow: View {
     let remove: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: T.s2) {
+            controls
+            CameraPictureRow(camera: $camera).padding(.leading, 18)
+        }
+    }
+
+    private var controls: some View {
         HStack(spacing: T.s2) {
             Circle().fill(ptz.online.contains(camera.id) ? T.success : T.lineStrong).frame(width: 8, height: 8)
                 .frame(width: 10).help(ptz.online.contains(camera.id) ? "Answering" : "Not answering")
@@ -387,6 +394,129 @@ struct CameraRow: View {
             Spacer(minLength: 0)
             IconButton(icon: "trash", help: "Remove \(camera.name)", action: remove)
         }
+    }
+}
+
+/// Where a camera's picture comes from (None, Canon preview, NDI or RTSP), and for RTSP its
+/// two stream addresses, which one the tiles and the monitors use, and how the stream is doing.
+struct CameraPictureRow: View {
+    @Binding var camera: PTZCamera
+    @EnvironmentObject var store: ConfigStore
+
+    private func label(_ v: CameraVideoSource) -> String {
+        switch v {
+        case .off: return "None"
+        case .canon: return "Canon preview"
+        case .ndi: return "NDI"
+        case .rtsp: return "RTSP"
+        }
+    }
+
+    private var choices: [CameraVideoSource] { camera.proto == .canonXC ? [.off, .canon, .ndi, .rtsp] : [.off, .ndi, .rtsp] }
+
+    /// What's in use now: the setting, or for cameras set up before it existed, what they show.
+    private var current: CameraVideoSource { camera.video ?? CameraPicture.kind(camera, store) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: T.s2) {
+            HStack(spacing: T.s2) {
+                Text("Picture").font(.sans(12, .semibold)).foregroundStyle(T.inkSubtle).frame(width: 52, alignment: .leading)
+                MenuField(text: label(current), width: 140, icon: "video") {
+                    ForEach(choices) { v in Button(label(v)) { choose(v) } }
+                }
+                .help("Where Churchfront Video gets this camera's live picture for its tile, the Next and Live monitors, auto tracking and snapshots. RTSP needs no license and works with PTZOptics, OBSBOT and most IP cameras.")
+                switch current {
+                case .ndi:
+                    NDIPicker(selection: camera.ndi ?? store.ndi(camera.atemInput), none: "Choose an NDI source") { camera.ndi = $0 }
+                        .frame(width: 300)
+                case .rtsp:
+                    MenuField(text: "Tiles: \((camera.rtspTiles ?? .sub) == .sub ? "sub stream" : "main stream")", width: 160) {
+                        Button("Sub stream (smaller, recommended)") { camera.rtspTiles = nil }
+                        Button("Main stream") { camera.rtspTiles = .main }
+                    }
+                    .help("The stream the small source tiles, auto tracking and snapshots use.")
+                    MenuField(text: "Monitors: \((camera.rtspMonitors ?? .main) == .main ? "main stream" : "sub stream")", width: 180) {
+                        Button("Main stream (full size, recommended)") { camera.rtspMonitors = nil }
+                        Button("Sub stream") { camera.rtspMonitors = .sub }
+                    }
+                    .help("The stream the big Next and Live monitors use.")
+                case .canon:
+                    Text("The camera's own motion-JPEG preview").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                case .off:
+                    Text("No picture from this camera").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                }
+            }
+            if current == .rtsp {
+                RTSPAddressField(title: "Main", stream: .main, camera: $camera)
+                RTSPAddressField(title: "Sub", stream: .sub, camera: $camera)
+            }
+        }
+    }
+
+    private func choose(_ v: CameraVideoSource) {
+        camera.video = v
+        if v == .ndi, (camera.ndi ?? "").isEmpty { camera.ndi = store.ndi(camera.atemInput) }
+    }
+}
+
+/// One RTSP address, editable, with the stream's state beside it. Left at its default, the
+/// address follows the camera's IP address (rtsp://ip:554/1 or /2).
+struct RTSPAddressField: View {
+    let title: String
+    let stream: RTSPStream
+    @Binding var camera: PTZCamera
+    @State private var text = ""
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        HStack(spacing: T.s2) {
+            Text(title).font(.sans(12)).foregroundStyle(T.inkSubtle).frame(width: 52, alignment: .trailing)
+            TextField(camera.defaultRTSP(stream), text: $text)
+                .textFieldStyle(CueFieldStyle()).frame(width: 320)
+                .focused($editing)
+                .onSubmit(save)
+                .onChange(of: editing) { _, now in if !now { save() } }
+            if (stream == .main ? camera.rtspMain : camera.rtspSub) != nil {
+                Button("Use default") { set(nil); text = camera.defaultRTSP(stream) }.buttonStyle(.borderless).font(.sans(11))
+            }
+            RTSPStateText(url: camera.rtspURL(stream))
+        }
+        .onAppear { text = camera.rtspURL(stream) }
+        .onChange(of: camera.host) { _, _ in if !editing { text = camera.rtspURL(stream) } }
+    }
+
+    /// Saved when the field is left or Return is pressed, so the stream isn't reopened on every keystroke.
+    private func save() {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        set(t.isEmpty || t == camera.defaultRTSP(stream) ? nil : t)
+        if t.isEmpty { text = camera.defaultRTSP(stream) }
+    }
+
+    private func set(_ v: String?) {
+        if stream == .main { camera.rtspMain = v } else { camera.rtspSub = v }
+    }
+}
+
+/// How an RTSP stream is doing, in a few words, for Setup.
+struct RTSPStateText: View {
+    let url: String
+    @ObservedObject private var feed: RTSPFeed
+
+    init(url: String) {
+        self.url = url
+        feed = RTSPFeedHub.shared.feed(url)
+    }
+
+    var body: some View {
+        Group {
+            switch RTSPFeedHub.shared.status(url) {
+            case nil: Text("Not on screen now").foregroundStyle(T.inkSubtle)
+            case .connecting?: Text("Connecting").foregroundStyle(T.inkMuted)
+            case .live?: Text(feed.status.text + (feed.detail.isEmpty ? "" : ", \(feed.detail)")).foregroundStyle(T.success)
+            case .offline(let why)?: Text("Offline: \(why)").foregroundStyle(T.danger)
+            }
+        }
+        .font(.sans(11)).lineLimit(1)
     }
 }
 
@@ -601,11 +731,26 @@ enum StatusReport {
         let s = b.atem.state
         let input = c.atemInput.map { "\(s.inputs[$0]?.long ?? "input \($0)") (input \($0))" } ?? "not set"
         let picture: String = {
-            guard c.proto == .canonXC else { return "Not available for VISCA cameras" }
-            switch CanonFeedHub.shared.isLive(c) {
-            case .some(true): return "Coming in (Canon video.cgi, motion JPEG)"
-            case .some(false): return "Connecting or stopped"
-            case .none: return "Not showing on screen right now"
+            func rtsp(_ role: PictureRole) -> String? {
+                guard case .rtsp(let u)? = CameraPicture.of(c, b.store, role: role) else { return nil }
+                let state = RTSPFeedHub.shared.status(u).map { $0.text } ?? "not on screen now"
+                let detail = RTSPFeedHub.shared.detail(u)
+                return "\(role == .tile ? "tiles" : "monitors") \(u): \(state)\(detail.isEmpty || RTSPFeedHub.shared.status(u) == nil ? "" : ", \(detail)")"
+            }
+            switch CameraPicture.of(c, b.store) {
+            case .rtsp?:
+                return "RTSP. " + [rtsp(.tile), rtsp(.monitor)].compactMap { $0 }.joined(separator: "; ")
+            case .ndi(let n)?:
+                let live = NDIFeedHub.shared.isLive(n)
+                return "NDI \(n): " + (live == nil ? "not on screen now" : live! ? "coming in" : "connecting or stopped")
+            case .canon?:
+                switch CanonFeedHub.shared.isLive(c) {
+                case .some(true): return "Coming in (Canon video.cgi, motion JPEG)"
+                case .some(false): return "Connecting or stopped"
+                case .none: return "Not showing on screen right now"
+                }
+            case nil:
+                return "None set"
             }
         }()
         let presets = b.ptz.presetNames(c)
