@@ -20,8 +20,9 @@ Churchfront Video can now show a camera's live picture over RTSP. That's the way
 | Cam 2, PTZOptics `192.168.2.154` | H.264 High, 1280×720, 60 fps | H.264, 640×360, 30 fps |
 | Cam 3, PTZOptics `192.168.2.172` | H.264 High, 1920×1080, 30 fps | H.264, 640×360, 30 fps |
 | Cam 4, PTZOptics `192.168.2.181` | H.264 Baseline, 1920×1080, 30 fps | H.264, 640×360, 30 fps |
+| Tail 2, OBSBOT `192.168.2.156` | `/stream1`: H.264 High, 1920×1080, 30 fps | `/stream2`: H.265, 1920×1080, 30 fps |
 
-None of the three asks for a login. The OBSBOT Tail 2 (`.153`) answers on port 554, but `rtsp://192.168.2.153:554/` returned 400 Bad Request. Its path still needs finding in the OBSBOT app (optional for this release).
+None of them asks for a login. The OBSBOT only serves RTSP once RTSP mode is on in the OBSBOT app, and turning it on moved the camera from `.153` to `.156` (DHCP). Give it a DHCP reservation in UniFi so its VISCA control and picture don't move again. Both OBSBOT streams are full size, so the setup uses `/stream1` (H.264) for tiles and monitors alike, as one shared stream.
 
 Cam 2's main stream is set to 720p60 while Cams 3 and 4 send 1080p30. That's worth matching in the cameras' own settings if the monitors should look alike.
 
@@ -29,6 +30,7 @@ Cam 2's main stream is set to 720p60 while Cams 3 and 4 send 1080p30. That's wor
 
 - All six streams open at once in the release build: every one decoded in hardware, first picture within about a second, 26% of one processor core in total.
 - Pulled cable (simulated with a relay that goes silent): Offline, "No video for 5 seconds", retried with backoff, then Live again on its own. The other camera kept running.
+- The OBSBOT's H.264 lets the decoder hold pictures back for reordering. The first build lost those and showed it at 1 to 3 fps. Fixed: every picture the decoder hands back is kept, and while a stream never reorders (no B-frames, as on all four cameras) each picture is asked for straight away, so no frames of delay are added. All eight streams at once (four mains, three subs, the OBSBOT's H.265): 30 fps each (60 on Cam 2's main), 2 to 5 ms to decode, 22% of one core.
 - 48 unit tests pass, including 11 new ones for the RTSP parts (SDP, RTP reassembly, lost packets, Digest login, old config files).
 - `CUEVIDEO_RTSPTEST=url,url` runs the stream check headlessly. It only watches video, so it's safe during a service.
 

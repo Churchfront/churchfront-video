@@ -92,6 +92,7 @@ final class RTSPTests: XCTestCase {
         XCTAssertEqual(units.count, 2)
         XCTAssertEqual(units[0].nals, [[0x67, 0xAA], [0x68, 0xBB], [0x65, 1, 2, 3, 4, 5]])
         XCTAssertEqual(units[1].nals, [[0x41, 9, 9]])
+        XCTAssertEqual(units.map(\.timestamp), [100, 3100])
     }
 
     func testLostPacketDropsOnlyThatPicture() {

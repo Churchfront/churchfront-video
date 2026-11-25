@@ -482,7 +482,16 @@ final class RTSPSession {
             lastKeepAlive = Date()
             guard let track else { return }
             depacketizer = RTPDepacketizer(codec: track.codec, payloadType: track.payloadType)
-            decoder = VideoDecoder(codec: track.codec, parameterSets: track.parameterSets)
+            let d = VideoDecoder(codec: track.codec, parameterSets: track.parameterSets)
+            d.onPicture = { [weak self] pb, hardware, took in
+                guard let self, !self.closed else { return }
+                if !self.gotPicture {
+                    self.gotPicture = true
+                    self.onReady?("\(track.codec.label), \(hardware ? "hardware decode" : "software decode")")
+                }
+                self.onFrame?(pb, took)
+            }
+            decoder = d
             onReady?(track.codec.label)
         case .playing:
             break
@@ -498,18 +507,7 @@ final class RTSPSession {
 
     private func rtp(_ packet: UnsafeBufferPointer<UInt8>) {
         guard let depacketizer, let decoder else { return }
-        depacketizer.push(packet) { [weak self] unit in
-            guard let self else { return }
-            let began = Date()
-            decoder.decode(unit) { [weak self] pb, hardware in
-                guard let self, !self.closed else { return }
-                if !self.gotPicture {
-                    self.gotPicture = true
-                    self.onReady?("\(self.track?.codec.label ?? "Video"), \(hardware ? "hardware decode" : "software decode")")
-                }
-                self.onFrame?(pb, Date().timeIntervalSince(began))
-            }
-        }
+        depacketizer.push(packet) { unit in decoder.decode(unit) }
     }
 
     static func explain(_ e: Error, _ t: RTSPTarget?) -> String {
@@ -684,6 +682,8 @@ struct SDPVideoTrack: Equatable {
 /// One picture's worth of NAL units, as they came off the wire.
 struct AccessUnit {
     var nals: [[UInt8]]
+    /// The RTP timestamp: when to show it, in 90 kHz ticks.
+    var timestamp: UInt32 = 0
 }
 
 /// Turns RTP packets back into whole pictures (H.264 per RFC 6184, H.265 per RFC 7798):
@@ -734,7 +734,7 @@ final class RTPDepacketizer {
 
     private func finish(_ emit: (AccessUnit) -> Void) {
         fragment = nil
-        if !nals.isEmpty, !broken { emit(AccessUnit(nals: nals)) }
+        if !nals.isEmpty, !broken { emit(AccessUnit(nals: nals, timestamp: timestamp ?? 0)) }
         nals.removeAll(keepingCapacity: true)
         broken = false
     }
@@ -791,8 +791,20 @@ final class RTPDepacketizer {
 
 /// Hands whole pictures to VideoToolbox, on the Mac's hardware decoder, and gets back
 /// BGRA pictures in IOSurfaces that can go straight onto the screen.
+///
+/// Some cameras' H.264 (the OBSBOT Tail 2's, for one) lets the decoder hold several pictures
+/// back in case they need reordering, which would add a few frames of delay. While a stream's
+/// timestamps only ever go forward (no B-frames), each picture is asked for straight away.
 final class VideoDecoder {
     let codec: VideoCodec
+    /// Every decoded picture, whether it comes out at once or later: the picture, whether
+    /// the hardware decoder made it, and seconds from handing it in to getting it back.
+    var onPicture: ((CVPixelBuffer, Bool, TimeInterval) -> Void)?
+    private var lastTimestamp: UInt32?
+    /// The stream has sent a picture to show before the one before it (B-frames), so the
+    /// decoder must be left to put them back in order.
+    private(set) var reorders = false
+    private var submitted = Date()
     private var vps: [UInt8]?
     private var sps: [UInt8]?
     private var pps: [UInt8]?
@@ -831,7 +843,9 @@ final class VideoDecoder {
     private func isPicture(_ t: Int) -> Bool { codec == .h264 ? (1...5).contains(t) : (0...31).contains(t) }
     private func isKeyframe(_ t: Int) -> Bool { codec == .h264 ? t == 5 : (16...21).contains(t) }
 
-    func decode(_ unit: AccessUnit, _ out: (CVPixelBuffer, Bool) -> Void) {
+    func decode(_ unit: AccessUnit) {
+        if let last = lastTimestamp, Int32(bitPattern: unit.timestamp &- last) < 0 { reorders = true }
+        lastTimestamp = unit.timestamp
         var changed = false
         var slices: [[UInt8]] = []
         var key = false
@@ -865,13 +879,18 @@ final class VideoDecoder {
         guard CMSampleBufferCreateReady(allocator: kCFAllocatorDefault, dataBuffer: block, formatDescription: format, sampleCount: 1,
                                         sampleTimingEntryCount: 0, sampleTimingArray: nil, sampleSizeEntryCount: 1,
                                         sampleSizeArray: &size, sampleBufferOut: &sample) == noErr, let sample else { return }
-        var picture: CVPixelBuffer?
-        let status = VTDecompressionSessionDecodeFrame(session, sampleBuffer: sample, flags: [._1xRealTimePlayback], infoFlagsOut: nil) { status, _, image, _, _ in
-            if status == noErr, let image { picture = image }
+        submitted = Date()
+        let hw = hardware
+        // The handler can run during a later call, for a picture the decoder held back, so it
+        // hands pictures on itself rather than through this call.
+        let status = VTDecompressionSessionDecodeFrame(session, sampleBuffer: sample, flags: [._1xRealTimePlayback], infoFlagsOut: nil) { [weak self] status, _, image, _, _ in
+            guard let self, status == noErr, let image else { return }
+            self.onPicture?(image, hw, Date().timeIntervalSince(self.submitted))
         }
         if status == kVTInvalidSessionErr { invalidate(); needKeyframe = true; return }
         if status != noErr { needKeyframe = true; return }  // wait for a clean picture rather than show a smeared one
-        if let picture { out(picture, hardware) }
+        // No reordering in this stream: don't let the decoder sit on the picture.
+        if !reorders { VTDecompressionSessionFinishDelayedFrames(session) }
     }
 
     private func rebuildFormat() {
