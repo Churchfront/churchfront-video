@@ -1,0 +1,71 @@
+# Required checks on every pull request (SECURITY.md). The ruleset on main requires
+# "Code" and "Security" to pass before anyone can merge.
+name: Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  code:
+    name: Code
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build
+      - name: Tests
+        run: swift test
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan (this PR's commits)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          v=8.21.2
+          curl -sSLo gl.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${v}/gitleaks_${v}_linux_x64.tar.gz"
+          echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  gl.tgz" | sha256sum -c -
+          tar xzf gl.tgz gitleaks
+          ./gitleaks git --log-opts="${BASE}..${HEAD}" --redact --no-banner --exit-code 1
+      - name: Network listeners stay on this Mac
+        # The app may only accept connections on 127.0.0.1. A new listener, or one bound to
+        # every network interface, has to be looked at by a person before it ships.
+        run: |
+          set -euo pipefail
+          hits=$(grep -rnE 'NWListener\(|bind\(|listen\(|0\.0\.0\.0|INADDR_ANY' Sources || true)
+          allowed='Sources/CueVideo/ControlServer.swift'
+          bad=$(printf '%s\n' "$hits" | grep -v "^$allowed:" | grep -v '^$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::New network listener found. Bind it to 127.0.0.1, require a key, and add the file to this check's allow list in the same PR (see SECURITY.md)."
+            printf '%s\n' "$bad"; exit 1
+          fi
+          grep -q 'requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1"' "$allowed" \
+            || { echo "::error::ControlServer no longer binds to 127.0.0.1 only."; exit 1; }
+          echo "Only the control server listens, on 127.0.0.1."
+      - name: Dependencies come from Churchfront
+        # Package.resolved is the full list of outside code built into the app.
+        run: |
+          set -euo pipefail
+          others=$(grep -oE '"location" : "[^"]+"' Package.resolved | grep -v 'github.com/Churchfront/' || true)
+          if [ -n "$others" ]; then
+            echo "::error::A package from outside Churchfront was added. Name it and why in the PR's Security section, then add it to this check's allow list."
+            printf '%s\n' "$others"; exit 1
+          fi
+          echo "All packages are Churchfront's own."
