@@ -1,0 +1,32 @@
+# Every PR fills in the Security section of the template (SECURITY.md).
+# Required by the ruleset on main as "Security section".
+name: PR security section
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  security-section:
+    name: Security section
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check the PR's Security section
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          section=$(printf '%s\n' "$BODY" | tr -d '\r' | awk '/^## Security/{on=1;next} /^## /{on=0} on')
+          if [ -z "$(printf '%s' "$section" | tr -d '[:space:]')" ]; then
+            echo "::error::Add the '## Security' section from the PR template and tick each line (tick a line that doesn't apply, and say why)."; exit 1
+          fi
+          if printf '%s\n' "$section" | grep -qE '^\s*[-*] \[ \]'; then
+            echo "::error::The Security section has unticked lines. Tick each one (a line that doesn't apply: tick it and say why)."; exit 1
+          fi
+          if ! printf '%s\n' "$section" | grep -qiE '^\s*[-*] \[x\]'; then
+            echo "::error::The Security section has no ticked lines."; exit 1
+          fi
+          echo "Security section filled in."

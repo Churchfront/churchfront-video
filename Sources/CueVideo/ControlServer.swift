@@ -87,7 +87,10 @@ final class ControlServer {
                 headers[line[..<i].lowercased()] = line[line.index(after: i)...].trimmingCharacters(in: .whitespaces)
             }
         }
-        let len = Int(headers["content-length"] ?? "0") ?? 0
+        // A negative or oversized length would crash the slice below or hold the connection open.
+        guard let len = Int(headers["content-length"] ?? "0"), len >= 0, len <= 4 << 20 else {
+            return Request(method: "", path: "", headers: [:], body: Data())
+        }
         let bodyStart = end.upperBound
         guard d.distance(from: bodyStart, to: d.endIndex) >= len else { return nil }
         return Request(method: String(first[0]), path: String(first[1]), headers: headers,
@@ -102,8 +105,18 @@ final class ControlServer {
         c.send(content: Data(head.utf8) + data, completion: .contentProcessed { _ in c.cancel() })
     }
 
+    /// Compares the whole key every time, so the reply time doesn't hint at how much of a guess was right.
+    static func sameKey(_ given: String?, _ key: String) -> Bool {
+        guard let given, !key.isEmpty else { return false }
+        let a = Array(given.utf8), b = Array(key.utf8)
+        guard a.count == b.count else { return false }
+        var diff: UInt8 = 0
+        for i in 0..<a.count { diff |= a[i] ^ b[i] }
+        return diff == 0
+    }
+
     private func handle(_ r: Request, _ done: @escaping (Int, Any) -> Void) {
-        guard r.headers["x-cuevideo-token"] == token else { done(401, ["error": "Missing or wrong key."]); return }
+        guard Self.sameKey(r.headers["x-cuevideo-token"], token) else { done(401, ["error": "Missing or wrong key."]); return }
         switch (r.method, r.path) {
         case ("GET", "/tools"):
             DispatchQueue.main.async { done(200, ["tools": ControlTools.definitions]) }
