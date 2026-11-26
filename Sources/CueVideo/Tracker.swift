@@ -143,6 +143,12 @@ final class AutoTracker: ObservableObject {
         var imgVX = 0.0, imgVY = 0.0         // the person's motion in the picture, frames a second
         var moveX = 0.0, moveY = 0.0         // their real motion (right and up), frames a second
         var polling = false
+        /// VISCA cameras: when to read the zoom next (at the start, and once a zoom has stopped).
+        /// Their pan and tilt aren't read while tracking: a moving PTZOptics takes about 0.4 s
+        /// to answer, so its motion is worked out from the speeds sent instead.
+        var zoomReadAt: Date? = Date()
+        /// The latest drive command's trip to the camera, for the log.
+        var lastDrive: DriveTiming?
         /// Recent measured positions (degrees), for how fast the camera really moved.
         var polls: [(at: Date, pan: Double, tilt: Double)] = []
         /// Zoom hold, kept calm: when the size first looked wrong, and the last zoom's end and direction.
@@ -197,7 +203,11 @@ final class AutoTracker: ObservableObject {
     func attach() {
         ptz.onManualMove = { [weak self] id in self?.stop(id) }
         ptz.onManualZoom = { [weak self] id in self?.manualZoom(id) }
+        ptz.onDriveTiming = { [weak self] id, t in self?.sessions[id]?.lastDrive = t }
     }
+
+    /// Cameras driven over VISCA, whose motion tracking works out from what it sent.
+    private func isVISCA(_ id: UUID) -> Bool { (cameras[id]?.proto ?? .canonXC) != .canonXC }
 
     func isTracking(_ id: UUID) -> Bool { sessions[id] != nil }
 
@@ -209,7 +219,7 @@ final class AutoTracker: ObservableObject {
     func start(_ camera: PTZCamera, at point: CGPoint? = nil, size: ShotSize? = nil, person: String? = nil, done: ((String?) -> Void)? = nil) {
         stop(camera.id)
         guard let picture = CameraPicture.of(camera) else {
-            done?("Auto tracking needs the camera's picture: a Canon camera, or an NDI picture set for its switcher input in Setup.")
+            done?("Auto tracking needs the camera's picture: set it (RTSP, NDI or a Canon's own preview) in Setup, Cameras.")
             return
         }
         var s = Session(camera: camera.id)
@@ -273,6 +283,7 @@ final class AutoTracker: ObservableObject {
         s.manualZoomAt = Date()
         s.zooming = false
         s.sentZoom = 0
+        s.zoomReadAt = nil   // read it once the volunteer's zoom has settled
         sessions[id] = s
     }
 
@@ -479,6 +490,7 @@ final class AutoTracker: ObservableObject {
         if let m = s.manualZoomAt {
             if now.timeIntervalSince(m) > 0.8 {
                 s.manualZoomAt = nil
+                s.zoomReadAt = now
                 if let sc = s.scale {
                     s.holdScale = sc
                     s.size = ShotSize.classify(scale: sc, anklesInShot: person.anklesInShot, hipsInShot: person.hipsInShot) ?? s.size
@@ -512,7 +524,14 @@ final class AutoTracker: ObservableObject {
         let ta = now.addingTimeInterval(-latency + 0.05)
         let before = s.polls.filter { $0.at <= ta }
         var camRX = 0.0, camRY = 0.0
-        if before.count >= 2 {
+        if isVISCA(s.camera) {
+            // From the speeds sent, averaged over the 0.3 s before the picture was taken. The
+            // camera acknowledges a drive within a few hundredths of a second and is moving
+            // about 0.1 s after it.
+            let v = Self.sentSpeed(s.sentLog, from: ta.addingTimeInterval(-0.4), to: ta.addingTimeInterval(-0.1))
+            camRX = v.pan / 100 * s.gainPan / fovX
+            camRY = v.tilt / 100 * s.gainTilt / fovY
+        } else if before.count >= 2 {
             // Over the last three reads (about half a second), so the camera's own starts and
             // stops don't look like the person moving.
             let a = before[max(0, before.count - 3)], b = before[before.count - 1]
@@ -596,10 +615,12 @@ final class AutoTracker: ObservableObject {
         }
         let pan = units(rx, fovX, s.gainPan, s.panning)
         let tilt = units(ry, fovY, s.gainTilt, s.tilting)
-        TrackLog.shared.write(String(format: "%.3f,%@,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f,%.2f,%d,%.3f,%.3f,%d,%.2f,%.2f",
+        let d = s.lastDrive
+        TrackLog.shared.write(String(format: "%.3f,%@,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f,%.2f,%d,%.3f,%.3f,%d,%.2f,%.2f,%.3f,%.1f,%.1f,%d",
             now.timeIntervalSince1970, cameras[s.camera]?.name ?? "?", eye.x, ex, ey, s.imgVX, s.moveX, camX, rx,
             s.fov, s.gainPan, pan, tilt, urgency, s.panning ? 1 : 0, box.minX, box.maxX,
-            bodyDir, person.shoulderSpan.flatMap { sp in s.squareSpan.map { sp / max($0, 0.001) } } ?? -1, s.walkW))
+            bodyDir, person.shoulderSpan.flatMap { sp in s.squareSpan.map { sp / max($0, 0.001) } } ?? -1, s.walkW,
+            d?.sent.timeIntervalSince1970 ?? 0, d?.sendMs ?? -1, d?.ackMs ?? -1, d?.dropped ?? 0))
 
         // Hold the shot size as they come nearer or move away, calmly: only when the size has
         // been clearly wrong (over about a third) for 1.5 s, slowly, with a rest of 2 s after
@@ -705,6 +726,8 @@ final class AutoTracker: ObservableObject {
             ptz.trackDriveRaw(pan: Int(pan), tilt: Int(tilt), camera: s.camera)
         }
         if zoom != s.sentZoom {
+            // Read where the zoom ended up once the camera has stopped.
+            if zoom == 0 { s.zoomReadAt = Date().addingTimeInterval(0.4) }
             s.sentZoom = zoom
             ptz.trackZoom(zoom, camera: s.camera)
         }
@@ -713,7 +736,7 @@ final class AutoTracker: ObservableObject {
     /// Stops a camera whose picture has stopped coming in, so it never drifts on old frames.
     private func tick() {
         let now = Date()
-        for id in sessions.keys { poll(id) }
+        for id in sessions.keys { if isVISCA(id) { readZoom(id) } else { poll(id) } }
         for (id, var s) in sessions where now.timeIntervalSince(s.lastFrame) > 0.6 && (s.sentPan != 0 || s.sentTilt != 0 || s.sentZoom != 0) {
             hold(&s)
             s.phase = .searching
@@ -722,6 +745,37 @@ final class AutoTracker: ObservableObject {
         for (id, s) in sessions where s.target == nil && now.timeIntervalSince(s.started) > 4 {
             finish(id, s.person.map { "Can't see \($0) in the picture, or the picture isn't coming in." } ?? "No one is in the picture, or the picture isn't coming in.")
         }
+    }
+
+    /// A VISCA camera's angle of view, read only when it's due (at the start, and after a zoom
+    /// has stopped), never while tracking is zooming it.
+    private func readZoom(_ id: UUID) {
+        guard var s = sessions[id], !s.polling, s.sentZoom == 0, let at = s.zoomReadAt, at <= Date() else { return }
+        s.polling = true
+        sessions[id] = s
+        ptz.readZoom(camera: id) { [weak self] z in
+            guard let self, var s = self.sessions[id] else { return }
+            s.polling = false
+            if let z, z > 50 { s.fov = Double(z) / 100; s.zoomReadAt = nil }
+            else { s.zoomReadAt = Date().addingTimeInterval(1) }
+            self.sessions[id] = s
+        }
+    }
+
+    /// The average speed sent (camera units, right and up) between two times, from the log of
+    /// speeds sent: each held from when it was sent until the next.
+    static func sentSpeed(_ log: [(at: Date, pan: Double, tilt: Double)], from: Date, to: Date) -> (pan: Double, tilt: Double) {
+        let span = to.timeIntervalSince(from)
+        guard span > 0 else { return (0, 0) }
+        var pan = 0.0, tilt = 0.0
+        for (i, e) in log.enumerated() {
+            let start = max(from, e.at)
+            let end = min(to, i + 1 < log.count ? log[i + 1].at : to)
+            guard end > start else { continue }
+            let w = end.timeIntervalSince(start)
+            pan += e.pan * w; tilt += e.tilt * w
+        }
+        return (pan / span, tilt / span)
     }
 
     /// Reads where the camera really is: its angle of view, and how fast it's really turning
@@ -801,7 +855,10 @@ final class TrackLog {
     func write(_ line: String) {
         if handle == nil || lines > 20000 {
             try? handle?.close()
-            let head = "time,camera,eye_x,err_x,err_y,picture_vx,person_vx,camera_vx_then,want_vx,fov_deg,pan_gain,pan_sent,tilt_sent,edge_urgency,panning,box_min_x,box_max_x,body_turn,shoulder_share,walk_sure\n"
+            // drive_out_time: when the latest acknowledged drive command went onto the socket;
+            // drive_queue_ms from asking to sending it; drive_ack_ms from sending to the camera's
+            // acknowledgement (-1: none came); drives_replaced: older speeds it replaced unsent.
+            let head = "time,camera,eye_x,err_x,err_y,picture_vx,person_vx,camera_vx_then,want_vx,fov_deg,pan_gain,pan_sent,tilt_sent,edge_urgency,panning,box_min_x,box_max_x,body_turn,shoulder_share,walk_sure,drive_out_time,drive_queue_ms,drive_ack_ms,drives_replaced\n"
             FileManager.default.createFile(atPath: url.path, contents: Data(head.utf8))
             handle = try? FileHandle(forWritingTo: url)
             handle?.seekToEndOfFile()

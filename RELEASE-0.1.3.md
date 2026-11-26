@@ -1,0 +1,61 @@
+# Churchfront Video 0.1.3: RTSP camera pictures
+
+Churchfront Video can now show a camera's live picture over RTSP. That's the way in for River Run's PTZOptics cameras, whose NDI|HX licenses are inactive (NDI stopped selling camera upgrades on Dec 31, 2025). RTSP needs no license and nothing extra installed.
+
+## What changed
+
+- **A picture source for each camera.** Setup, Cameras now has a Picture row under each camera: None, NDI or RTSP (and Canon preview for Canon cameras). Cameras set up before this release keep working exactly as they did.
+- **RTSP, built in.** Churchfront Video speaks RTSP itself and decodes H.264 and H.265 on the Mac's hardware decoder (VideoToolbox). There is no FFmpeg or VLC inside, so nothing extra to bundle, sign or license.
+- **Main and sub streams.** Each RTSP camera has a main and a sub address, defaulting to `rtsp://<camera ip>:554/1` and `/2`, and both can be edited. Tiles, auto tracking and snapshots use the sub stream. The Next and Live monitors use the main stream. Either can be switched per camera.
+- **Low latency.** Video comes over the RTSP connection itself (TCP), with no buffering. Each picture goes to the decoder the moment its last packet arrives and shows on the next screen refresh. Decoding takes 4 to 7 ms a picture.
+- **Reconnects on its own.** After a dropped cable or a camera reboot, the tile shows Offline with the reason, then retries after 2 seconds, backing off to 10. Other tiles keep running. A broken stream can't freeze the window.
+- **Status on every tile.** Connecting, Live (size and frame rate, such as "640×360 · 30 fps"), or Offline with the last error. Status (Engineer, ⌘2) and Claude's `get_status` show each stream's address, state and decoder.
+- **Saved with the camera.** The settings live in each camera's entry in `config.json` (`video`, `rtspMain`, `rtspSub`, `rtspTiles`, `rtspMonitors`), next to its VISCA settings. Claude's `update_config` knows the fields.
+- **Kept apart from control.** Each stream runs on its own thread, away from the main thread, the ATEM connection and VISCA.
+
+## Camera control and tracking (VISCA)
+
+- **Drive commands never wait.** Pan/tilt and zoom drives each have one slot: a newer speed replaces one still on its way to the socket, and none waits for a reply. TCP's Nagle delay is off for VISCA over TCP. With it on, a drive written while an inquiry was unacknowledged at the TCP level was held back (about 20 ms more on Cam 4).
+- **Replies matched by kind and socket.** Acknowledgements (4z), completions (5z), inquiry answers (50) and errors (6z) are each matched for what they are, and anything unanswered expires instead of being waited on. If both of the camera's command sockets are busy (Companion drives these cameras too) and it refuses a drive with 60 03, the latest drive is sent again, so a stop is never lost.
+- **Tracking stops polling VISCA cameras.** A moving PTZOptics takes about 0.4 s to answer a position inquiry, and tracking stamped each answer when it arrived, so its idea of the camera's motion ran late. VISCA cameras' motion now comes from the speeds sent. Zoom is read when tracking starts and once after each zoom stops. Canon cameras are unchanged.
+- **Send and ACK times in `tracking.csv`.** New columns: `drive_out_time` (when the latest drive went onto the socket), `drive_queue_ms`, `drive_ack_ms` and `drives_replaced`.
+- **Measured on Cam 4** (`CUEVIDEO_LAGTEST`, 12 trials, camera returned to its exact position):
+
+  | | Before | After |
+  |---|---|---|
+  | Command to socket | 0.3 ms | 0.3 ms |
+  | Socket to ACK, at rest | 20 ms | 22 ms |
+  | Speed change to ACK, moving, right after a position read | 58 ms | 38 ms |
+  | Command to first moving picture (RTSP sub stream) | 178 ms | 187 ms |
+
+  So the physical command-to-picture lag is about 0.18 s. The 1.1 to 1.4 s the old tracking log implied came from the tracker's motion estimate (late-stamped position reads, and an assumed 0.45 s picture delay), not from commands queuing.
+- **River Run's tracking settings:** tilt on, speed 1, correction 1.2, latency 0.18 s (the measured median).
+- **Not yet checked with a person walking.** Speeds are no longer learned from position reads on VISCA cameras, so how fast the camera really turns for each speed is taken as sent.
+
+## Stream paths confirmed at River Run (2026-11-25, ffprobe over TCP)
+
+| Camera | Main `/1` | Sub `/2` |
+|---|---|---|
+| Cam 2, PTZOptics `192.168.2.154` | H.264 High, 1280×720, 60 fps | H.264, 640×360, 30 fps |
+| Cam 3, PTZOptics `192.168.2.172` | H.264 High, 1920×1080, 30 fps | H.264, 640×360, 30 fps |
+| Cam 4, PTZOptics `192.168.2.181` | H.264 Baseline, 1920×1080, 30 fps | H.264, 640×360, 30 fps |
+| Tail 2, OBSBOT `192.168.2.156` | `/stream1`: H.264 High, 1920×1080, 30 fps | `/stream2`: H.265, 1920×1080, 30 fps |
+
+None of them asks for a login. The OBSBOT only serves RTSP once RTSP mode is on in the OBSBOT app, and turning it on moved the camera from `.153` to `.156` (DHCP). Give it a DHCP reservation in UniFi so its VISCA control and picture don't move again. Both OBSBOT streams are full size, so the setup uses `/stream1` (H.264) for tiles and monitors alike, as one shared stream.
+
+Cam 2's main stream is set to 720p60 while Cams 3 and 4 send 1080p30. That's worth matching in the cameras' own settings if the monitors should look alike.
+
+## Tested
+
+- All six streams open at once in the release build: every one decoded in hardware, first picture within about a second, 26% of one processor core in total.
+- Pulled cable (simulated with a relay that goes silent): Offline, "No video for 5 seconds", retried with backoff, then Live again on its own. The other camera kept running.
+- The OBSBOT's H.264 lets the decoder hold pictures back for reordering. The first build lost those and showed it at 1 to 3 fps. Fixed: every picture the decoder hands back is kept, and while a stream never reorders (no B-frames, as on all four cameras) each picture is asked for straight away, so no frames of delay are added. All eight streams at once (four mains, three subs, the OBSBOT's H.265): 30 fps each (60 on Cam 2's main), 2 to 5 ms to decode, 22% of one core.
+- 48 unit tests pass, including 11 new ones for the RTSP parts (SDP, RTP reassembly, lost packets, Digest login, old config files).
+- `CUEVIDEO_RTSPTEST=url,url` runs the stream check headlessly. It only watches video, so it's safe during a service.
+
+## Still to test on site
+
+- Glass-to-glass latency (wave a hand in front of the lens).
+- A real cable pull on one camera.
+- VISCA and ATEM control while all streams run.
+- Quit and relaunch to confirm the settings were kept.

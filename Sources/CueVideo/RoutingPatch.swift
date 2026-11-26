@@ -18,6 +18,12 @@ struct SourcePicture: View {
     @EnvironmentObject var ptz: PTZController
     @EnvironmentObject var store: ConfigStore
 
+    /// NDI cameras show through the input's NDI picture below, as before.
+    static func isNDI(_ c: PTZCamera, _ store: ConfigStore) -> Bool {
+        if case .ndi? = CameraPicture.of(c, store) { return true }
+        return false
+    }
+
     private var resolved: Int? {
         guard let input, (10000..<11000).contains(input), input % 10 == 0 else { return input }
         return atem.state.program[(input - 10000) / 10 - 1] ?? input
@@ -27,7 +33,7 @@ struct SourcePicture: View {
         let id = resolved
         ZStack {
             Color.black
-            if let id, let cam = ptz.cameras.first(where: { $0.atemInput == id && $0.proto == .canonXC && !$0.host.isEmpty }) {
+            if let id, let cam = ptz.cameras.first(where: { $0.atemInput == id && CameraPicture.of($0, store) != nil && !Self.isNDI($0, store) }) {
                 CameraVideo(camera: cam).id(cam.id)
             } else if let n = store.ndi(id) {
                 NDIVideo(source: n).id(n)

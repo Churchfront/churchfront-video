@@ -104,7 +104,7 @@ struct BusMonitor: View {
     /// A source's picture: the camera's own preview, its NDI picture, or its name.
     @ViewBuilder func picture(_ input: Int?, pick: Bool) -> some View {
         if let camera = camera(on: input) {
-            CameraVideo(camera: camera, onPick: pick ? self.pick(camera) : nil).id(camera.id)
+            CameraVideo(camera: camera, role: .monitor, onPick: pick ? self.pick(camera) : nil).id(camera.id)
         } else if let n = store.ndi(input) {
             NDIVideo(source: n).id(n)
         } else {
