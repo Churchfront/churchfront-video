@@ -26,15 +26,16 @@ enum DeckItem: Hashable {
 /// camera is showing, and the place each camera was last sent to.
 final class ShotDeckState: ObservableObject {
     static let shared = ShotDeckState()
-    static let perPage = 10, columns = 5
+    static let perPage = 16, columns = 4, rows = 4
 
     @Published var page: [UUID: Int] = [:]
     @Published var lastUsed: [UUID: String] = [:]
 
-    /// The keys on the tiles, laid out like the grid: the top row on Q W E R T, the bottom on
-    /// A S D F G. (1 to 0 already pick sources.)
-    static let letters = ["Q", "W", "E", "R", "T", "A", "S", "D", "F", "G"]
-    static let keyCodes: [UInt16: Int] = [12: 0, 13: 1, 14: 2, 15: 3, 17: 4, 0: 5, 1: 6, 2: 7, 3: 8, 5: 9]
+    /// The keys on the tiles, row by row: Q W E R, T Y U I, then A S D F, G H J K.
+    /// (1 to 0 already pick sources.)
+    static let letters = ["Q", "W", "E", "R", "T", "Y", "U", "I", "A", "S", "D", "F", "G", "H", "J", "K"]
+    static let keyCodes: [UInt16: Int] = [12: 0, 13: 1, 14: 2, 15: 3, 17: 4, 16: 5, 32: 6, 34: 7,
+                                          0: 8, 1: 9, 2: 10, 3: 11, 5: 12, 4: 13, 38: 14, 40: 15]
 
     /// The camera's places in button order: its saved shots, then its own presets.
     func items(_ c: PTZCamera, _ ptz: PTZController) -> [DeckItem] {
@@ -80,8 +81,8 @@ final class ShotDeckState: ObservableObject {
 }
 
 /// The saved shots: one camera at a time. Tabs across the top, one per camera; the shown camera
-/// follows Next, and tapping a tab puts that camera on Next. Its shots fill a 5 by 2 grid of
-/// big tiles, paged with the arrows (or [ and ]) instead of scrolling. Each tile has a key, Q to G.
+/// follows Next, and tapping a tab puts that camera on Next. Its shots fill a 4 by 4 grid of
+/// tiles, paged with the arrows (or [ and ]) instead of scrolling. Each tile has a key, Q to K.
 /// The last tile saves where the camera is now. Right-click a shot to update, rename or delete it;
 /// hold one, then drag it, to put it somewhere else on its page.
 /// The Live camera's tab shows its shots, locked: a tap asks before it moves the camera on air.
@@ -226,7 +227,7 @@ struct ShotDeck: View {
         let live = onLive(c)
         return GeometryReader { g in
             let w = (g.size.width - Self.gap * CGFloat(cols - 1)) / CGFloat(cols)
-            let h = (g.size.height - Self.gap) / 2
+            let h = (g.size.height - Self.gap * CGFloat(ShotDeckState.rows - 1)) / CGFloat(ShotDeckState.rows)
             let size = CGSize(width: w + Self.gap, height: h + Self.gap)
             ZStack(alignment: .topLeading) {
                 ForEach(0..<per, id: \.self) { slot in
@@ -307,7 +308,7 @@ struct ShotDeck: View {
                 .buttonStyle(PressStyle()).disabled(page >= pages - 1).help("Next page (])")
             Text("Page \(page + 1) of \(pages)").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle)
             Spacer()
-            Text("Keys Q–G send \(c.name) to a shot").font(.sans(11)).foregroundStyle(T.inkSubtle)
+            Text("Keys Q–K send \(c.name) to a shot").font(.sans(11)).foregroundStyle(T.inkSubtle)
         }
         .frame(height: 22)
         .opacity(pages > 1 ? 1 : 0.6)
@@ -410,7 +411,7 @@ struct ShotDrag: Equatable {
     /// The slot it would land in if dropped now.
     var to: Int {
         let col = min(Self.columns - 1, max(0, from % Self.columns + Int((moved.width / cell.width).rounded())))
-        let row = min(1, max(0, from / Self.columns + Int((moved.height / cell.height).rounded())))
+        let row = min(ShotDeckState.rows - 1, max(0, from / Self.columns + Int((moved.height / cell.height).rounded())))
         return min(range.upperBound, max(range.lowerBound, row * Self.columns + col))
     }
 
@@ -464,8 +465,8 @@ struct DeckTile: View {
 
     var body: some View {
         ZStack {
-            Text(item.name).font(.sans(15, .bold)).lineLimit(2).minimumScaleFactor(0.7)
-                .multilineTextAlignment(.center).padding(.horizontal, 8)
+            Text(item.name).font(.sans(13, .bold)).lineLimit(2).minimumScaleFactor(0.7)
+                .multilineTextAlignment(.center).padding(.horizontal, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
@@ -473,7 +474,7 @@ struct DeckTile: View {
                 .foregroundStyle(used ? T.onAction : T.inkMuted)
                 .frame(width: 18, height: 16)
                 .background(RoundedRectangle(cornerRadius: 3).stroke(used ? T.onAction.opacity(0.5) : T.lineStrong))
-                .padding(6)
+                .padding(4)
         }
         .overlay(alignment: .topTrailing) {
             if used {

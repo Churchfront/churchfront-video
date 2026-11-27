@@ -663,6 +663,7 @@ enum ControlTools {
         let s = atem.state
         func src(_ i: Int?) -> Any { i.map { ["input": $0, "name": store.label($0, s)] as [String: Any] } ?? NSNull() }
         let link: String = {
+            if atem.simulated { return "offline mode: a pretend switcher, nothing reaches the real one" }
             switch atem.link {
             case .online: return "online"
             case .connecting: return "connecting"

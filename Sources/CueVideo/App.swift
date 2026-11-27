@@ -49,6 +49,45 @@ final class Booth: ObservableObject {
 
     var connectedOnce: Bool { !atem.state.inputs.isEmpty }
 
+    /// Offline mode, for when the switcher can't be reached: the Operate screen runs against a
+    /// pretend switcher with the setup's sources, keys and screens, so shots, cameras and the
+    /// buttons can be tried. Nothing goes to the switcher. Connecting again ends it.
+    func goOffline() {
+        atem.startOffline(Self.offlineState(store.config))
+    }
+
+    /// Reaches for the real switcher again, leaving offline mode.
+    func goOnline() {
+        atem.connect(store.config.atemHost)
+    }
+
+    static func offlineState(_ c: CueConfig) -> ATEMState {
+        var s = ATEMState()
+        s.product = "Offline mode"
+        func add(_ id: Int, _ name: String) { s.inputs[id] = ATEMInput(id: id, long: name, short: String(name.prefix(4)).uppercased()) }
+        add(0, "Black")
+        add(1000, "Color Bars")
+        let ids = c.sources.map(\.input) + c.cameras.compactMap(\.atemInput)
+        for src in c.sources { add(src.input, src.label.flatMap { $0.isEmpty ? nil : $0 } ?? "Input \(src.input)") }
+        for cam in c.cameras { if let i = cam.atemInput, s.inputs[i] == nil { add(i, cam.name) } }
+        let bus = ids.isEmpty ? [0, 1000] : ids
+        let mes = max(1, c.me, (c.keys.compactMap(\.me).max() ?? 1))
+        for m in 0..<mes {
+            s.program[m] = bus[0]
+            s.preview[m] = bus.count > 1 ? bus[1] : 0
+            s.style[m] = 0; s.nextSelection[m] = 1; s.mixRate[m] = 30
+            s.inTransition[m] = false; s.ftbBlack[m] = false
+            let keyers = c.keys.filter { ($0.me ?? 1) - 1 == m }.compactMap(\.keyer).max() ?? 1
+            s.keyOnAir[m] = Dictionary(uniqueKeysWithValues: (0..<max(1, keyers)).map { ($0, false) })
+        }
+        let dsks = max(2, c.keys.compactMap(\.dsk).max() ?? 0)
+        for d in 0..<dsks { s.dskOnAir[d] = false; s.dskTie[d] = false }
+        let auxes = c.screens.flatMap(\.aux).max() ?? 0
+        for a in 0..<auxes { s.aux[a] = 10010 }
+        if auxes > 0 { add(10010, "Program") }
+        return s
+    }
+
     /// Keyboard: 1 to 9 and 0 put that tile of the volunteer's source row on Next, shift
     /// puts it on Live, space cuts, return fades, arrows move the camera on Next.
     ///
@@ -82,7 +121,7 @@ final class Booth: ObservableObject {
         case 36, 76: atem.auto(me: me); return true
         default: break
         }
-        // Q W E R T / A S D F G: the shot deck's tiles, for the camera on Next. [ and ] turn its page.
+        // Q W E R T Y U I / A S D F G H J K: the shot deck's tiles, for the camera on Next. [ and ] turn its page.
         if !e.modifierFlags.contains(.option), !e.modifierFlags.contains(.control),
            let cam = cameraOnNext, (atem.state.tally[cam.atemInput ?? -1] ?? 0) & 1 == 0 {
             let deck = ShotDeckState.shared
