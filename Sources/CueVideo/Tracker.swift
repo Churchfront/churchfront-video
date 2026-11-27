@@ -149,6 +149,15 @@ final class AutoTracker: ObservableObject {
         var zoomReadAt: Date? = Date()
         /// The latest drive command's trip to the camera, for the log.
         var lastDrive: DriveTiming?
+        /// Smooth drive (see `control`): the picture decides where the camera should be heading
+        /// (`aim`), and a steady loop 30 times a second moves the camera's speed toward it,
+        /// easing every start, stop and change. Speed and its rate of change, frames a second.
+        var smooth = false
+        var aim: Aim?
+        var outX = 0.0, outY = 0.0, accX = 0.0, accY = 0.0
+        var controlAt = Date()
+        /// Since when they've been sliding back against the way the camera is panning (they stopped).
+        var againstSince: Date?
         /// Recent measured positions (degrees), for how fast the camera really moved.
         var polls: [(at: Date, pan: Double, tilt: Double)] = []
         /// Zoom hold, kept calm: when the size first looked wrong, and the last zoom's end and direction.
@@ -182,7 +191,22 @@ final class AutoTracker: ObservableObject {
         var headAt: Date?
     }
 
+    /// What the latest picture asked of a smoothly driven camera: how far off the mark they
+    /// were, their own motion (frames a second, right and up), the walking speed to keep up
+    /// with, and whether to move at all.
+    struct Aim {
+        var at: Date
+        var errX: Double, errY: Double
+        var moveX: Double, moveY: Double
+        var walkX: Double, walkY: Double
+        var panning: Bool, tilting: Bool
+        var kp: Double
+        var urgent: Bool
+        var fovX: Double, fovY: Double
+    }
+
     @Published private(set) var sessions: [UUID: Session] = [:]
+    private var controlTimer: Timer?
 
     private var feeds: [UUID: AnyCancellable] = [:]
     private var cameras: [UUID: PTZCamera] = [:]
@@ -223,6 +247,7 @@ final class AutoTracker: ObservableObject {
             return
         }
         var s = Session(camera: camera.id)
+        s.smooth = camera.tracksSmoothly
         if let person {
             guard let cast = StageCast.shared.look(person) else {
                 let names = StageCast.shared.names
@@ -245,6 +270,11 @@ final class AutoTracker: ObservableObject {
         feeds[camera.id] = picture.frames.sink { [weak self] img in self?.frame(img, camera.id) }
         if timer == nil {
             timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.tick() }
+        }
+        if s.smooth, controlTimer == nil {
+            let t = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in self?.control() }
+            RunLoop.main.add(t, forMode: .common)
+            controlTimer = t
         }
     }
 
@@ -273,6 +303,7 @@ final class AutoTracker: ObservableObject {
         if s.sentZoom != 0 { ptz.trackZoom(0, camera: id) }
         finish(id, "Tracking was stopped.")
         if sessions.isEmpty { timer?.invalidate(); timer = nil }
+        if !sessions.values.contains(where: \.smooth) { controlTimer?.invalidate(); controlTimer = nil }
     }
 
     func stopAll() { for id in sessions.keys { stop(id) } }
@@ -450,7 +481,12 @@ final class AutoTracker: ObservableObject {
             if let z = next.size { s.seen = z }
             steer(&s, next)
         } else {
-            if gone > 0.6 { hold(&s) }
+            if gone > 0.6 {
+                // Smooth drive eases to a stop (the loop's aim is gone); the picture itself
+                // stopping still stops at once (tick).
+                if s.smooth { s.aim = nil; s.panning = false; s.tilting = false; s.zooming = false; send(&s, s.sentPan, s.sentTilt, 0) }
+                else { hold(&s) }
+            }
             s.phase = gone > 5 ? .lost : .searching
         }
         sessions[id] = s
@@ -567,7 +603,19 @@ final class AutoTracker: ObservableObject {
             return speed * a * a * (3 - 2 * a)   // eased in and out
         }
         let walkMin = tune.walkThreshold ?? 0.12
-        let walkVX = walking(s.moveX, &s.walkW, &s.walkSpeed, walkMin, toward: bodyDir)
+        // Smooth drive: someone who stops sliding back against the pan for a quarter of a
+        // second has stopped walking, whatever the camera's own motion says. Stop following
+        // the walk then, sooner than it would fade.
+        var braking = false
+        if s.smooth, s.walkW != 0 {
+            let dir = s.walkW > 0 ? 1.0 : -1.0
+            if s.imgVX * dir < -walkMin * 1.5, s.sentPan * dir > 0 {
+                if s.againstSince == nil { s.againstSince = now }
+                braking = now.timeIntervalSince(s.againstSince!) > 0.25
+            } else { s.againstSince = nil }
+        } else { s.againstSince = nil }
+        if braking { s.walkW = Self.walkWeight(s.walkW, moving: 0, dt: dtFrame, rise: 1, fall: 0.25) }
+        let walkVX = walking(braking ? 0 : s.moveX, &s.walkW, &s.walkSpeed, walkMin, toward: bodyDir)
         let walkVY = walking(s.moveY, &s.walkWY, &s.walkSpeedY, walkMin * 1.25, toward: 0)
         let walkingX = abs(s.walkW) > 0.3, walkingY = abs(s.walkWY) > 0.3
         let relX = s.imgVX, relY = -s.imgVY
@@ -577,7 +625,16 @@ final class AutoTracker: ObservableObject {
         // camera on, the move reading as a walk, and the shot swinging past someone standing
         // still. Standing, which way they face (turning to each side of the room) only nudges it.
         // Eased so the frame doesn't jump when they turn.
-        s.lead += (Self.leadTarget(walkVX: abs(s.walkW) > 0.5 ? walkVX : 0, facing: bodyDir, leadRoom: size.leadRoom) - s.lead) * 0.06
+        let leadWant = Self.leadTarget(walkVX: abs(s.walkW) > 0.5 ? walkVX : 0, facing: bodyDir, leadRoom: size.leadRoom)
+        if s.smooth {
+            // Out to the lead in about half a second as a walk starts; back over a couple of
+            // seconds once it ends, so the camera drifts them back toward the middle instead
+            // of swinging there.
+            let tau = abs(leadWant) < abs(s.lead) ? 2.5 : 0.6
+            s.lead += (leadWant - s.lead) * (1 - exp(-dtFrame / tau))
+        } else {
+            s.lead += (leadWant - s.lead) * 0.06
+        }
         let ex = eye.x - (0.5 + s.lead)        // right of the mark: pan right
 
         // Edge alarm: how close their body is to the side of the frame they're heading for,
@@ -605,16 +662,26 @@ final class AutoTracker: ObservableObject {
             let want = on ? move + kp * e : 0
             return Self.easeRate(from: prev, to: want, dt: dtFrame, urgent: urgency > 0.3, speed: k)
         }
-        let camNowX = s.sentPan / 100 * s.gainPan / fovX, camNowY = s.sentTilt / 100 * s.gainTilt / fovY
-        let rx = rate(ex, walkVX, s.panning, camNowX)
-        let ry = rate(ey, walkVY, s.tilting, camNowY)
         let camX = camRX
         // Back into the camera's units: degrees a second (× 100), allowing for how it really turns.
         func units(_ r: Double, _ fov: Double, _ g: Double, _ correcting: Bool) -> Double {
             Self.cameraSpeed(raw: r * fov * 100 / max(0.05, g), correcting: correcting)
         }
-        let pan = units(rx, fovX, s.gainPan, s.panning)
-        let tilt = units(ry, fovY, s.gainTilt, s.tilting)
+        let rx: Double, pan: Double, tilt: Double
+        if s.smooth {
+            // The control loop drives the camera; this picture only says where to head.
+            s.aim = Aim(at: now, errX: ex, errY: ey, moveX: s.moveX, moveY: s.moveY, walkX: walkVX, walkY: walkVY,
+                        panning: s.panning, tilting: s.tilting,
+                        kp: min(2.5, min(1.6, (tune.correction ?? 1.2) * k) * (1 + 1.5 * urgency)),
+                        urgent: urgency > 0.3, fovX: fovX, fovY: fovY)
+            rx = s.outX; pan = s.sentPan; tilt = s.sentTilt
+        } else {
+            let camNowX = s.sentPan / 100 * s.gainPan / fovX, camNowY = s.sentTilt / 100 * s.gainTilt / fovY
+            rx = rate(ex, walkVX, s.panning, camNowX)
+            let ry = rate(ey, walkVY, s.tilting, camNowY)
+            pan = units(rx, fovX, s.gainPan, s.panning)
+            tilt = units(ry, fovY, s.gainTilt, s.tilting)
+        }
         let d = s.lastDrive
         TrackLog.shared.write(String(format: "%.3f,%@,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f,%.2f,%d,%.3f,%.3f,%d,%.2f,%.2f,%.3f,%.1f,%.1f,%d",
             now.timeIntervalSince1970, cameras[s.camera]?.name ?? "?", eye.x, ex, ey, s.imgVX, s.moveX, camX, rx,
@@ -714,14 +781,74 @@ final class AutoTracker: ObservableObject {
 
     private func hold(_ s: inout Session) {
         s.panning = false; s.tilting = false; s.zooming = false
+        s.aim = nil; s.outX = 0; s.outY = 0; s.accX = 0; s.accY = 0
         send(&s, 0, 0, 0)
+    }
+
+    // MARK: Smooth drive
+
+    /// 30 times a second, for each smoothly driven camera: works out where they are now from
+    /// the latest picture and how far the camera has turned since (the pictures come about
+    /// 10 to 20 times a second), and eases the camera's speed toward what keeps them on the
+    /// mark. A camera whose picture has stopped is left to tick(), which stops it at once.
+    private func control() {
+        let now = Date()
+        for (id, var s) in sessions where s.smooth {
+            let dt = min(0.1, max(0.005, now.timeIntervalSince(s.controlAt)))
+            s.controlAt = now
+            guard now.timeIntervalSince(s.lastFrame) <= 0.6, cameras[id] != nil else { sessions[id] = s; continue }
+            let fovX = s.fov
+            let fovY = fovX * 9 / 16
+            let k = config.trackSpeed
+            var wantX = 0.0, wantY = 0.0, urgent = false
+            if let a = s.aim, s.phase == .following {
+                let since = min(0.3, now.timeIntervalSince(a.at))
+                // Since the picture: they kept moving at their own speed, the camera at the
+                // speed it really runs (a VISCA camera's nearest speed step).
+                let real = ptz.trackSpeedActual(pan: Int(s.sentPan), tilt: Int(s.sentTilt), camera: id)
+                let camX = Double(real.pan) / 100 * s.gainPan / fovX, camY = Double(real.tilt) / 100 * s.gainTilt / fovY
+                let ex = a.errX + (a.moveX - camX) * since
+                let ey = a.errY + (a.moveY - camY) * since
+                wantX = a.panning ? a.walkX + a.kp * ex : 0
+                wantY = a.tilting ? a.walkY + a.kp * ey : 0
+                urgent = a.urgent
+            }
+            func step(_ v: inout Double, _ acc: inout Double, _ want: Double) {
+                let slowing = abs(want) < abs(v) || want * v < 0
+                let r = Self.smoothStep(v: v, a: acc, want: want, dt: dt,
+                                        maxAcc: (slowing || urgent ? 3.0 : 1.5) * max(1, k))
+                v = r.v; acc = r.a
+                if want == 0, abs(v) < 0.002 { v = 0; acc = 0 }
+            }
+            step(&s.outX, &s.accX, wantX)
+            step(&s.outY, &s.accY, wantY)
+            let pan = Self.cameraSpeed(raw: s.outX * fovX * 100 / max(0.05, s.gainPan), correcting: s.panning)
+            let tilt = Self.cameraSpeed(raw: s.outY * fovY * 100 / max(0.05, s.gainTilt), correcting: s.tilting)
+            send(&s, pan, tilt, s.sentZoom)
+            sessions[id] = s
+        }
+    }
+
+    /// One step of the smooth drive toward the speed `want` (frames a second): the change of
+    /// speed heads for what would close the gap in about a third of a second, at most
+    /// `maxAcc`, and that change itself builds up and dies away over about a tenth of a
+    /// second (an S-curve), so the camera never lurches into or out of a move. Critically
+    /// damped: it lands on the new speed without going past it.
+    static func smoothStep(v: Double, a: Double, want: Double, dt: Double, maxAcc: Double,
+                           settle: Double = 0.35, jerk: Double = 10) -> (v: Double, a: Double) {
+        let target = max(-maxAcc, min(maxAcc, (want - v) / settle))
+        let blend = min(1, dt / (settle / 4))
+        let na = a + max(-jerk * dt, min(jerk * dt, (target - a) * blend))
+        return (v + na * dt, na)
     }
 
     private func send(_ s: inout Session, _ pan: Double, _ tilt: Double, _ zoom: Double) {
         if pan != s.sentPan || tilt != s.sentTilt {
             s.sentPan = pan; s.sentTilt = tilt
             s.sentAt = Date()
-            s.sentLog.append((Date(), pan, tilt))
+            // What the camera really runs (a VISCA camera's nearest speed step), for working out its motion.
+            let real = ptz.trackSpeedActual(pan: Int(pan), tilt: Int(tilt), camera: s.camera)
+            s.sentLog.append((Date(), Double(real.pan), Double(real.tilt)))
             if s.sentLog.count > 40 { s.sentLog.removeFirst(s.sentLog.count - 40) }
             ptz.trackDriveRaw(pan: Int(pan), tilt: Int(tilt), camera: s.camera)
         }

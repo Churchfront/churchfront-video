@@ -79,9 +79,21 @@ public struct PTZCamera: Codable, Identifiable, Hashable {
     /// monitors use (main when left out).
     public var rtspTiles: RTSPStream?
     public var rtspMonitors: RTSPStream?
+    /// VISCA cameras: how fast each pan speed (1 to 24) and tilt speed (1 to 20) really turns,
+    /// in degrees a second, as measured on this camera (CUEVIDEO_SPEEDTEST). Left out: the
+    /// standard table, which is what every VISCA camera used before these were measured.
+    public var viscaPanSpeeds: [Double]?
+    public var viscaTiltSpeeds: [Double]?
+    /// Auto tracking's smooth drive: a steady control loop that eases every start, stop and
+    /// change of speed. Left out: on for VISCA cameras, off for Canon (Canon keeps the drive
+    /// it was tuned with until smooth drive has been tried on one).
+    public var smoothTracking: Bool?
     public init() {}
 
-    private enum Keys: String, CodingKey { case id, name, host, port, proto, atemInput, firstPreset, presetNames, shots, presetOrder, video, ndi, rtspMain, rtspSub, rtspTiles, rtspMonitors }
+    /// Whether auto tracking drives this camera with the smooth control loop.
+    public var tracksSmoothly: Bool { smoothTracking ?? (proto != .canonXC) }
+
+    private enum Keys: String, CodingKey { case id, name, host, port, proto, atemInput, firstPreset, presetNames, shots, presetOrder, video, ndi, rtspMain, rtspSub, rtspTiles, rtspMonitors, viscaPanSpeeds, viscaTiltSpeeds, smoothTracking }
 
     /// Lenient, so a camera can be written by hand (or by Claude) in the config file:
     /// only `host` is needed, everything else has a sensible default. The port follows
@@ -104,6 +116,9 @@ public struct PTZCamera: Codable, Identifiable, Hashable {
         rtspSub = try c.decodeIfPresent(String.self, forKey: .rtspSub)
         rtspTiles = try c.decodeIfPresent(RTSPStream.self, forKey: .rtspTiles)
         rtspMonitors = try c.decodeIfPresent(RTSPStream.self, forKey: .rtspMonitors)
+        viscaPanSpeeds = try c.decodeIfPresent([Double].self, forKey: .viscaPanSpeeds)
+        viscaTiltSpeeds = try c.decodeIfPresent([Double].self, forKey: .viscaTiltSpeeds)
+        smoothTracking = try c.decodeIfPresent(Bool.self, forKey: .smoothTracking)
     }
 
     /// The default RTSP address for a stream: rtsp://host:554/1 (main) or /2 (sub), as PTZOptics serves them.
@@ -342,6 +357,54 @@ public struct VISCAUnits {
     }
 }
 
+/// What a VISCA camera's pan and tilt speeds really do. VISCA has 24 pan speeds and 20 tilt
+/// speeds, and each make turns at its own rate for each. Auto tracking asks for degrees a
+/// second; this picks the nearest speed the camera has and says how fast that really is, so
+/// tracking knows what the camera is doing rather than what it asked for.
+public struct VISCASpeedTable: Equatable {
+    /// Degrees a second for speeds 1 to 24 (pan) and 1 to 20 (tilt).
+    public let pan: [Double]
+    public let tilt: [Double]
+
+    /// The table every VISCA camera used before speeds were measured: evenly spaced, 1.29
+    /// degrees a second a step for pan (31 at speed 24), 1.54 for tilt (31 at speed 20).
+    /// Picking from it gives exactly the speeds earlier versions sent.
+    public static let standardPan = (1...24).map { Double($0) / 0.7776 }
+    public static let standardTilt = (1...20).map { Double($0) / 0.648 }
+    public static let standard = VISCASpeedTable(pan: standardPan, tilt: standardTilt)
+
+    public init(pan: [Double], tilt: [Double]) { self.pan = pan; self.tilt = tilt }
+
+    /// The camera's measured table, or the standard one for any part not measured (or not
+    /// a full set of positive speeds).
+    public init(_ camera: PTZCamera) {
+        func ok(_ t: [Double]?, _ n: Int) -> [Double]? { t.flatMap { $0.count == n && $0.allSatisfy { $0 > 0 } ? $0 : nil } }
+        pan = ok(camera.viscaPanSpeeds, 24) ?? Self.standardPan
+        tilt = ok(camera.viscaTiltSpeeds, 20) ?? Self.standardTilt
+    }
+
+    /// The speed step (1 and up, 0 for none) nearest `raw`, in hundredths of a degree a second.
+    /// Anything that isn't 0 gets at least the slowest step.
+    public static func level(raw: Int, _ table: [Double]) -> Int {
+        guard raw != 0, !table.isEmpty else { return 0 }
+        let want = Double(abs(raw)) / 100
+        var best = 0
+        for i in table.indices where abs(table[i] - want) <= abs(table[best] - want) { best = i }
+        return best + 1
+    }
+
+    public func panLevel(_ raw: Int) -> Int { Self.level(raw: raw, pan) }
+    public func tiltLevel(_ raw: Int) -> Int { Self.level(raw: raw, tilt) }
+
+    /// How fast the camera really turns for a speed asked in hundredths of a degree a second,
+    /// signed: the speed of the step it gets.
+    public func actualPan(_ raw: Int) -> Int { actual(raw, panLevel(raw), pan) }
+    public func actualTilt(_ raw: Int) -> Int { actual(raw, tiltLevel(raw), tilt) }
+    private func actual(_ raw: Int, _ level: Int, _ t: [Double]) -> Int {
+        level == 0 ? 0 : Int((t[level - 1] * 100).rounded()) * (raw < 0 ? -1 : 1)
+    }
+}
+
 final class VISCALink: PTZLink {
     let camera: PTZCamera
     private let queue: DispatchQueue
@@ -362,6 +425,19 @@ final class VISCALink: PTZLink {
     private var inFlight: Set<Cmd> = []
     private var waiting: [Cmd: (bytes: [UInt8], queued: Date, dropped: Int)] = [:]
     private var lastDrive: [UInt8]?
+    /// The latest drive and zoom asked for (sent or waiting), so a stop that went missing or
+    /// a speed the camera refused can be sent again, and the same speed isn't sent twice.
+    private var asked: [Cmd: [UInt8]] = [:]
+    /// Counts every command asked for. A stop is sent a second time, and a refused drive
+    /// again, only when nothing else has been asked since: a stop repeated after a shot was
+    /// recalled would cut the recall short.
+    private var asks = 0
+    /// Which ask each drive and zoom was: one is sent again only while it's still the latest
+    /// thing asked of the camera.
+    private var askedAt: [Cmd: Int] = [:]
+    /// Times in a row a drive or zoom has been sent again after the camera refused it.
+    private var retries: [Cmd: Int] = [:]
+    private lazy var speeds = VISCASpeedTable(camera)
     /// Commands written and not yet acknowledged, oldest first. The camera acknowledges a
     /// connection's commands in the order sent (y0 4z FF, z its socket), then completes
     /// each (y0 5z FF) or reports an error (y0 6z ee FF).
@@ -481,6 +557,12 @@ final class VISCALink: PTZLink {
     /// A command: a drive or zoom takes its slot (latest wins), anything else goes straight out.
     private func command(_ visca: [UInt8], _ cmd: Cmd) {
         let now = Date()
+        asks &+= 1
+        if cmd != .other {
+            if asked[cmd] != visca { retries[cmd] = 0 }
+            asked[cmd] = visca
+            askedAt[cmd] = asks
+        }
         if cmd != .other, inFlight.contains(cmd) {
             waiting[cmd] = (visca, waiting[cmd]?.queued ?? now, waiting[cmd].map { $0.dropped + 1 } ?? 0)
             return
@@ -533,18 +615,56 @@ final class VISCALink: PTZLink {
         let ts = tilt == 0 ? 1 : max(1, min(0x14, Int((tilt * tilt * 20).rounded())))
         let p: UInt8 = pan == 0 ? 0x03 : (pan < 0 ? 0x01 : 0x02)
         let t: UInt8 = tilt == 0 ? 0x03 : (tilt > 0 ? 0x01 : 0x02)
-        command([0x81, 0x01, 0x06, 0x01, UInt8(ps), UInt8(ts), p, t, 0xFF], .drive)
+        moveCommand([0x81, 0x01, 0x06, 0x01, UInt8(ps), UInt8(ts), p, t, 0xFF], .drive)
     }
 
+    /// Auto tracking's speeds (hundredths of a degree a second): the nearest speed step the
+    /// camera has, from its speed table. A speed that comes out as the step already running
+    /// isn't sent again.
     func driveRaw(pan: Int, tilt: Int) {
-        func v(_ r: Int) -> Double { r == 0 ? 0 : (r < 0 ? -1 : 1) * min(1, (Double(abs(r)) / 10000).squareRoot() * 1.8) }
-        drive(pan: v(pan), tilt: v(tilt))
+        let ps = speeds.panLevel(pan), ts = speeds.tiltLevel(tilt)
+        let p: UInt8 = ps == 0 ? 0x03 : (pan < 0 ? 0x01 : 0x02)
+        let t: UInt8 = ts == 0 ? 0x03 : (tilt > 0 ? 0x01 : 0x02)
+        let bytes: [UInt8] = [0x81, 0x01, 0x06, 0x01, UInt8(max(1, ps)), UInt8(max(1, ts)), p, t, 0xFF]
+        if bytes == asked[.drive], (retries[.drive] ?? 0) == 0, !Self.isStop(bytes, .drive) { return }
+        moveCommand(bytes, .drive)
     }
 
     func zoom(_ v: Double) {
         let p = UInt8(min(7, max(0, Int((abs(v) * 7).rounded()))))
-        if v == 0 { command([0x81, 0x01, 0x04, 0x07, 0x00, 0xFF], .zoom) }
-        else { command([0x81, 0x01, 0x04, 0x07, (v > 0 ? 0x20 : 0x30) | p, 0xFF], .zoom) }
+        if v == 0 { moveCommand([0x81, 0x01, 0x04, 0x07, 0x00, 0xFF], .zoom) }
+        else { moveCommand([0x81, 0x01, 0x04, 0x07, (v > 0 ? 0x20 : 0x30) | p, 0xFF], .zoom) }
+    }
+
+    private static func isStop(_ b: [UInt8], _ cmd: Cmd) -> Bool {
+        cmd == .drive ? (b.count == 9 && b[6] == 0x03 && b[7] == 0x03) : (b.count == 6 && b[4] == 0x00)
+    }
+
+    /// A drive or zoom. A VISCA camera keeps moving until it's told to stop, so every stop
+    /// goes out a second time 0.3 s later, unless anything else has been asked of the camera
+    /// since (a shot recalled straight after must never be cut short by it).
+    private func moveCommand(_ bytes: [UInt8], _ cmd: Cmd) {
+        command(bytes, cmd)
+        guard Self.isStop(bytes, cmd) else { return }
+        let n = asks
+        queue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, self.asks == n, self.asked[cmd] == bytes else { return }
+            self.command(bytes, cmd)
+        }
+    }
+
+    /// The camera refused a drive or zoom (an error on the socket it was running on): send
+    /// the latest one asked for again, twice at most in a row, and only while it's still the
+    /// last thing asked of the camera.
+    private func resendRefused(_ cmd: Cmd) {
+        // Not if anything has been asked since (a recall the drive would cut short).
+        guard let bytes = asked[cmd], askedAt[cmd] == asks, (retries[cmd] ?? 0) < 2 else { return }
+        retries[cmd, default: 0] += 1
+        let n = asks
+        queue.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self, self.asks == n, self.asked[cmd] == bytes, self.waiting[cmd] == nil, !self.inFlight.contains(cmd) else { return }
+            self.command(bytes, cmd)
+        }
     }
 
     func autoFocus(_ on: Bool) { send([0x81, 0x01, 0x04, 0x38, on ? 0x02 : 0x03, 0xFF]) }
@@ -631,7 +751,11 @@ final class VISCALink: PTZLink {
             if type == 0x50, socket != 0 { sockets[socket] = nil; continue }   // a command completed
             if type == 0x60 {
                 let code = m.count > 3 ? m[2] : 0
-                if socket != 0 { sockets[socket] = nil; continue }             // that command failed
+                if socket != 0 {                                                // that command failed
+                    let failed = sockets.removeValue(forKey: socket)
+                    if let failed, failed != .other { resendRefused(failed) }
+                    continue
+                }
                 if code == 0x03 || (code == 0x02 && unackedIsOlderThanInquiry) {
                     // A command the camera had no room for. If it was a drive, send the latest
                     // drive again, so a stop is never lost.
@@ -1171,7 +1295,12 @@ public final class PTZController: ObservableObject {
 
     /// Only reconnect when an address or protocol changed, not when a name did.
     private func links(differ old: [PTZCamera]) -> Bool {
-        old.map { "\($0.id)\($0.host)\($0.port)\($0.proto)\($0.firstPreset)" } != cameras.map { "\($0.id)\($0.host)\($0.port)\($0.proto)\($0.firstPreset)" }
+        old.map(Self.linkKey) != cameras.map(Self.linkKey)
+    }
+
+    /// What a camera's connection depends on (a measured speed table is read when it connects).
+    private static func linkKey(_ c: PTZCamera) -> String {
+        "\(c.id)\(c.host)\(c.port)\(c.proto)\(c.firstPreset)\(c.viscaPanSpeeds ?? [])\(c.viscaTiltSpeeds ?? [])"
     }
 
     private func restart() {
@@ -1236,6 +1365,14 @@ public final class PTZController: ObservableObject {
     /// Pan and tilt for auto tracking in the camera's own speed units (Canon: hundredths of a
     /// degree a second), signed, without counting as a manual move.
     public func trackDriveRaw(pan: Int, tilt: Int, camera: UUID) { with(camera) { $0.driveRaw(pan: pan, tilt: tilt) } }
+
+    /// How fast a camera really turns for a tracking speed (hundredths of a degree a second):
+    /// a VISCA camera runs the nearest of its speed steps; a Canon runs what it's asked.
+    public func trackSpeedActual(pan: Int, tilt: Int, camera: UUID) -> (pan: Int, tilt: Int) {
+        guard let c = cameras.first(where: { $0.id == camera }), c.proto != .canonXC else { return (pan, tilt) }
+        let t = VISCASpeedTable(c)
+        return (t.actualPan(pan), t.actualTilt(tilt))
+    }
 
     /// Where a camera is now (Canon: pan and tilt in hundredths of a degree, zoom as the
     /// horizontal angle of view in hundredths of a degree), on main; nil if it can't say.

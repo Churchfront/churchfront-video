@@ -341,6 +341,118 @@ enum SelfTest {
         ready(0)
     }
 
+    /// CUEVIDEO_SPEEDTEST=camera-ip (a VISCA camera): measures how fast each pan speed step
+    /// (1 to 24) and tilt speed step (1 to 20) really turns, for auto tracking's speed table.
+    /// Each step runs one way for a time and back for twice as long, reading the position
+    /// after each, so the camera's own start and stop ramps cancel out; then the camera goes
+    /// back exactly where it was. It moves the camera, so check it isn't on Live first.
+    /// CUEVIDEO_SPEEDPROTO=udp for VISCA over IP (52381; default VISCA over TCP on 5678),
+    /// CUEVIDEO_SPEEDAXES=pan or tilt (both), CUEVIDEO_SPEEDLEVELS=1,2,4,8,16,24 to measure
+    /// only those and fill the rest in between. Prints the lines to put on the camera in
+    /// config.json ("viscaPanSpeeds", "viscaTiltSpeeds"). Takes about ten minutes for all.
+    static func speedTest(_ host: String) {
+        let env = ProcessInfo.processInfo.environment
+        func log(_ s: String) { print("SPEED", s); fflush(stdout) }
+        let ptz = Booth.shared.ptz
+        var cam = PTZCamera(); cam.name = "speed"; cam.host = host
+        if env["CUEVIDEO_SPEEDPROTO"] == "udp" { cam.proto = .sonyUDP; cam.port = 52381 } else { cam.proto = .rawTCP; cam.port = 5678 }
+        ptz.cameras = [cam]
+        let axes = (env["CUEVIDEO_SPEEDAXES"] ?? "pan,tilt").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        let only = env["CUEVIDEO_SPEEDLEVELS"].map { Set($0.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }) }
+        var home: PTZPosition?
+        var results: [String: [Int: Double]] = [:]
+
+        /// Measured steps, the rest filled in on a straight line between them (or the standard
+        /// table scaled to the nearest measured step at either end).
+        func table(_ axis: String, _ count: Int, _ standard: [Double]) -> [Double] {
+            let got = results[axis] ?? [:]
+            let known = got.keys.sorted()
+            return (1...count).map { n in
+                if let v = got[n] { return v }
+                guard let lo = known.last(where: { $0 < n }) else {
+                    guard let hi = known.first else { return standard[n - 1] }
+                    return standard[n - 1] * got[hi]! / standard[hi - 1]
+                }
+                guard let hi = known.first(where: { $0 > n }) else { return standard[n - 1] * got[lo]! / standard[lo - 1] }
+                return got[lo]! + (got[hi]! - got[lo]!) * Double(n - lo) / Double(hi - lo)
+            }
+        }
+        func finish(_ code: Int32) {
+            ptz.trackDrive(pan: 0, tilt: 0, camera: cam.id)
+            if let home { ptz.go(to: PTZShot(name: "home", home), camera: cam.id) }
+            func list(_ t: [Double]) -> String { t.map { String(format: "%.2f", $0) }.joined(separator: ", ") }
+            if results["pan"] != nil { log("\"viscaPanSpeeds\": [\(list(table("pan", 24, VISCASpeedTable.standardPan)))],") }
+            if results["tilt"] != nil { log("\"viscaTiltSpeeds\": [\(list(table("tilt", 20, VISCASpeedTable.standardTilt)))],") }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { exit(code) }
+        }
+        /// Where it points (hundredths of a degree), once it has stopped.
+        func settled(_ done: @escaping (PTZPosition) -> Void) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                ptz.readPosition(camera: cam.id) { p in
+                    guard let p else { log("couldn't read the position; stopping"); finish(1); return }
+                    done(p)
+                }
+            }
+        }
+        /// Runs one axis at one step for about `t` seconds, one way (dir 1: right or up), and
+        /// says how long it really ran (timers fire late by a share of their wait, and that
+        /// share differs between the two runs).
+        func run(_ axis: String, _ n: Int, _ dir: Double, _ t: Double, _ done: @escaping (Double) -> Void) {
+            let v = dir * (Double(n) / (axis == "pan" ? 24 : 20)).squareRoot()   // exactly step n
+            let began = Date()
+            if axis == "pan" { ptz.trackDrive(pan: v, tilt: 0, camera: cam.id) } else { ptz.trackDrive(pan: 0, tilt: v, camera: cam.id) }
+            DispatchQueue.main.asyncAfter(wallDeadline: .now() + t) {
+                ptz.trackDrive(pan: 0, tilt: 0, camera: cam.id)
+                done(Date().timeIntervalSince(began))
+            }
+        }
+        var plan: [(axis: String, n: Int)] = []
+        for axis in axes where axis == "pan" || axis == "tilt" {
+            for n in 1...(axis == "pan" ? 24 : 20) where only?.contains(n) ?? true { plan.append((axis, n)) }
+        }
+        func step(_ i: Int) {
+            guard i < plan.count else { finish(0); return }
+            let (axis, n) = plan[i]
+            let standard = axis == "pan" ? VISCASpeedTable.standardPan : VISCASpeedTable.standardTilt
+            // About 10 degrees of pan (5 of tilt) at the standard speed.
+            let t = min(4, max(0.5, (axis == "pan" ? 10 : 5) / standard[n - 1]))
+            func value(_ p: PTZPosition) -> Double { Double(axis == "pan" ? p.pan : p.tilt) / 100 }
+            settled { p0 in
+                run(axis, n, 1, t) { t1 in
+                    settled { p1 in
+                        run(axis, n, -1, 2 * t) { t2 in
+                            settled { p2 in
+                                let one = value(p1) - value(p0), back = value(p1) - value(p2)
+                                let speed = (back - one) / max(0.1, t2 - t1)
+                                if speed > 0, one > 0 {
+                                    results[axis, default: [:]][n] = speed
+                                    log(String(format: "%@ step %d: %.2f degrees a second (standard table %.2f; %.1f then %.1f degrees in %.2f and %.2f s)",
+                                               axis, n, speed, standard[n - 1], one, back, t1, t2))
+                                } else {
+                                    log(String(format: "%@ step %d: didn't measure (moved %.1f then %.1f degrees); at a limit?", axis, n, one, back))
+                                }
+                                if let home { ptz.go(to: PTZShot(name: "home", home), camera: cam.id) }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { step(i + 1) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        func ready(_ k: Int) {
+            if ptz.online.contains(cam.id) {
+                ptz.readShotPosition(camera: cam.id) { p in
+                    guard let p else { log("couldn't read where the camera points; not moving it"); exit(1) }
+                    home = p
+                    log("camera at pan \(p.pan) tilt \(p.tilt) zoom \(p.zoom); measuring \(plan.count) speed steps")
+                    step(0)
+                }
+            } else if k > 80 { log("camera never answered"); exit(1) }
+            else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { ready(k + 1) } }
+        }
+        ready(0)
+    }
+
     /// CUEVIDEO_FOLLOWTEST=1: puts each linked camera's input on M/E 1 preview (never program),
     /// checks "Follow next" selects that camera, then puts preview back.
     static func followTest() {

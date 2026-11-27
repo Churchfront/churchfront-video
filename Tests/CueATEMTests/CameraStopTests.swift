@@ -84,12 +84,20 @@ final class CameraStopTests: XCTestCase {
 
 /// Listens on a UDP port and records the VISCA pan/tilt and zoom commands it's sent.
 final class FakeVISCACamera {
-    struct Move { let isStop: Bool }
+    struct Move { let isStop: Bool; var panSpeed = 0; var panDir = 3 }
     private let listener: NWListener
     private let queue = DispatchQueue(label: "fake.visca")
     private let lock = NSLock()
     private var _moves: [Move] = [], _zooms: [Bool] = []
+    private var _refuse = 0
     private(set) var port: UInt16 = 0
+
+    /// Turns down this many of the next pan/tilt drives: acknowledges each on socket 1, then
+    /// reports it couldn't be done (90 61 41 FF), as a busy camera does.
+    var refuseDrives: Int {
+        get { lock.lock(); defer { lock.unlock() }; return _refuse }
+        set { lock.lock(); _refuse = newValue; lock.unlock() }
+    }
 
     var moves: [Move] { lock.lock(); defer { lock.unlock() }; return _moves }
     /// One entry per zoom command: true for a zoom stop.
@@ -118,10 +126,22 @@ final class FakeVISCACamera {
                 let v = [UInt8](data.dropFirst(8))  // after the VISCA over IP header
                 self.lock.lock()
                 // Pan/tilt drive: 81 01 06 01 speed speed pan tilt FF; 03 03 is stop.
-                if v.count == 9, v[2] == 0x06, v[3] == 0x01 { self._moves.append(Move(isStop: v[6] == 0x03 && v[7] == 0x03)) }
+                var refuse = false
+                if v.count == 9, v[2] == 0x06, v[3] == 0x01 {
+                    self._moves.append(Move(isStop: v[6] == 0x03 && v[7] == 0x03, panSpeed: Int(v[4]), panDir: Int(v[6])))
+                    if self._refuse > 0 { self._refuse -= 1; refuse = true }
+                }
                 // Zoom: 81 01 04 07 xx FF; 00 is stop.
                 if v.count == 6, v[2] == 0x04, v[3] == 0x07 { self._zooms.append(v[4] == 0x00) }
                 self.lock.unlock()
+                if refuse {
+                    func reply(_ m: [UInt8]) {
+                        let n = UInt16(m.count)
+                        c.send(content: Data([0x01, 0x11, UInt8(n >> 8), UInt8(n & 0xFF), 0, 0, 0, 0] + m), completion: .contentProcessed { _ in })
+                    }
+                    reply([0x90, 0x41, 0xFF])          // acknowledged on socket 1
+                    reply([0x90, 0x61, 0x41, 0xFF])    // then: not executable
+                }
             }
             if err == nil { self.receive(c) }
         }
@@ -267,7 +287,8 @@ final class VISCATCPTests: XCTestCase {
         wait(3) { fake.connected }
         var fov: Int?
         ptz.readZoom(camera: cam.id) { fov = $0 }
-        for i in 0..<5 { ptz.trackDriveRaw(pan: 500 + i * 100, tilt: 0, camera: cam.id) }
+        // Five distinct speed steps (4, 5, 7, 9, 10): a speed on the step already running isn't sent again.
+        for i in 0..<5 { ptz.trackDriveRaw(pan: 500 + i * 200, tilt: 0, camera: cam.id) }
         wait(2) { fov != nil && !timings.isEmpty }
         // Halfway along the 20x zoom range: 58° × (1/20)^0.5, about 12.97°.
         XCTAssertEqual(fov, 1297, "the zoom answer was matched to the wrong reply")
